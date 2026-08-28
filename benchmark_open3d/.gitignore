@@ -1,0 +1,6 @@
+datasets/
+*.csv
+*.exe
+*.obj
+*.pdb
+*.ilk

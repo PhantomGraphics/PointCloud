@@ -1,0 +1,17 @@
+{
+  "name": "large_file",
+  "steps": [
+    { "label": "Load gs_large_scene.ply (~15 000 splats)",
+      "command": "LoadPLY:../samples/gs/gs_large_scene.ply",
+      "expect_prefix": "OK:", "expect_not": "OK:0" },
+    { "label": "Large scene splat count non-zero",
+      "command": "GetSplatCount",
+      "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Mode still SortBased after large load",
+      "command": "GetRenderMode",
+      "expect": "Val:SortBased" },
+    { "label": "App still healthy after large load",
+      "command": "GetStatus",
+      "expect": "OK" }
+  ]
+}

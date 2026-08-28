@@ -1,0 +1,32 @@
+{
+  "name": "load_ply",
+  "steps": [
+    { "label": "Load gs_sphere",
+      "command": "LoadPLY:../samples/gs/gs_sphere.ply",
+      "expect_prefix": "OK:", "expect_not": "OK:0" },
+    { "label": "Sphere splat count non-zero",
+      "command": "GetSplatCount",
+      "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Load gs_cube",
+      "command": "LoadPLY:../samples/gs/gs_cube.ply",
+      "expect_prefix": "OK:", "expect_not": "OK:0" },
+    { "label": "Cube splat count non-zero",
+      "command": "GetSplatCount",
+      "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Load gs_torus",
+      "command": "LoadPLY:../samples/gs/gs_torus.ply",
+      "expect_prefix": "OK:", "expect_not": "OK:0" },
+    { "label": "Torus splat count non-zero",
+      "command": "GetSplatCount",
+      "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Load gs_galaxy",
+      "command": "LoadPLY:../samples/gs/gs_galaxy.ply",
+      "expect_prefix": "OK:", "expect_not": "OK:0" },
+    { "label": "Galaxy splat count non-zero",
+      "command": "GetSplatCount",
+      "expect_prefix": "Count:", "expect_not": "Count:0" }
+  ]
+}

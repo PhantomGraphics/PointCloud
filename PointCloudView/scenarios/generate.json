@@ -1,0 +1,16 @@
+{
+  "name": "generate",
+  "steps": [
+    { "label": "Clear world (sphere)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate sphere 1000 points", "command": "GenerateSphere:1000", "expect_prefix": "Id:" },
+    { "label": "Sphere has 1000 points", "command": "GetScenePointCount", "expect": "Count:1000" },
+
+    { "label": "Clear world (cylinder)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate cylinder 500 points", "command": "GenerateCylinder:500", "expect_prefix": "Id:" },
+    { "label": "Cylinder has 500 points", "command": "GetScenePointCount", "expect": "Count:500" },
+
+    { "label": "Clear world (rect)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate rect 20x20", "command": "GenerateRect:20,20", "expect_prefix": "Id:" },
+    { "label": "Rect has 400 points (20x20)", "command": "GetScenePointCount", "expect": "Count:400" }
+  ]
+}

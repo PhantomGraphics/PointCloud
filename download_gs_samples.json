@@ -1,0 +1,34 @@
+{
+  "synthetic": [
+    {
+      "file": "gs_sphere.ply",
+      "label": "sphere  (2 000 splats)",
+      "generator": "sphere",
+      "params": { "n": 2000, "radius": 1.0 }
+    },
+    {
+      "file": "gs_cube.ply",
+      "label": "cube    (3 000 splats)",
+      "generator": "cube",
+      "params": { "nPerFace": 500, "half": 1.0 }
+    },
+    {
+      "file": "gs_galaxy.ply",
+      "label": "galaxy  (3 000 splats)",
+      "generator": "galaxy",
+      "params": { "n": 3000, "arms": 3 }
+    },
+    {
+      "file": "gs_torus.ply",
+      "label": "torus   (3 000 splats)",
+      "generator": "torus",
+      "params": { "n": 3000, "majorRadius": 1.5, "tubeRadius": 0.4 }
+    },
+    {
+      "file": "gs_large_scene.ply",
+      "label": "large scene (shell, ~15 000 splats, for large-file load-path coverage)",
+      "generator": "shell",
+      "params": { "n": 15000, "turns": 4.5, "baseRadius": 0.08, "growth": 0.18, "pitch": 0.05, "tubeRadius": 0.05 }
+    }
+  ]
+}

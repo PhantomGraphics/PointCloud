@@ -1,0 +1,17 @@
+{
+  "name": "pipeline",
+  "steps": [
+    { "label": "Clear world (downsample)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Record original point count", "command": "GetScenePointCount", "expect_prefix": "Count:", "store_as": "original_count", "strip_prefix": "Count:" },
+    { "label": "Downsample with cellSize 0.05", "command": "DownSample:0.05", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Downsampled result is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (normals)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply for normals", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Record sphere point count", "command": "GetScenePointCount", "expect_prefix": "Count:", "store_as": "sphere_count", "strip_prefix": "Count:" },
+    { "label": "Estimate normals radius 0.1", "command": "EstimateNormals:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Normal result has normals", "command": "GetSceneHasNormals", "expect": "Yes" },
+    { "label": "Normal count equals original point count", "command": "GetSceneNormalCount", "expect": "Count:${sphere_count}" }
+  ]
+}

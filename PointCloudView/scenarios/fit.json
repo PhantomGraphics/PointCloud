@@ -1,0 +1,28 @@
+{
+  "name": "fit",
+  "steps": [
+    { "label": "Clear world (RANSAC plane)", "command": "Clear", "expect": "OK" },
+    { "label": "Load plane.ply", "command": "LoadPly:PointCloud/samples/plane.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run RANSAC plane detection threshold 0.05", "command": "RansacPlane:0.05", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Plane inliers are non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Two new scenes added (inliers + outliers)", "command": "GetSceneCount", "expect": "Count:3" },
+
+    { "label": "Clear world (RANSAC cylinder)", "command": "Clear", "expect": "OK" },
+    { "label": "Load cylinder.ply", "command": "LoadPly:PointCloud/samples/cylinder.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run RANSAC cylinder detection threshold 0.05", "command": "RansacCylinder:0.05", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Cylinder inliers are non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Two new scenes added (inliers + outliers)", "command": "GetSceneCount", "expect": "Count:3" },
+
+    { "label": "Clear world (RANSAC sphere)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic sphere", "command": "GenerateSphere:2000", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run RANSAC sphere detection threshold 0.05", "command": "RansacSphere:0.05", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Sphere inliers are non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Two new scenes added (inliers + outliers)", "command": "GetSceneCount", "expect": "Count:3" },
+
+    { "label": "Clear world (RANSAC cone)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic cone", "command": "GenerateCone:1500", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run RANSAC cone detection threshold 0.05", "command": "RansacCone:0.05", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Cone inliers are non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Two new scenes added (inliers + outliers)", "command": "GetSceneCount", "expect": "Count:3" }
+  ]
+}

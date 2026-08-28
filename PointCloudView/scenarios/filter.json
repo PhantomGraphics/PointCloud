@@ -1,0 +1,14 @@
+{
+  "name": "filter",
+  "steps": [
+    { "label": "Clear world (density filter)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Apply density filter radius 0.1", "command": "FilterDensity:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Density filter result is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (curvature filter)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply for curvature filter", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Apply curvature filter radius 0.1 threshold 0.01", "command": "FilterCurvature:0.1,0.01", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Curvature filter result is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" }
+  ]
+}

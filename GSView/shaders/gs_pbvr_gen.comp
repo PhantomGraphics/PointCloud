@@ -1,0 +1,160 @@
+#version 450
+
+layout(local_size_x = 64) in;
+
+// -------------------------------------------------------------------
+// Input: GSPoint array (std430 packed, 17 floats = 68 bytes, no padding)
+// Matches C++ Crystal::PointCloud::GSPoint exactly.
+// -------------------------------------------------------------------
+struct GsPoint {
+    float x,  y,  z;
+    float nx, ny, nz;
+    float f_dc0, f_dc1, f_dc2;
+    float opacity;
+    float s0, s1, s2;       // log-scale
+    float r0, r1, r2, r3;  // quaternion (w, x, y, z)
+};
+layout(std430, binding = 0) readonly buffer InputSSBO {
+    GsPoint splats[];
+};
+
+// -------------------------------------------------------------------
+// Output: PBVRVertex array (std430 packed, 7 floats = 28 bytes, no padding)
+// vec3+vec4 struct would be 32 bytes in std430; individual floats give
+// the 28-byte layout matching C++ PBVR::PBVRVertex {glm::vec3 pos; glm::vec4 color}.
+// -------------------------------------------------------------------
+struct GpuVertex {
+    float px, py, pz;       // pos   (offset  0)
+    float cr, cg, cb, ca;  // color (offset 12)
+};
+layout(std430, binding = 1) writeonly buffer OutputSSBO {
+    GpuVertex particles[];
+};
+
+layout(push_constant) uniform PC {
+    uint  numSplats;
+    uint  maxParticlesPerSplat;
+    float densityScale;
+    uint  _pad;
+} pc;
+
+// -------------------------------------------------------------------
+// GPU PRNG: PCG hash
+// -------------------------------------------------------------------
+uint pcg(uint v) {
+    uint s = v * 747796405u + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+float randF(inout uint seed) {
+    seed = pcg(seed);
+    return float(seed) * (1.0 / 4294967296.0);
+}
+
+// Box-Muller: returns two independent N(0,1) samples
+vec2 boxMuller(inout uint seed) {
+    float u1 = max(randF(seed), 1e-7);
+    float u2 = randF(seed);
+    float r  = sqrt(-2.0 * log(u1));
+    float th = 6.28318530718 * u2;
+    return vec2(r * cos(th), r * sin(th));
+}
+
+// Sample 3D standard normal, deterministic per (splatId, particleIndex)
+vec3 sampleN3(uint splatId, int j) {
+    uint seed = splatId * 65537u + uint(j) * 1000003u + 1u;
+    vec2 ab = boxMuller(seed);
+    vec2 cd = boxMuller(seed);
+    return vec3(ab.x, ab.y, cd.x);
+}
+
+// -------------------------------------------------------------------
+// Quaternion (w,x,y,z) -> column-major 3x3 rotation matrix
+// -------------------------------------------------------------------
+mat3 quatToMat3(float w, float x, float y, float z) {
+    float il = inversesqrt(w*w + x*x + y*y + z*z);
+    w *= il; x *= il; y *= il; z *= il;
+    // mat3 constructor fills column-major: each triple is one column
+    return mat3(
+        1.0-2.0*(y*y+z*z),  2.0*(x*y+z*w),      2.0*(x*z-y*w),    // col 0
+        2.0*(x*y-z*w),      1.0-2.0*(x*x+z*z),  2.0*(y*z+x*w),    // col 1
+        2.0*(x*z+y*w),      2.0*(y*z-x*w),      1.0-2.0*(x*x+y*y) // col 2
+    );
+}
+
+// -------------------------------------------------------------------
+// Cholesky decomposition: lower triangular L s.t. L*L^T = A
+// A must be symmetric positive semi-definite (3x3).
+// GLSL mat3 is column-major: A[col][row].
+// -------------------------------------------------------------------
+mat3 chol3(mat3 A) {
+    const float eps = 1e-8;
+    float l00 = sqrt(max(A[0][0], eps));
+    float l10 = A[0][1] / l00;
+    float l20 = A[0][2] / l00;
+    float l11 = sqrt(max(A[1][1] - l10*l10, eps));
+    float l21 = (A[1][2] - l20*l10) / l11;
+    float l22 = sqrt(max(A[2][2] - l20*l20 - l21*l21, eps));
+    mat3 L = mat3(0.0);
+    L[0][0] = l00;
+    L[0][1] = l10;
+    L[0][2] = l20;
+    L[1][1] = l11;
+    L[1][2] = l21;
+    L[2][2] = l22;
+    return L;
+}
+
+// -------------------------------------------------------------------
+// Main: one thread per splat, generates up to maxParticlesPerSplat
+// output vertices into pre-allocated contiguous slots.
+// Slots beyond N_i are written with alpha=0 (culled by vertex shader).
+// -------------------------------------------------------------------
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= pc.numSplats) return;
+
+    GsPoint sp = splats[id];
+
+    // Sigmoid-activated opacity
+    float op = 1.0 / (1.0 + exp(-sp.opacity));
+
+    // Particle count for this splat
+    int Ni = max(1, int(round(pc.densityScale * op * float(pc.maxParticlesPerSplat))));
+
+    // Color from DC spherical harmonics term
+    vec3 col = clamp(vec3(sp.f_dc0, sp.f_dc1, sp.f_dc2) * 0.28209479177 + 0.5,
+                     0.0, 1.0);
+    float apc = op / float(Ni);  // per-particle alpha
+
+    // Covariance = R * S^2 * R^T
+    vec3 sc  = vec3(exp(sp.s0), exp(sp.s1), exp(sp.s2));
+    mat3 R   = quatToMat3(sp.r0, sp.r1, sp.r2, sp.r3);
+    mat3 S2  = mat3(sc.x*sc.x, 0.0, 0.0,
+                    0.0, sc.y*sc.y, 0.0,
+                    0.0, 0.0, sc.z*sc.z);
+    mat3 cov = R * S2 * transpose(R);
+    cov[0][0] = max(cov[0][0], 1e-6);
+    cov[1][1] = max(cov[1][1], 1e-6);
+    cov[2][2] = max(cov[2][2], 1e-6);
+
+    mat3 L = chol3(cov);
+    vec3 center = vec3(sp.x, sp.y, sp.z);
+
+    uint base = id * pc.maxParticlesPerSplat;
+
+    for (int j = 0; j < int(pc.maxParticlesPerSplat); ++j) {
+        if (j < Ni) {
+            vec3 pos = center + L * sampleN3(id, j);
+            particles[base + uint(j)] = GpuVertex(
+                pos.x, pos.y, pos.z,
+                col.r, col.g, col.b, apc
+            );
+        } else {
+            // alpha=0: vertex shader culls these to outside clip space
+            particles[base + uint(j)] = GpuVertex(0.0, 0.0, 0.0,
+                                                   0.0, 0.0, 0.0, 0.0);
+        }
+    }
+}

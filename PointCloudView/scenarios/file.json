@@ -1,0 +1,16 @@
+{
+  "name": "file",
+  "steps": [
+    { "label": "Clear world (sphere.ply)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Sphere.ply has points", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (cylinder.ply)", "command": "Clear", "expect": "OK" },
+    { "label": "Load cylinder.ply", "command": "LoadPly:PointCloud/samples/cylinder.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Cylinder.ply has points", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (plane.ply)", "command": "Clear", "expect": "OK" },
+    { "label": "Load plane.ply", "command": "LoadPly:PointCloud/samples/plane.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Plane.ply has points", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" }
+  ]
+}

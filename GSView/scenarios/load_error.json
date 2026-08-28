@@ -1,0 +1,17 @@
+{
+  "name": "load_error",
+  "steps": [
+    { "label": "Load nonexistent file returns error",
+      "command": "LoadPLY:../samples/gs/does_not_exist.ply",
+      "expect_prefix": "Error:" },
+    { "label": "Splat count still 0 after failed load",
+      "command": "GetSplatCount",
+      "expect": "Count:0" },
+    { "label": "App still healthy after failed load",
+      "command": "GetStatus",
+      "expect": "OK" },
+    { "label": "Render mode unchanged after failed load",
+      "command": "GetRenderMode",
+      "expect": "Val:SortBased" }
+  ]
+}

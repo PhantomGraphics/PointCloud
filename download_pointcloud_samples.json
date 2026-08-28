@@ -1,0 +1,52 @@
+﻿{
+  "samples": [
+    {
+      "name": "Organic A",
+      "desc": "多octave変調球 -- 閉じた非凸形状、35 000点（旧 Stanford Bunny 相当のスケール/密度）",
+      "source": "synthetic",
+      "generator": "organic",
+      "output": "organic_a.ply",
+      "params": { "baseRadius": 0.09, "nPoints": 35000, "octaves": 3, "ampScale": 0.28, "seed": 11 }
+    },
+    {
+      "name": "Organic B",
+      "desc": "多octave変調球 -- より高周波・大規模、500 000点（旧 Stanford Happy Buddha 相当のスケール/密度）",
+      "source": "synthetic",
+      "generator": "organic",
+      "output": "organic_b.ply",
+      "params": { "baseRadius": 0.12, "nPoints": 500000, "octaves": 6, "ampScale": 0.32, "seed": 22 }
+    },
+    {
+      "name": "Sphere",
+      "desc": "球面点群 -- 半径 1.0、10 000 点",
+      "source": "synthetic",
+      "generator": "sphere",
+      "output": "sphere.ply",
+      "params": { "radius": 1.0, "nPoints": 10000 }
+    },
+    {
+      "name": "Cylinder",
+      "desc": "円柱点群 -- 半径 0.5、高さ 2.0、8 000 点",
+      "source": "synthetic",
+      "generator": "cylinder",
+      "output": "cylinder.ply",
+      "params": { "radius": 0.5, "height": 2.0, "nPoints": 8000 }
+    },
+    {
+      "name": "Plane",
+      "desc": "平面点群 -- 5 x 5 グリッド + ガウスノイズ、10 000 点",
+      "source": "synthetic",
+      "generator": "plane",
+      "output": "plane.ply",
+      "params": { "size": 5.0, "nPoints": 10000, "noise": 0.02 }
+    },
+    {
+      "name": "Torus",
+      "desc": "トーラス点群 -- 外半径 1.0、管半径 0.3、12 000 点",
+      "source": "synthetic",
+      "generator": "torus",
+      "output": "torus.ply",
+      "params": { "majorRadius": 1.0, "tubeRadius": 0.3, "nPoints": 12000 }
+    }
+  ]
+}

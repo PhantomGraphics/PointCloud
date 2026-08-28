@@ -1,0 +1,36 @@
+{
+  "name": "normals",
+  "steps": [
+    { "label": "Clear world", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Record point count", "command": "GetScenePointCount", "expect_prefix": "Count:", "store_as": "pt_count", "strip_prefix": "Count:" },
+    { "label": "Estimate normals radius 0.1", "command": "EstimateNormals:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Result scene has normals", "command": "GetSceneHasNormals", "expect": "Yes" },
+    { "label": "Normal count equals point count", "command": "GetSceneNormalCount", "expect": "Count:${pt_count}" },
+
+    { "label": "Clear world (oriented normals)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply for orientation", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Estimate + orient normals towards origin", "command": "OrientNormals:0.1,0,0,0", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Oriented result scene has normals", "command": "GetSceneHasNormals", "expect": "Yes" },
+
+    { "label": "Clear world (principal curvature)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply for principal curvature", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Estimate principal curvature radius 0.1", "command": "EstimatePrincipalCurvature:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Principal curvature result is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Mean k1 is a finite, non-trivial value", "command": "GetLastMetric:meanK1", "expect_range": "-1000,1000" },
+
+    { "label": "Clear world (FPFH)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply for FPFH", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Estimate normals radius 0.1 (FPFH prerequisite)", "command": "EstimateNormals:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Estimate FPFH k=20", "command": "EstimateFPFH:20", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "FPFH result is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "FPFH descriptor is 33-dimensional", "command": "GetLastMetric:fpfhDim", "expect": "33" },
+
+    { "label": "Clear world (boundary detection)", "command": "Clear", "expect": "OK" },
+    { "label": "Load plane.ply for boundary detection", "command": "LoadPly:PointCloud/samples/plane.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Estimate normals radius 0.1 (boundary prerequisite)", "command": "EstimateNormals:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Detect boundary radius=0.1 angle=150deg", "command": "DetectBoundary:0.1,150", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Boundary result is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "A finite rectangular plane has boundary points", "command": "GetLastMetric:boundaryCount", "expect_not": "0" }
+  ]
+}

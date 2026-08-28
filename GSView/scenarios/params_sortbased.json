@@ -1,0 +1,32 @@
+{
+  "name": "params_sortbased",
+  "steps": [
+    { "label": "Load sphere",
+      "command": "LoadPLY:../samples/gs/gs_sphere.ply",
+      "expect_prefix": "OK:" },
+    { "label": "Ensure SortBased mode",
+      "command": "SetRenderMode:SortBased",
+      "expect": "OK" },
+    { "label": "Set splat size scale to 500",
+      "command": "SetSplatSizeScale:500",
+      "expect": "OK" },
+    { "label": "Get splat size scale is 500",
+      "command": "GetSplatSizeScale",
+      "expect": "Val:500" },
+    { "label": "Set sort point size to 5",
+      "command": "SetSortPointSize:5",
+      "expect": "OK" },
+    { "label": "Get sort point size is 5",
+      "command": "GetSortPointSize",
+      "expect": "Val:5" },
+    { "label": "Restore splat size scale",
+      "command": "SetSplatSizeScale:1000",
+      "expect": "OK" },
+    { "label": "Restore sort point size",
+      "command": "SetSortPointSize:2",
+      "expect": "OK" },
+    { "label": "Splat size scale back to 1000",
+      "command": "GetSplatSizeScale",
+      "expect": "Val:1000" }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "params_pbvr",
+  "steps": [
+    { "label": "Load sphere for PBVR params",
+      "command": "LoadPLY:../samples/gs/gs_sphere.ply",
+      "expect_prefix": "OK:" },
+    { "label": "Switch to PBVR",
+      "command": "SetRenderMode:PBVR",
+      "expect": "OK" },
+    { "label": "Set density scale to 2",
+      "command": "SetDensityScale:2",
+      "expect": "OK" },
+    { "label": "Get density scale is 2",
+      "command": "GetDensityScale",
+      "expect": "Val:2" },
+    { "label": "Set max particles per splat to 4",
+      "command": "SetMaxParticlesPerSplat:4",
+      "expect": "OK" },
+    { "label": "Get max particles per splat is 4",
+      "command": "GetMaxParticlesPerSplat",
+      "expect": "Val:4" },
+    { "label": "Set PBVR particle size to 6",
+      "command": "SetPbvrParticleSize:6",
+      "expect": "OK" },
+    { "label": "Get PBVR particle size is 6",
+      "command": "GetPbvrParticleSize",
+      "expect": "Val:6" },
+    { "label": "Particles exist after param change",
+      "command": "GetParticleCount",
+      "expect_prefix": "Count:", "expect_not": "Count:0" }
+  ]
+}

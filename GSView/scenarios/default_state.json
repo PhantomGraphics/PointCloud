@@ -1,0 +1,13 @@
+{
+  "name": "default_state",
+  "steps": [
+    { "label": "Liveness check",            "command": "GetStatus",        "expect": "OK" },
+    { "label": "No splats loaded",           "command": "GetSplatCount",    "expect": "Count:0" },
+    { "label": "No PBVR particles",          "command": "GetParticleCount", "expect": "Count:0" },
+    { "label": "Default mode is SortBased",  "command": "GetRenderMode",    "expect": "Val:SortBased" },
+    { "label": "GS available flag readable", "command": "GetGSAvailable",   "expect_prefix": "Val:" },
+    { "label": "Default splat size scale",   "command": "GetSplatSizeScale","expect": "Val:1000" },
+    { "label": "Default sort point size",    "command": "GetSortPointSize", "expect": "Val:2" },
+    { "label": "Default density scale",      "command": "GetDensityScale",  "expect": "Val:1" }
+  ]
+}

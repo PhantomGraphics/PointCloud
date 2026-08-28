@@ -1,0 +1,22 @@
+{
+  "name": "error_handling",
+  "steps": [
+    { "label": "Clear world", "command": "Clear", "expect": "OK" },
+    { "label": "No scenes yet", "command": "GetLastSceneId", "expect": "Id:-1" },
+
+    { "label": "Generate sphere 200 points", "command": "GenerateSphere:200", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Record sphere scene id", "command": "GetLastSceneId", "expect_prefix": "Id:", "store_as": "sphere_id", "strip_prefix": "Id:" },
+    { "label": "Generate cylinder 200 points", "command": "GenerateCylinder:200", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Last scene id is now the cylinder, not the sphere", "command": "GetLastSceneId", "expect_not": "Id:${sphere_id}" },
+
+    { "label": "SetActiveScene back to sphere", "command": "SetActiveScene:${sphere_id}", "expect": "OK" },
+    { "label": "Sphere scene (200 points) is active again", "command": "GetScenePointCount", "expect": "Count:200" },
+
+    { "label": "SetActiveScene with unknown id fails", "command": "SetActiveScene:999999", "expect_prefix": "Error:" },
+    { "label": "Active scene is unchanged after failed SetActiveScene", "command": "GetScenePointCount", "expect": "Count:200" },
+
+    { "label": "Load nonexistent PLY file returns error", "command": "LoadPly:PointCloud/samples/does_not_exist.ply", "expect_prefix": "Error:" },
+    { "label": "Scene count unchanged after failed load", "command": "GetSceneCount", "expect": "Count:2" },
+    { "label": "Active scene still healthy after failed load", "command": "GetScenePointCount", "expect": "Count:200" }
+  ]
+}

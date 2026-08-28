@@ -1,0 +1,25 @@
+{
+  "name": "registration",
+  "steps": [
+    { "label": "Clear world (ICP point-to-point)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic sphere (target)", "command": "GenerateSphere:1500", "expect_prefix": "Id:", "expect_not": "Id:-1", "store_as": "target_id", "strip_prefix": "Id:" },
+    { "label": "Duplicate + transform sphere (source)", "command": "DuplicateSceneTransformed:0.05,0.02,-0.03,5", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run ICP point-to-point alignment", "command": "ICPAlign:${target_id},50", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "ICP fitness converges to a small residual", "command": "GetLastMetric:fitness", "expect_range": "0,0.01" },
+
+    { "label": "Clear world (ICP point-to-plane)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic sphere (target)", "command": "GenerateSphere:1500", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Estimate target normals radius 0.1", "command": "EstimateNormals:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1", "store_as": "target_normals_id", "strip_prefix": "Id:" },
+    { "label": "Duplicate + transform target-with-normals (source)", "command": "DuplicateSceneTransformed:0.05,0.02,-0.03,5", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run ICP point-to-plane alignment", "command": "ICPAlignPointToPlane:${target_normals_id},50", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Point-to-plane ICP fitness converges to a small residual", "command": "GetLastMetric:fitness", "expect_range": "0,0.01" },
+
+    { "label": "Clear world (global registration)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic sphere (target)", "command": "GenerateSphere:1500", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Estimate target normals radius 0.1", "command": "EstimateNormals:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1", "store_as": "gr_target_id", "strip_prefix": "Id:" },
+    { "label": "Duplicate + transform target-with-normals (source)", "command": "DuplicateSceneTransformed:0.05,0.02,-0.03,5", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Estimate source normals radius 0.1", "command": "EstimateNormals:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run global registration (FPFH+RANSAC)", "command": "GlobalRegister:${gr_target_id},20,1000", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Global registration finds at least one inlier correspondence", "command": "GetLastMetric:inlierCount", "expect_not": "0" }
+  ]
+}

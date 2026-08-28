@@ -1,0 +1,20 @@
+{
+  "name": "realworld",
+  "steps": [
+    { "label": "Clear world (organic_a)", "command": "Clear", "expect": "OK" },
+    { "label": "Load organic_a.ply", "command": "LoadPly:PointCloud/samples/organic_a.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Organic A has points (>0)", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (organic_b)", "command": "Clear", "expect": "OK" },
+    { "label": "Load organic_b.ply (500k points)", "command": "LoadPly:PointCloud/samples/organic_b.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Organic B has points (>0)", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (organic_a pipeline)", "command": "Clear", "expect": "OK" },
+    { "label": "Load organic_a.ply for pipeline", "command": "LoadPly:PointCloud/samples/organic_a.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Downsample organic_a cellSize=0.005", "command": "DownSample:0.005", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Record downsampled count", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0", "store_as": "ds_count", "strip_prefix": "Count:" },
+    { "label": "Estimate normals on downsampled organic_a radius=0.02", "command": "EstimateNormals:0.02", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Organic A normals scene has normals", "command": "GetSceneHasNormals", "expect": "Yes" },
+    { "label": "Normal count equals downsampled point count", "command": "GetSceneNormalCount", "expect": "Count:${ds_count}" }
+  ]
+}

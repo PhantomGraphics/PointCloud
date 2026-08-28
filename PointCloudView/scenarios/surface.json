@@ -1,0 +1,26 @@
+{
+  "name": "surface",
+  "steps": [
+    { "label": "Clear world (MLS smooth)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic sphere", "command": "GenerateSphere:1500", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "MLS smooth radius 0.15", "command": "MLSSmooth:0.15", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "MLS smoothed scene is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (MLS upsample)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic sphere", "command": "GenerateSphere:1500", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "MLS upsample radius 0.15, upsampleRadius 0.05, step 0.02", "command": "MLSUpsample:0.15,0.05,0.02", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "MLS upsampled scene is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (convex hull)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic sphere", "command": "GenerateSphere:1500", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Compute convex hull of XY projection", "command": "ConvexHull2D", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Convex hull has vertices", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Convex hull area is close to a unit circle's (pi)", "command": "GetLastMetric:hullArea", "expect_range": "2.0,3.5" },
+
+    { "label": "Clear world (concave hull)", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic sphere", "command": "GenerateSphere:1500", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Compute concave hull of XY projection (k=8)", "command": "ConcaveHull2D:8,0", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Concave hull has vertices", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Concave hull area is non-trivial (dense disk, close to convex hull)", "command": "GetLastMetric:hullArea", "expect_range": "1.5,3.5" }
+  ]
+}

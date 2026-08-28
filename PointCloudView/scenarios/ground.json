@@ -1,0 +1,10 @@
+{
+  "name": "ground",
+  "steps": [
+    { "label": "Clear world", "command": "Clear", "expect": "OK" },
+    { "label": "Generate synthetic ground + raised block scene", "command": "GenerateGroundScene:2000", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Extract ground (cellSize=1.0, slope=0.3)", "command": "ExtractGround:1.0,0.3", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Ground scene is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Ground ratio is between 0 and 1 (mixed scene)", "command": "GetLastMetric:groundRatio", "expect_range": "0.05,0.95" }
+  ]
+}

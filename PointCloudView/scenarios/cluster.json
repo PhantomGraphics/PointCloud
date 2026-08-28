@@ -1,0 +1,21 @@
+{
+  "name": "cluster",
+  "steps": [
+    { "label": "Clear world (DBSCAN)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run DBSCAN eps=0.03 minPts=8", "command": "ClusterDbscan:0.03,8", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "DBSCAN result is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (region growing)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply for region growing", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run region growing radius=0.03", "command": "ClusterRegionGrowing:0.03", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Region growing result is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+
+    { "label": "Clear world (normal/curvature region growing)", "command": "Clear", "expect": "OK" },
+    { "label": "Load sphere.ply for normal-based region growing", "command": "LoadPly:PointCloud/samples/sphere.ply", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Estimate normals radius 0.1", "command": "EstimateNormals:0.1", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Run normal/curvature region growing (distinct from ClusterRegionGrowing above)", "command": "SegmentRegionGrowing:0.1,30,10,1.0", "expect_prefix": "Id:", "expect_not": "Id:-1" },
+    { "label": "Normal/curvature region growing result is non-empty", "command": "GetScenePointCount", "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "At least one cluster was found", "command": "GetLastMetric:clusterCount", "expect_not": "0" }
+  ]
+}

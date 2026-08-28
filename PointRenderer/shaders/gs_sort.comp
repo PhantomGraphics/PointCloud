@@ -1,0 +1,45 @@
+#version 450
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+struct GSSplat {
+    vec4 centerSize;
+    vec4 covRow0;
+    vec4 covRow1;
+    vec4 covRow2;
+    vec4 color;
+};
+
+layout(std430, binding = 0) buffer SplatBuffer {
+    GSSplat splats[];
+};
+
+layout(push_constant) uniform SortPC {
+    uint count;
+    uint phase;
+    uint _pad0;
+    uint _pad1;
+    vec4 eye;
+} pc;
+
+float depth2(in GSSplat s) {
+    vec3 d = s.centerSize.xyz - pc.eye.xyz;
+    return dot(d, d);
+}
+
+void main() {
+    uint pairIndex = gl_GlobalInvocationID.x;
+    uint i = pairIndex * 2u + pc.phase;
+
+    if (i + 1u >= pc.count) {
+        return;
+    }
+
+    GSSplat a = splats[i + 0u];
+    GSSplat b = splats[i + 1u];
+
+    if (depth2(a) < depth2(b)) {
+        splats[i + 0u] = b;
+        splats[i + 1u] = a;
+    }
+}

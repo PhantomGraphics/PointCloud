@@ -1,0 +1,29 @@
+{
+  "name": "render_mode",
+  "steps": [
+    { "label": "Load sphere for mode test",
+      "command": "LoadPLY:../samples/gs/gs_sphere.ply",
+      "expect_prefix": "OK:" },
+    { "label": "Default is SortBased",
+      "command": "GetRenderMode",
+      "expect": "Val:SortBased" },
+    { "label": "Switch to PBVR",
+      "command": "SetRenderMode:PBVR",
+      "expect": "OK" },
+    { "label": "Mode is now PBVR",
+      "command": "GetRenderMode",
+      "expect": "Val:PBVR" },
+    { "label": "PBVR particles generated",
+      "command": "GetParticleCount",
+      "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Switch back to SortBased",
+      "command": "SetRenderMode:SortBased",
+      "expect": "OK" },
+    { "label": "Mode is back SortBased",
+      "command": "GetRenderMode",
+      "expect": "Val:SortBased" },
+    { "label": "Unknown mode rejected",
+      "command": "SetRenderMode:Unknown",
+      "expect_prefix": "Error:" }
+  ]
+}
