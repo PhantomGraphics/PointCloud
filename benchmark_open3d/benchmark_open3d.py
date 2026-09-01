@@ -1,5 +1,5 @@
 """Benchmark Open3D on the same synthetic datasets/parameters used for the
-Crystal2024 PointCloud module C++ benchmark (benchmark_pointcloud.cpp), for a
+Phantom PointCloud module C++ benchmark (benchmark_pointcloud.cpp), for a
 speed comparison. See README.md for how to run this.
 
 Run with: py -3.11 benchmark_open3d.py   (open3d has no Python 3.13 wheel yet)

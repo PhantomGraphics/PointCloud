@@ -4,7 +4,7 @@ layout(local_size_x = 64) in;
 
 // -------------------------------------------------------------------
 // Input: GSPoint array (std430 packed, 17 floats = 68 bytes, no padding)
-// Matches C++ Crystal::PointCloud::GSPoint exactly.
+// Matches C++ Phantom::PointCloud::GSPoint exactly.
 // -------------------------------------------------------------------
 struct GsPoint {
     float x,  y,  z;

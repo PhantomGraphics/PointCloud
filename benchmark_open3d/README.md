@@ -70,7 +70,7 @@
 （`IPointCloud` 導入・AoS→SoA 移行 Phase 1・`Space::KDTree` の `IPointItem` 廃止＆
 `Vector3dfVector` 直接対応、`PointCloudKdTree` ラッパー削除）を反映してソリューション全体を
 再ビルドしたもの、2回目はそれに加えて `SORFilter::execute()` を O(n²) 総当たりから
-`Crystal::Space::KDTree` ベースの k-NN 探索（O(n log n)）へ書き換えたもの**
+`Phantom::Space::KDTree` ベースの k-NN 探索（O(n log n)）へ書き換えたもの**
 （初回計測時点の数値は各行に注記。Open3D 側の数値は再計測しても実質変化なし）。
 
 | アルゴリズム | 点数 | PointCloud (秒) | Open3D (秒) | 倍率 (PC ÷ O3D) | 初回計測時点の倍率 |
@@ -162,7 +162,7 @@
    ため計測をスキップしていたが、今回初めて直接計測でき **8.845秒**（Open3D比 2.3倍）で
    完走した。50K/200K の inlier 数（48260 / 193738）は書き換え前の総当たり実装と完全一致し、
    結果の正しさも確認済み（`PointCloud/PointCloud/SORFilter.cpp`、
-   `Crystal::Space::KDTree::findKNearestIndices()` を使用）。
+   `Phantom::Space::KDTree::findKNearestIndices()` を使用）。
 2. **ICP (point-to-point) の 1,000,000 点が 483.8秒 → 122.6秒に短縮（約 3.9倍高速化）、
    Open3D との倍率も 22倍 → 5.4倍に縮小。** 初回計測時点では「`KDTree` が `IPointItem` を廃止し
    `Vector3dfVector` を直接扱うようになったので仮想関数呼び出しのオーバーヘッドは解消したはずだが

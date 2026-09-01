@@ -1,13 +1,13 @@
-# Cross-platform CMake build for the PointCloud core library (Crystal::PC /
-# Crystal::PointCloud), its GoogleTest suite (PointCloudTest), and
+# Cross-platform CMake build for the PointCloud core library (Phantom::PC /
+# Phantom::PointCloud), its GoogleTest suite (PointCloudTest), and
 # PointCloudView/PointRenderer/GSView (Vulkan apps).
 #
 # This is a standalone CMake build, separate from the MSBuild/.vcxproj-based
 # Windows build (PointCloud/PointCloud/PointCloud.vcxproj + PointCloud/
 # PointCloudTest/PointCloudTest.vcxproj, driven by Phantom2026.sln).
 # MathCore/SpaceCore/NumericsCore/VolumeRenderer/VkAppBaseCore/etc. are now
-# defined once in ../cmake/CrystalCoreLibs.cmake and
-# ../cmake/CrystalVulkanApp.cmake (Phase 4 §5.4 item 1 dedup,
+# defined once in ../cmake/PhantomCoreLibs.cmake and
+# ../cmake/PhantomVulkanApp.cmake (Phase 4 §5.4 item 1 dedup,
 # docs/todo/PLAN_crossplatform_non_cgapp_build.md) -- this file just calls
 # them (PointCloudCore itself links against MathCore/SpaceCore/NumericsCore
 # instead of bundling their raw sources, same behavior, cleaner; GSView's
@@ -24,15 +24,15 @@
 #   cmake --build PointCloud/build_linux -j
 #   ctest --test-dir PointCloud/build_linux --output-on-failure
 #
-# GSView.vcxproj additionally references Crystal/Volume/VolumeRenderer/
-# VolumeRenderer.vcxproj (for Crystal::Volume::PBVRPipeline/ParticleSet, used
+# GSView.vcxproj additionally references CGLib/Volume/VolumeRenderer/
+# VolumeRenderer.vcxproj (for Phantom::Volume::PBVRPipeline/ParticleSet, used
 # by the PBVR render-mode toggle in GSViewRenderer/GSComputePBVR). NOTE:
 # GSView.vcxproj's AdditionalIncludeDirectories points at a stale
-# "..\..\Crystal\Volume\PBVRLib" path that doesn't exist on disk (renamed to
+# "..\..\CGLib\Volume\PBVRLib" path that doesn't exist on disk (renamed to
 # VolumeRenderer/ at some point, per its own vcxproj's leftover
 # RootNamespace=PBVRLib) -- resolves in practice via the ProjectReference's
 # public include dirs on Windows; this file just points directly at the real
-# path via crystal_add_volumerenderer_core()'s PUBLIC include dirs.
+# path via phantom_add_volumerenderer_core()'s PUBLIC include dirs.
 
 cmake_minimum_required(VERSION 3.20)
 
@@ -53,9 +53,9 @@ set(CGLIB_ROOT ${REPO_ROOT}/CGLib)
 
 if(MSVC)
     add_compile_options(/utf-8)
-    set(CRYSTAL_WARN_FLAGS /W3)
+    set(PHANTOM_WARN_FLAGS /W3)
 else()
-    set(CRYSTAL_WARN_FLAGS -Wall)
+    set(PHANTOM_WARN_FLAGS -Wall)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH ${REPO_ROOT}/cmake)
@@ -63,9 +63,9 @@ include(PhantomGTest)
 include(PhantomCoreLibs)
 include(PhantomVulkanApp)
 
-crystal_add_math_core()
-crystal_add_space_core()
-crystal_add_numerics_core()
+phantom_add_math_core()
+phantom_add_space_core()
+phantom_add_numerics_core()
 
 file(GLOB POINTCLOUD_SOURCES ${POINTCLOUD_ROOT}/PointCloud/*.cpp)
 list(FILTER POINTCLOUD_SOURCES EXCLUDE REGEX "pch\\.cpp$")
@@ -79,13 +79,13 @@ if(OpenMP_CXX_FOUND)
     target_link_libraries(PointCloudCore PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
-target_compile_options(PointCloudCore PRIVATE ${CRYSTAL_WARN_FLAGS})
+target_compile_options(PointCloudCore PRIVATE ${PHANTOM_WARN_FLAGS})
 
 # --- PointCloudTest (GoogleTest) ---
 
-crystal_find_gtest()
+phantom_find_gtest()
 
-if(CRYSTAL_GTEST_FOUND)
+if(PHANTOM_GTEST_FOUND)
     enable_testing()
 
     file(GLOB POINTCLOUDTEST_SOURCES ${POINTCLOUD_ROOT}/PointCloudTest/*.cpp)
@@ -104,7 +104,7 @@ if(CRYSTAL_GTEST_FOUND)
         GTest::gtest_main
     )
 
-    target_compile_options(PointCloudTest PRIVATE ${CRYSTAL_WARN_FLAGS})
+    target_compile_options(PointCloudTest PRIVATE ${PHANTOM_WARN_FLAGS})
 
     include(GoogleTest)
     gtest_discover_tests(PointCloudTest)
@@ -117,20 +117,20 @@ endif()
 # GSView (GSView::GSViewApp).
 # ---------------------------------------------------------------------------
 
-crystal_find_vulkan_headers()
+phantom_find_vulkan_headers()
 
-if(CRYSTAL_VULKAN_INCLUDE_DIR)
+if(PHANTOM_VULKAN_INCLUDE_DIR)
 
-crystal_find_vulkan_loader()
-crystal_find_glfw_loader()
+phantom_find_vulkan_loader()
+phantom_find_glfw_loader()
 
-if(CRYSTAL_VULKAN_LIBRARY AND CRYSTAL_GLFW_LIBRARY)
+if(PHANTOM_VULKAN_LIBRARY AND PHANTOM_GLFW_LIBRARY)
 
-crystal_add_vkappbase_core()
-crystal_add_vkrenderer_core()
-crystal_add_volumerenderer_core()
+phantom_add_vkappbase_core()
+phantom_add_vkrenderer_core()
+phantom_add_volumerenderer_core()
 
-# --- PointRenderer (Crystal::VKR point/GS-splat pipelines, shared with GSView) ---
+# --- PointRenderer (Phantom::VKR point/GS-splat pipelines, shared with GSView) ---
 
 add_library(PointRendererCore STATIC
     ${POINTCLOUD_ROOT}/PointRenderer/src/VkGSPointRenderer.cpp
@@ -142,7 +142,7 @@ target_include_directories(PointRendererCore PRIVATE
     ${CGLIB_ROOT}/ThirdParty/glm-0.9.9.8
 )
 # VkPointRenderer.cpp (PointRenderer/src/VkPointRenderer.cpp) uses
-# Crystal::VKG::VkLineRenderer for normal-line overlays (via
+# Phantom::VKG::VkLineRenderer for normal-line overlays (via
 # Renderer/VkRenderer/VkLineRenderer.h) -- must declare this so CMake orders
 # VkRendererCore correctly on PointCloudView's final link line (undeclared,
 # this static-archive link failed with "undefined reference to
@@ -150,7 +150,7 @@ target_include_directories(PointRendererCore PRIVATE
 # pass and VkRendererCore's needed members weren't re-pulled after
 # PointRendererCore introduced the reference).
 target_link_libraries(PointRendererCore PRIVATE VulkanGraphicsCore VkRendererCore)
-target_compile_options(PointRendererCore PRIVATE ${CRYSTAL_WARN_FLAGS})
+target_compile_options(PointRendererCore PRIVATE ${PHANTOM_WARN_FLAGS})
 
 # --- PointCloudView (VPC::PointCloudApp) -- standalone ImGui + Vulkan viewer ---
 # Excludes VkGSPointRenderer.cpp/VulkanPointCloudPipeline.cpp still sitting in
@@ -171,13 +171,13 @@ target_link_libraries(PointCloudView PRIVATE
     VkAppBaseCore
     VkRendererCore
     PointRendererCore
-    ${CRYSTAL_VULKAN_LIBRARY}
-    ${CRYSTAL_GLFW_LIBRARY}
+    ${PHANTOM_VULKAN_LIBRARY}
+    ${PHANTOM_GLFW_LIBRARY}
 )
 if(OpenMP_CXX_FOUND)
     target_link_libraries(PointCloudView PRIVATE OpenMP::OpenMP_CXX)
 endif()
-target_compile_options(PointCloudView PRIVATE ${CRYSTAL_WARN_FLAGS})
+target_compile_options(PointCloudView PRIVATE ${PHANTOM_WARN_FLAGS})
 
 # loadSPVRepo() (VulkanSPVResolver.h) resolves "shaders/*.spv" relative to the
 # running binary's directory on Windows, and to the current working directory
@@ -202,7 +202,7 @@ add_custom_command(TARGET PointCloudView POST_BUILD
 # ---------------------------------------------------------------------------
 # GSView (GSView::GSViewApp) -- standalone Gaussian Splatting ImGui + Vulkan
 # viewer. Reuses PointCloudCore/PointRendererCore/VkAppBaseCore/VkRendererCore
-# above, plus the shared VolumeRenderer (crystal_add_volumerenderer_core(),
+# above, plus the shared VolumeRenderer (phantom_add_volumerenderer_core(),
 # called above) for its PBVR render-mode toggle.
 # ---------------------------------------------------------------------------
 
@@ -228,13 +228,13 @@ target_link_libraries(GSView PRIVATE
     VolumeRenderer
     VkAppBaseCore
     VkRendererCore
-    ${CRYSTAL_VULKAN_LIBRARY}
-    ${CRYSTAL_GLFW_LIBRARY}
+    ${PHANTOM_VULKAN_LIBRARY}
+    ${PHANTOM_GLFW_LIBRARY}
 )
 if(OpenMP_CXX_FOUND)
     target_link_libraries(GSView PRIVATE OpenMP::OpenMP_CXX)
 endif()
-target_compile_options(GSView PRIVATE ${CRYSTAL_WARN_FLAGS})
+target_compile_options(GSView PRIVATE ${PHANTOM_WARN_FLAGS})
 
 # GSView.vcxproj's PreBuild/PostBuild compiles+copies BOTH PointRenderer/shaders
 # (point/gs_splat/gs_sort pipelines, shared with PointCloudView) and GSView's

@@ -45,7 +45,7 @@ cmake --build --preset windows-debug
 .\build\windows-debug\PointCloud\PointCloudTest.exe --gtest_filter=DBSCANTest.*
 ```
 
-183 テストケース（約 31 ファイル）。フィルタ/クラスタリング（`DensityBasedFilterTest`/`DBSCANTest`/`DistanceBasedClusteringTest`/`GroundExtractorTest`/`RegionGrowingTest`）、推定（`NormalEstimatorTest`/`CurvatureEstimatorTest`/`DensityEstimatorTest`/`FPFHEstimatorTest`/`BoundaryDetectorTest`）、検出（`RansacPlaneDetectorTest`/`RansacCylinderDetectorTest`/`RansacSphereDetectorTest`/`RansacConeDetectorTest`）、レジストレーション（`ICPRegistrationTest`/`GlobalRegistrationTest`）、メッシュ化/サーフェス（`GreedyProjectionMeshGeneratorTest`/`PoissonSurfaceTest`/`MLSSurfaceTest`/`ConvexHull2DTest`/`ConcaveHull2DTest`）、ファイル I/O（`PLYFileReaderTest`/`PLYFileWriterTest`/`PCDFileReaderTest`/`PCDFileWriterTest`/`TXTFileReaderTest`/`TXTFileWriterTest`/`PointCloudFileLoaderTest`）、GS（`GSPointCloudTest`）で構成される。近傍探索（k-NN/最近傍）は `Crystal::Space::KDTree` を各アルゴリズムが直接使用し、そのテストは `CGLib/Space/SpaceTest/KDTreeTest.cpp` 側にある。
+183 テストケース（約 31 ファイル）。フィルタ/クラスタリング（`DensityBasedFilterTest`/`DBSCANTest`/`DistanceBasedClusteringTest`/`GroundExtractorTest`/`RegionGrowingTest`）、推定（`NormalEstimatorTest`/`CurvatureEstimatorTest`/`DensityEstimatorTest`/`FPFHEstimatorTest`/`BoundaryDetectorTest`）、検出（`RansacPlaneDetectorTest`/`RansacCylinderDetectorTest`/`RansacSphereDetectorTest`/`RansacConeDetectorTest`）、レジストレーション（`ICPRegistrationTest`/`GlobalRegistrationTest`）、メッシュ化/サーフェス（`GreedyProjectionMeshGeneratorTest`/`PoissonSurfaceTest`/`MLSSurfaceTest`/`ConvexHull2DTest`/`ConcaveHull2DTest`）、ファイル I/O（`PLYFileReaderTest`/`PLYFileWriterTest`/`PCDFileReaderTest`/`PCDFileWriterTest`/`TXTFileReaderTest`/`TXTFileWriterTest`/`PointCloudFileLoaderTest`）、GS（`GSPointCloudTest`）で構成される。近傍探索（k-NN/最近傍）は `Phantom::Space::KDTree` を各アルゴリズムが直接使用し、そのテストは `CGLib/Space/SpaceTest/KDTreeTest.cpp` 側にある。
 
 ### シナリオテスト（PointCloudView）
 
@@ -76,13 +76,13 @@ cmake --build --preset windows-debug
 
 ## Architecture
 
-### Crystal::PC / Crystal::PointCloud（`PointCloud/`）— コアライブラリ
+### Phantom::PC / Phantom::PointCloud（`PointCloud/`）— コアライブラリ
 
-**注意: 名前空間が2種類混在している。** ほとんどのクラス（`PointCloudColoredData`／各種フィルタ・推定器・検出器・ファイル I/O）は `Crystal::PC` 名前空間だが、`GSPointCloud`（Gaussian Splatting 点群）のみ `Crystal::PointCloud` 名前空間になっている。新規クラス追加時はどちらに属するファイルか要確認。
+**注意: 名前空間が2種類混在している。** ほとんどのクラス（`PointCloudColoredData`／各種フィルタ・推定器・検出器・ファイル I/O）は `Phantom::PC` 名前空間だが、`GSPointCloud`（Gaussian Splatting 点群）のみ `Phantom::PointCloud` 名前空間になっている。新規クラス追加時はどちらに属するファイルか要確認。
 
 - `PointCloudColoredData`（SoA、`PointCloudFileLoader.h`）— `positions`/`colors`/`normals`/`scalars` を並行配列で保持する主点群コンテナ。`colors`/`normals`/`scalars` は任意（未使用なら空、使う場合は `positions` と同サイズ）で `hasColors()`/`hasNormals()`/`hasScalars()` で判定する。旧 `PointCloud<T>` テンプレート（`std::vector<std::unique_ptr<T>>` による AoS）と `PointXYZ`/`PointXYZf`/`PointXYZRGBf`/`PointXYZRGBNormal` は AoS→SoA 移行の Phase 1（`docs/todo/PLAN_pointcloud_soa_migration.md`）で削除済み——利用箇所が `PointCloudTest.cpp` と Python バインディングのみで、コアアルゴリズムはいずれも消費していなかったため。`loadPointCloud()`/`savePointCloud()`（`PointCloudFileLoader.h`）もこの型を直接読み書きする。
 - `IPointCloud`（`IPointCloud.h`）— 点群の共通読み書きインタフェース。純粋仮想は `size()`/`getPosition(i)`/`getPositions()`/`setPositions(vector)`/`addPosition(pos)` の5つ。ジェネリックなコード（将来のアルゴリズム・テスト等）が具体的なコンテナ型に依存せず「任意の点群」を読み書きできるようにする拡張の受け皿。`empty()`/`getBoundingBox()` はこのインタフェース上に非仮想メソッドとして一度だけ実装済みで、実装クラス側は再実装不要。`PointCloud`（位置のみ、`PointCloud.h`）と `ColoredPointCloud`（`PointCloudColoredData` を内部に保持するラッパー、`ColoredPointCloud.h`）の2つが実装する。属性の組み合わせごとにクラスを増やす（旧 `PointXYZ*` 系と同じ型爆発）のではなく、色/法線/スカラーは `PointCloudColoredData` 側（`ColoredPointCloud` の `addColor()`/`addNormal()`/`addScalar()`/`getColor()`/`getData()` 等）にまとめて持たせる方針。`feedPositions(consumer, cloud)`（`IPointCloud.h` のフリー関数テンプレート）は `add(const Vector3df&)` を持つ既存アルゴリズム（`NormalEstimator`/`DownSampler`/`CurvatureEstimator`/`DensityEstimator`/`DensityBasedFilter`/`SORFilter`/`RadiusOutlierFilter`/`PassThroughFilter`/`MLSSurface` 等）に `IPointCloud` 経由で点群を流し込む汎用ヘルパーで、`IPointCloud::addPosition()` とは別物（後者は点群自身への追加、前者は他のアルゴリズムへの一括投入）。
-- 近傍探索: 専用ラッパーは持たず、`ICPRegistration`/`NormalEstimator`/`RegionGrowing`/`FPFHEstimator`/`BoundaryDetector`/`CurvatureEstimator`/`DensityEstimator`/`DownSampler`/`MLSSurface` の KNN 系メソッドが `Crystal::Space::KDTree` を直接使用する（旧 `PointCloudKdTree` ラッパーは `Space::KDTree` が `Vector3dfVector` を直接扱うようになり実質的な差分がなくなったため削除済み）。既存の `CompactSpaceHash` ベース実装は未移行、詳細は `docs/todo/PLAN_pointcloud_feature_gap_analysis.md` Phase 0 参照。
+- 近傍探索: 専用ラッパーは持たず、`ICPRegistration`/`NormalEstimator`/`RegionGrowing`/`FPFHEstimator`/`BoundaryDetector`/`CurvatureEstimator`/`DensityEstimator`/`DownSampler`/`MLSSurface` の KNN 系メソッドが `Phantom::Space::KDTree` を直接使用する（旧 `PointCloudKdTree` ラッパーは `Space::KDTree` が `Vector3dfVector` を直接扱うようになり実質的な差分がなくなったため削除済み）。既存の `CompactSpaceHash` ベース実装は未移行、詳細は `docs/todo/PLAN_pointcloud_feature_gap_analysis.md` Phase 0 参照。
 - フィルタ/クラスタリング: `DensityBasedFilter`、`DBSCAN`、`DistanceBasedClustering`、`DownSampler`、`RegionGrowing`(法線・曲率ベースのリージョングロウイング。曲率が低い点から成長を開始し、`Space::KDTree` のk-NN近傍のうち法線角度が閾値内のものを吸収。DBSCAN/距離ベースクラスタリングでは分離できない「同一平面上だが密度的には連続」なケースや、逆に法線が大きく折れ曲がる箇所での過剰結合を防ぐ)。
 - 推定: `NormalEstimator`(PCA 法線推定。`orientTowardsViewpoint()` で視点ベースの向き統一が可能)、`CurvatureEstimator`(`estimate()`: PCA固有値比によるスカラー曲率。`estimatePrincipal()`: PCA接平面での局所二次曲面フィッティングにより主曲率 k1/k2 と主方向を推定)、`DensityEstimator`、`FPFHEstimator`(Fast Point Feature Histogram、33次元記述子。法線が既知の点群に対し `Space::KDTree` の k-NN で SPFH を計算し近傍で重み付き合成。大域レジストレーション向けの特徴量基盤)、`BoundaryDetector`(法線既知の点群に対し、接平面に投影した近傍点の角度分布の最大ギャップで境界点を判定)。
 - 検出/フィッティング: `RansacPlaneDetector`、`RansacCylinderDetector`、`RansacSphereDetector`(4点から閉形式で球を解く)、`RansacConeDetector`(サンプルのPCA主方向を軸候補とし、軸からの半径が頂点からの距離に比例するというコーン特有の性質を最小二乗直線回帰で利用して頂点・軸・半頂角を推定。半頂角が小さすぎる/大きすぎる劣化フィットは棄却)。
@@ -94,11 +94,11 @@ cmake --build --preset windows-debug
 
 ### PointRenderer（`PointRenderer/`）— 点群/GS 描画共有ライブラリ
 
-`Crystal::VKR`（`include/`/`src/` 構成、他プロジェクトと異なり `include`/`src` 分離）。`VkPointRenderer`/`VkPointCloudPipeline`/`VkPointScene` が通常点群の描画を、`VkGSPointRenderer`/`GSSplat` が GS スプラットの描画を担当。`PointCloudView` と `GSView` の両方から参照される。
+`Phantom::VKR`（`include/`/`src/` 構成、他プロジェクトと異なり `include`/`src` 分離）。`VkPointRenderer`/`VkPointCloudPipeline`/`VkPointScene` が通常点群の描画を、`VkGSPointRenderer`/`GSSplat` が GS スプラットの描画を担当。`PointCloudView` と `GSView` の両方から参照される。
 
 ### PointCloudView（`PointCloudView/`）— 点群処理スタンドアロン ImGui + Vulkan アプリ
 
-`PointCloudApp : VkAppBase` 直下。**`VPC` 名前空間**（コアライブラリの `Crystal::PC` とは別）。
+`PointCloudApp : VkAppBase` 直下。**`VPC` 名前空間**（コアライブラリの `Phantom::PC` とは別）。
 
 - `World`（`World.h`）— `PointCloudfScene` の集合を ID 管理する軽量な状態保持クラス（`addScene()`/`removeScene()`/`findById()`）。ポリゴンオーバーレイ（`PolygonMesh`）も `addPolygon()`/`clearPolygons()` で保持する。
 - `Menu : ::VKG::IVkUIPanel` — アルゴリズム切り替えメニュー兼 "Control" ウィンドウ所有者（`docs/VulkanPointCloudView_StructurePlan.md` に構造整理の経緯あり）。各処理パネルは `IProcessView`（`getName()`/`onImGui(World&, activeSceneId, onRebuild)`）を実装する:
@@ -126,6 +126,6 @@ cmake --build --preset windows-debug
 ## Key Conventions
 
 - **例外禁止**: このリポジトリ全体の規約（`docs/guide/conventions.md`）に従い、`throw`/`try`/`catch` は使わない。エラーは `bool`/`std::optional` で返す（例: `PLYFileReader::readFromFile()`、`PointCloudFileLoader::loadPointCloud()`）。`PointCloudView` の `CommandDispatcher.cpp` はシナリオコマンドの数値引数パースに `std::from_chars` を使う（`std::stof`/`std::stoi` の `try/catch` は使わない）。新規コマンドもこのパターンに倣うこと。
-- **名前空間の不統一に注意**: 上記の通り `Crystal::PC`（大半のコアクラス）と `Crystal::PointCloud`（`GSPointCloud`）が混在する。ファイルを開いて確認してから実装すること。
+- **名前空間の不統一に注意**: 上記の通り `Phantom::PC`（大半のコアクラス）と `Phantom::PointCloud`（`GSPointCloud`）が混在する。ファイルを開いて確認してから実装すること。
 - **非所有ポインタ**: `World::findById()`/`addScene()` が返すシーンポインタは `World` が所有する。呼び出し元は寿命を管理しない。
 - **PointRenderer の共有**: 点群/GS 描画パイプラインを変更する場合は `PointCloudView` と `GSView` の両方に影響する。片方だけで検証して終わらせないこと。
