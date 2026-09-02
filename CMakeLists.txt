@@ -2,13 +2,10 @@
 # Phantom::PointCloud), its GoogleTest suite (PointCloudTest), and
 # PointCloudView/PointRenderer/GSView (Vulkan apps).
 #
-# This is a standalone CMake build, separate from the MSBuild/.vcxproj-based
-# Windows build (PointCloud/PointCloud/PointCloud.vcxproj + PointCloud/
-# PointCloudTest/PointCloudTest.vcxproj, driven by Phantom2026.sln).
+# CMake is the only build system for this module (Windows and Linux).
 # MathCore/SpaceCore/NumericsCore/VolumeRenderer/VkAppBaseCore/etc. are now
 # defined once in ../cmake/PhantomCoreLibs.cmake and
-# ../cmake/PhantomVulkanApp.cmake (Phase 4 §5.4 item 1 dedup,
-# docs/todo/PLAN_crossplatform_non_cgapp_build.md) -- this file just calls
+# ../cmake/PhantomVulkanApp.cmake -- this file just calls
 # them (PointCloudCore itself links against MathCore/SpaceCore/NumericsCore
 # instead of bundling their raw sources, same behavior, cleaner; GSView's
 # volume-rendering path now reuses the shared VolumeRenderer/VolumeCore

@@ -52,7 +52,7 @@ void RegionGrowingView::onImGui(World& world, int activeSceneId,
         const auto& normals   = scene->getNormals();
 
         // PointCloudfScene doesn't persist curvature, so it's recomputed here from the same
-        // radius used for the neighborhood search (see docs/todo/PLAN_pointcloudview_new_algorithm_views.md §4).
+        // radius used for the neighborhood search.
         Phantom::PC::CurvatureEstimator curvEstimator;
         for (const auto& p : positions) curvEstimator.add(p);
         curvEstimator.estimate(static_cast<double>(curvatureRadius_));

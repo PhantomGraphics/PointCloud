@@ -12,8 +12,7 @@ namespace Phantom
 		/// @brief IPointCloud-compliant wrapper around PointCloudColoredData.
 		///
 		/// PointCloudColoredData (see PointCloudFileLoader.h) is the SoA container already
-		/// used by loadPointCloud()/savePointCloud() and most algorithms (see
-		/// docs/todo/PLAN_pointcloud_soa_migration.md Phase 1). ColoredPointCloud wraps one so
+		/// used by loadPointCloud()/savePointCloud() and most algorithms. ColoredPointCloud wraps one so
 		/// it can also be passed through APIs that accept `const IPointCloud&`, while still
 		/// keeping direct access to colors/normals/scalars via getData()/getColor()/etc.
 		class ColoredPointCloud : public IPointCloud

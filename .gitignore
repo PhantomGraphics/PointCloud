@@ -21,11 +21,6 @@
 /PointCloud/PointCloud/x64/Debug
 /PointCloudTest/PointCloudTest/x64/Debug
 /PointRenderer/x64/Release
-/PyPointCloud/build
-/PyPointCloud/tests/__pycache__
-/crystal_pc_addon/__pycache__
-/PyPointCloud/build_blender41
-/PyPointCloud/build_v142
 *.spv
 /VulkanPointCloudView/VulkanPo.C4E1F2A3/x64/Debug
 /VulkanPointCloudView/x64/Debug

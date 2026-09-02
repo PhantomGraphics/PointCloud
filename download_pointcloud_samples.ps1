@@ -2,9 +2,7 @@
 <#
 .SYNOPSIS
   点群サンプルデータ 生成
-  合成点群を PointCloud\samples\ に生成する（実データのダウンロードは行わない --
-  実データ（Stanford Bunny/Armadillo/Happy Buddha/Dragon）での追加検証は
-  ThirdPartyScenarios\PointCloudView\download_pointcloud_samples.ps1（非公開のルートリポジトリ側）を参照）。
+  合成点群を PointCloud\samples\ に生成する（実データのダウンロードは行わない）。
   ソース定義: PointCloud\download_pointcloud_samples.json
 #>
 $ErrorActionPreference = 'Stop'
@@ -78,7 +76,7 @@ function New-TorusPoints([double]$R, [double]$tubeR, [int]$nPoints) {
 # 多octaveの角度依存半径変調を持つ球。閉じた(watertight)非凸形状で、解析プリミティブ
 # (sphere/cylinder/plane/torus)より複雑な"有機的"表面が要る検証(実データダウンロード無しで
 # ダウンサンプル/法線推定/大規模ロードパスを一通り検証できる)用の代替。
-# 旧 Stanford Bunny / Happy Buddha の代替、docs/todo/PLAN_scenario_test_synthetic_assets.md Phase 2。
+# 解析プリミティブより複雑な "有機的" 表面のテスト用合成形状。
 function New-OrganicPoints([double]$baseRadius, [int]$nPoints, [int]$octaves, [double]$ampScale, [int]$seed) {
     $rng = [Random]::new($seed)
     $pts = [Collections.Generic.List[double[]]]::new()

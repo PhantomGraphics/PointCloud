@@ -14,9 +14,8 @@ namespace Phantom
 		/// Lets generic code (algorithms, tests, future point types) work with "any point
 		/// cloud" via a common base rather than a specific concrete type. Each implementer
 		/// (PointCloud, ColoredPointCloud, ...) keeps its own SoA (Structure of Arrays)
-		/// storage internally (see docs/todo/PLAN_pointcloud_soa_migration.md) - this
-		/// interface only standardizes access to position/size, so it does not bring back
-		/// the per-point heap allocation the AoS->SoA migration (Phase 1) removed.
+		/// storage internally - this interface only standardizes access to position/size,
+		/// so it does not bring back the per-point heap allocation the AoS->SoA migration removed.
 		class IPointCloud
 		{
 		public:

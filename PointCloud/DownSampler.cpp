@@ -61,7 +61,7 @@ void DownSampler::execute(const double voxelSize)
 	//
 	// Deliberately not OpenMP-parallelized: per-point work here is just a handful of floor()s
 	// plus one hash-map lookup, so a per-thread-map-then-merge parallelization was measured
-	// (via PointCloud/benchmark_open3d/) to be 2-3x SLOWER than this single-threaded version at
+	// to be 2-3x SLOWER than this single-threaded version at
 	// every tested size up to 1,000,000 points -- thread fork/join, per-thread map allocation,
 	// and the serial merge pass all cost more than the parallel section saves. Revisit only if a
 	// fundamentally different strategy (e.g. parallel sort-based bucketing) is worth the added

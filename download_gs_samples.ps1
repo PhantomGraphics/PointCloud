@@ -2,8 +2,7 @@
 <#
 .SYNOPSIS
   Gaussian Splatting サンプル PLY / .splat 生成
-  合成 GS シーンを binary_little_endian PLY と .splat の両形式で生成する（実データのダウンロードは行わない —
-  実シーンでの追加検証は ThirdPartyScenarios\GSView\download_gs_samples.ps1（非公開のルートリポジトリ側）を参照）。
+  合成 GS シーンを binary_little_endian PLY と .splat の両形式で生成する（実データのダウンロードは行わない）。
   ソース定義: PointCloud\download_gs_samples.json
   出力先: PointCloud\samples\gs\
 #>
@@ -157,8 +156,7 @@ function New-TorusPoints([int]$n = 3000, [double]$R = 1.5, [double]$tubeR = 0.4)
     ,$pts
 }
 
-# 対数螺旋の巻殻（テーパー付きチューブ断面）。非対称・大規模な形状のロードパス検証用
-# （旧 luigi.ply の代替、docs/todo/PLAN_scenario_test_synthetic_assets.md Phase 1）。
+# 対数螺旋の巻殻（テーパー付きチューブ断面）。非対称・大規模な形状のロードパス検証用。
 function New-ShellPoints([int]$n = 15000, [double]$turns = 4.5, [double]$baseRadius = 0.08,
                          [double]$growth = 0.18, [double]$pitch = 0.05, [double]$tubeRadius = 0.05) {
     $rng = [Random]::new(123)

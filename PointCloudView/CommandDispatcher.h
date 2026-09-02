@@ -32,7 +32,7 @@ private:
 
     // Scalar results from the most recent processing command that don't fit the
     // "new scene of points" model (fitness, inlier counts, hull area, ...).
-    // Read back via "GetLastMetric:<name>". See docs/todo/PLAN_pointcloudview_new_algorithm_views.md §3.3.
+    // Read back via "GetLastMetric:<name>".
     std::map<std::string, std::string> lastMetrics_;
 
     std::mutex              mutex_;

@@ -37,7 +37,7 @@ void DBSCANClustering::cluster(std::vector<Point>& points, double eps, int minPt
     //
     // Deliberately not restructured to precompute-and-cache every point's neighbor list
     // up front (which would allow OpenMP-parallelizing the search): that was tried and
-    // measured (via PointCloud/benchmark_open3d/) to be 10-15x SLOWER even single-threaded
+    // measured to be 10-15x SLOWER even single-threaded
     // on dense clustered data, because retaining ~n heap-allocated neighbor-list vectors for
     // the whole run (rather than each findNeighbors() call's result living briefly and being
     // freed right away) blows up peak memory and allocator/cache overhead for workloads where
