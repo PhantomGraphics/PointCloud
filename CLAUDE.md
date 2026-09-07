@@ -108,14 +108,17 @@ cmake --build --preset windows-debug
     `IProcessView` を遅延生成し `std::array` で保持（パラメーターがセッション中残る）。Reset で当該パネルのみ破棄。
     `blockReason()` が前提条件不足（点群未ロード／対象シーン未選択／Registration の参照シーン不足）を
     判定し、理由を出して当該パネルを `BeginDisabled()` する（Generate* は空 World でも常時可）。
-  - **GUI/シナリオ経路の共通化（Phase 4、進行中）**: 処理ロジックを `PointCloudOps.{h,cpp}`（`VPC::ops::`）へ
-    型付き関数として順次移し、`*View`（GUI）と `CommandDispatcher`（シナリオ）が同じ関数を呼ぶ。移行済み:
-    `downSample` / `estimateNormals`（orient 込み）/ `filterDensity` / `filterCurvature` /
-    `detectPlane`/`detectCylinder`/`detectSphere`/`detectCone`（`RansacParams`、GUI のみ
-    `buildOverlayMesh=true`）。`IProcessView::onImGui` の第3引数は `std::function<void(int)> onResult`
-    （新 active scene id、-1 = 維持）。`CommandDispatcher` は自前の `activeId_` を廃し
-    `renderer_.getActiveSceneIdPtr()` を `setActiveSceneIdRef()` で共有——GUI 選択とシナリオ対象が一致する。
-    新規処理は原則 `PointCloudOps` に関数を書き、両方から呼ぶ。
+  - **GUI/シナリオ経路の共通化（Phase 4、完了）**: 処理ロジックは `PointCloudOps.{h,cpp}`（`VPC::ops::`）の
+    型付き関数に集約され、`*View`（GUI）と `CommandDispatcher`（シナリオ）が同じ関数を呼ぶ。
+    Dispatcher に対応コマンドのある処理は全 20 op 移行済み（DownSample / normals / 各種 filter /
+    RANSAC 4 種 / clustering 3 種 / Ground / Curvature / FPFH / Boundary / MLS 2 種 / Hull 2 種 /
+    ICP 2 種 / GlobalRegister）。`CommandDispatcher.cpp` はアルゴリズム include をすべて撤去し、
+    `Error:<reason>` 整形と `lastMetrics_` 反映だけを行う。`IProcessView::onImGui` の第3引数は
+    `std::function<void(int)> onResult`（新 active scene id、-1 = 維持）。`CommandDispatcher` は自前の
+    `activeId_` を廃し `renderer_.getActiveSceneIdPtr()` を `setActiveSceneIdRef()` で共有——GUI 選択と
+    シナリオ対象が常に一致。**新規処理は `PointCloudOps` に関数を書き、GUI と Dispatcher の両方から呼ぶこと。**
+    Dispatcher コマンドを持たない GUI 専用（Density Estimator / Greedy・Poisson メッシュ /
+    パラメトリック Generate）は未移行。
   - `ImportExportPanel : IEmbeddedPanel` — Import/Export ページ。I/O は `PointCloudApp` コールバックへ委譲。
   - Scenes/Rendering/ScenarioBrowser ページは既存 `SceneListPanel::onImGui()` /
     `PointCloudRenderer::drawImGuiControls()` / `ScenarioBrowserPanel::drawEmbedded()` を
@@ -131,10 +134,11 @@ cmake --build --preset windows-debug
 - `CommandDispatcher : IScenarioDispatcher` — シナリオ用コマンド文字列ディスパッチャ。点群以外のスカラー結果（ICP fitness・hull 面積・inlier 数等）は `lastMetrics_` に格納し `GetLastMetric:<name>` で読み出す。
 - 描画: `PointCloudRenderer`/`VulkanPointCloudPipeline`（通常点群）、`VkGSPointRenderer`/`GSPointPresenter`（GS プレビュー、`PointRenderer` を利用）。
 
-**新しいアルゴリズムを追加する場合:** `IProcessView` を実装したパネルを追加し、`ProcessRegistry.{h,cpp}` に
-`ProcessId` 定数・`processName()`・カテゴリ表エントリ・`makeProcessView()` の分岐を足し（メニューは自動生成される）、
-`CommandDispatcher.cpp` へシナリオ用コマンドを追加する（ビルドは `PointCloud/CMakeLists.txt` の `file(GLOB)` で
-新規 `.cpp` を自動的に拾うため、明示的なファイル登録は不要）。
+**新しいアルゴリズムを追加する場合:** (1) 処理本体を `PointCloudOps.{h,cpp}`（`VPC::ops::`）に型付き関数として書く
+（`World& / int activeSceneId / <Params>` を取り `ProcessOutcome` 系を返す）。(2) `IProcessView` を実装したパネルを
+追加し、その関数を呼ぶ。(3) `ProcessRegistry.{h,cpp}` に `ProcessId` 定数・`processName()`・カテゴリ表エントリ・
+`makeProcessView()` の分岐を足す（メニューは自動生成される）。(4) `CommandDispatcher.cpp` に同じ関数を呼ぶ
+シナリオ用コマンドを追加する。ビルドは `PointCloud/CMakeLists.txt` の `file(GLOB)` で新規 `.cpp` を自動的に拾う。
 
 **シェーダー:** `PointCloud/CMakeLists.txt` は `phantom_add_runtime_shaders()`（`../cmake/PhantomVulkanApp.cmake`）で
 `PointRenderer/shaders`・`PointCloudView/shaders`・`GSView/shaders` の GLSL を `glslc` で `.spv` 化して exe 横へ置く
