@@ -1,12 +1,16 @@
 # run_pc_scenarios.ps1 - Run all PointCloudView scenario tests
 # Usage: .\PointCloud\PointCloudView\run_pc_scenarios.ps1 [-Configuration Debug|Release]
-# Run from the repository root or the PointCloud\PointCloudView directory.
+# Run from the Phantom root or the PointCloud\PointCloudView directory.
 #
 # Note: unlike some sibling scenario runners, this one runs the exe with the
-# repository root as the working directory, because these scenario JSON files
-# reference sample data with repo-root-relative paths (e.g.
+# Phantom root as the working directory, because these scenario JSON files
+# reference sample data with Phantom-root-relative paths (e.g.
 # "PointCloud/samples/sphere.ply"), and PointCloudFileLoader resolves paths
-# as given without any repo-root lookup of its own.
+# as given without any root lookup of its own.
+#
+# The Phantom C++ modules (CGLib/Physics/PointCloud/RayTracer) now live under
+# the "Phantom/" submodule with their own CMakePresets.json, so this locates
+# the Phantom root by its build markers rather than the parent "Phantom2026.sln".
 
 param(
     [string]$Configuration = "Debug"
@@ -14,13 +18,15 @@ param(
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot  = $scriptDir
-while ($repoRoot -and -not (Test-Path (Join-Path $repoRoot "Phantom2026.sln"))) {
+while ($repoRoot -and -not (
+        (Test-Path (Join-Path $repoRoot "CMakePresets.json")) -and
+        (Test-Path (Join-Path $repoRoot "cmake\PhantomVulkanApp.cmake")))) {
     $parent = Split-Path -Parent $repoRoot
     if ($parent -eq $repoRoot) { $repoRoot = $null; break }
     $repoRoot = $parent
 }
 if (-not $repoRoot) {
-    Write-Host "ERROR: Could not locate repository root (Phantom2026.sln)"
+    Write-Host "ERROR: Could not locate the Phantom root (CMakePresets.json + cmake\PhantomVulkanApp.cmake)"
     exit 1
 }
 $preset    = "windows-$($Configuration.ToLower())"

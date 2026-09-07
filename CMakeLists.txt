@@ -178,22 +178,15 @@ target_compile_options(PointCloudView PRIVATE ${PHANTOM_WARN_FLAGS})
 
 # loadSPVRepo() (VulkanSPVResolver.h) resolves "shaders/*.spv" relative to the
 # running binary's directory on Windows, and to the current working directory
-# on other platforms -- mirror Windows' PostBuildEvent xcopy so the binary
-# finds its shaders either way.
-add_custom_command(TARGET PointCloudView POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${POINTCLOUD_ROOT}/PointCloudView/shaders
-        $<TARGET_FILE_DIR:PointCloudView>/shaders
-)
-
-# PointCloudView.vcxproj's own PostBuildEvent only xcopies PointCloudView/shaders,
-# but its GS-preview code path (GSPointPresenter/VkGSPointRenderer, see
-# PointCloud/CLAUDE.md) draws through PointRenderer's pipelines, which need
-# PointRenderer/shaders/*.spv too. Mirror GSView's PointRenderer/shaders copy here.
-add_custom_command(TARGET PointCloudView POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${POINTCLOUD_ROOT}/PointRenderer/shaders
-        $<TARGET_FILE_DIR:PointCloudView>/shaders
+# on other platforms. The .spv files are Git-ignored, so compile them from GLSL
+# with glslc and drop them beside the binary (phantom_add_runtime_shaders,
+# cmake/PhantomVulkanApp.cmake). PointRenderer/shaders is listed first so its
+# point.vert/gs_splat.frag (what VkPointRenderer's pipeline expects) win over
+# PointCloudView/shaders' older single-purpose copies; PointCloudView/shaders
+# still supplies the triangle.* pair for the plane/cylinder polygon overlay.
+phantom_add_runtime_shaders(PointCloudView
+    ${POINTCLOUD_ROOT}/PointRenderer/shaders
+    ${POINTCLOUD_ROOT}/PointCloudView/shaders
 )
 
 # ---------------------------------------------------------------------------
@@ -233,19 +226,12 @@ if(OpenMP_CXX_FOUND)
 endif()
 target_compile_options(GSView PRIVATE ${PHANTOM_WARN_FLAGS})
 
-# GSView.vcxproj's PreBuild/PostBuild compiles+copies BOTH PointRenderer/shaders
-# (point/gs_splat/gs_sort pipelines, shared with PointCloudView) and GSView's
-# own shaders/ (gs_pbvr*) into the output shaders/ dir -- mirror both copies
-# here, in that order, matching the vcxproj's own two xcopy lines.
-add_custom_command(TARGET GSView POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${POINTCLOUD_ROOT}/PointRenderer/shaders
-        $<TARGET_FILE_DIR:GSView>/shaders
-)
-add_custom_command(TARGET GSView POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${POINTCLOUD_ROOT}/GSView/shaders
-        $<TARGET_FILE_DIR:GSView>/shaders
+# GSView compiles+copies BOTH PointRenderer/shaders (point/gs_splat/gs_sort
+# pipelines, shared with PointCloudView) and GSView's own shaders/ (gs_pbvr*)
+# into the output shaders/ dir -- glslc-compiled from GLSL, same as above.
+phantom_add_runtime_shaders(GSView
+    ${POINTCLOUD_ROOT}/PointRenderer/shaders
+    ${POINTCLOUD_ROOT}/GSView/shaders
 )
 
 else()
