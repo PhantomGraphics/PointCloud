@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../../CGLib/VkAppBase/VkAppBase.h"
 #include "../../CGLib/VulkanGraphics/VulkanSPVResolver.h"
@@ -8,7 +8,12 @@
 
 #include "PointCloudRenderer.h"
 #include "SceneListPanel.h"
-#include "Menu.h"
+#include "ControlPage.h"
+#include "ControlPanelHost.h"
+#include "IEmbeddedPanel.h"
+#include "PointCloudMenu.h"
+#include "ProcessPanel.h"
+#include "ImportExportPanel.h"
 #include "CommandDispatcher.h"
 #include "World.h"
 
@@ -30,6 +35,11 @@ public:
     void setExitOnScenarioComplete(bool v) override { exitOnComplete_ = v; }
     int  getExitCode() const               { return exitCode_; }
 
+    // Turns off reading/writing the interactive Control-layout ini so scenario
+    // and screenshot runs get a fixed, reproducible layout
+    // (docs/todo/PLAN_pointcloudview_gui_restructuring.md section 5).
+    void disableInteractiveLayoutPersistence() { controlHost_.setLayoutFile({}); }
+
     // IScenarioHost (drives ScenarioBrowserPanel)
     bool   isScenarioActive()   const override { return runner_.isActive();   }
     bool   scenarioHasFailed()  const override { return runner_.hasFailed();  }
@@ -48,9 +58,17 @@ private:
 
     PointCloudRenderer  renderer_;
     SceneListPanel      sceneListPanel_;
-    Menu menuPanel_;
 
-    CommandDispatcher dispatcher_;
+    // The single shared "Control" window and the panels it embeds.
+    ControlPanelHost  controlHost_;
+    PointCloudMenu    menu_;
+    ProcessPanel      processPanel_;
+    ImportExportPanel importExportPanel_;
+    FnEmbeddedPanel   scenesEmbed_;
+    FnEmbeddedPanel   renderingEmbed_;
+    FnEmbeddedPanel   scenarioBrowserEmbed_;
+
+    CommandDispatcher             dispatcher_;
     ScenarioRunner                runner_;
     ScenarioBrowserPanel          scenarioBrowser_;
     bool exitOnComplete_ = true;
@@ -58,6 +76,9 @@ private:
 
     void syncRenderer();
     void setupCallbacks();
+    void registerControlPages();
+    void drawStatusArea();
+    void drawMenuBar();
 };
 
 } // namespace VPC

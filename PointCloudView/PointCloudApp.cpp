@@ -49,15 +49,17 @@ PointCloudApp::PointCloudApp(int width, int height, const std::string& title)
         [this]() { syncRenderer(); },
         [this]() { renderer_.notifySceneSelectionChanged(); });
 
-    menuPanel_.init(
+    processPanel_.init(
         &world_,
         renderer_.getActiveSceneIdPtr(),
-        [this]() { syncRenderer(); },
-        renderer_.getRenderModePtr(),
-        &sceneListPanel_,
+        [this]() { syncRenderer(); });
+
+    importExportPanel_.init(
         &renderer_,
         [this](const std::string& p, std::string& e) { return loadPointCloudFromFile(p, e); },
         [this](const std::string& p, std::string& e) { return savePointCloudToFile(p, e); });
+
+    menu_.init(&controlHost_, &processPanel_);
 
     dispatcher_.setWorld(&world_);
     dispatcher_.setOnWorldChanged([this](int id) {
@@ -67,9 +69,34 @@ PointCloudApp::PointCloudApp(int width, int height, const std::string& title)
     scenarioBrowser_.setHost(this);
     scenarioBrowser_.setDefaultFolder("scenarios");
 
+    registerControlPages();
+    controlHost_.setStatusDrawer([this]() { drawStatusArea(); });
+    controlHost_.setProcessAccessors(
+        [this]() { return static_cast<int>(processPanel_.getProcess()); },
+        [this](int id) {
+            processPanel_.setProcess(
+                (id >= 0 && id < kProcessCount) ? static_cast<ProcessId>(id)
+                                                : ProcessId::None);
+        });
+    controlHost_.setLayoutFile("pointcloudview_control_layout.ini");
+
     add(&renderer_);
-    add(&menuPanel_);
-    add(&scenarioBrowser_);
+    add(&controlHost_);
+}
+
+void PointCloudApp::registerControlPages()
+{
+    scenesEmbed_.setFunction([this]() { sceneListPanel_.onImGui(); });
+    renderingEmbed_.setFunction([this]() { renderer_.drawImGuiControls(); });
+    // ScenarioBrowserPanel lives in CGLib and cannot derive from the
+    // PointCloudView-local IEmbeddedPanel, so bridge it through a callable.
+    scenarioBrowserEmbed_.setFunction([this]() { scenarioBrowser_.drawEmbedded(); });
+
+    controlHost_.registerPage(ControlPage::Scenes,          &scenesEmbed_);
+    controlHost_.registerPage(ControlPage::Rendering,       &renderingEmbed_);
+    controlHost_.registerPage(ControlPage::Processing,      &processPanel_);
+    controlHost_.registerPage(ControlPage::ImportExport,    &importExportPanel_);
+    controlHost_.registerPage(ControlPage::ScenarioBrowser, &scenarioBrowserEmbed_);
 }
 
 // ============================================================
@@ -132,6 +159,8 @@ bool PointCloudApp::savePointCloudToFile(const std::string& path,
 }
 
 bool PointCloudApp::loadScenario(const std::string& jsonPath) {
+    // Scenario runs must not read or write the interactive Control layout.
+    disableInteractiveLayoutPersistence();
     return runner_.load(jsonPath);
 }
 
@@ -166,6 +195,10 @@ void PointCloudApp::onSwapChainCreated() {
 void PointCloudApp::onUpdate(uint32_t frameIndex) {
     dispatcher_.processQueue();
 
+    // Keep the Scenario Browser's GUI run-queue advancing every frame, even
+    // when its page is not the one currently shown in the Control window.
+    scenarioBrowser_.pumpQueue();
+
     if (runner_.isActive()) {
         auto responses = dispatcher_.collectResponses();
         if (runner_.tick(dispatcher_, responses)) {
@@ -189,21 +222,69 @@ void PointCloudApp::onCleanup() {
 }
 
 void PointCloudApp::onImGui() {
-    if (ImGui::BeginMainMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Quit"))
-                glfwSetWindowShouldClose(getWindow().get(), GLFW_TRUE);
-            ImGui::EndMenu();
-        }
-        menuPanel_.onImGuiMenuBar();
-        ImGui::EndMainMenuBar();
-    }
+    drawMenuBar();
     ::VKG::VkAppBase::onImGui();
 }
 
 // ============================================================
 //  Private
 // ============================================================
+
+void PointCloudApp::drawMenuBar() {
+    if (!ImGui::BeginMainMenuBar()) return;
+
+    if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("Import / Export...")) {
+            controlHost_.setPage(ControlPage::ImportExport);
+            controlHost_.setVisible(true);
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Quit"))
+            glfwSetWindowShouldClose(getWindow().get(), GLFW_TRUE);
+        ImGui::EndMenu();
+    }
+
+    menu_.onImGuiMenuBar();
+
+    if (ImGui::BeginMenu("View")) {
+        if (ImGui::MenuItem("Control Window", nullptr, controlHost_.isVisible()))
+            controlHost_.setVisible(!controlHost_.isVisible());
+        if (ImGui::MenuItem("Reset Layout"))
+            controlHost_.resetLayout();
+        ImGui::EndMenu();
+    }
+
+    ImGui::EndMainMenuBar();
+}
+
+void PointCloudApp::drawStatusArea() {
+    const int activeId = renderer_.getActiveSceneId();
+    auto* scene = world_.findById(activeId);
+
+    size_t totalPoints = 0;
+    for (const auto& s : world_.getScenes()) totalPoints += s->getSize();
+
+    const char* mode =
+        (renderer_.getRenderMode() == PointCloudRenderer::RenderMode::GaussianSplatting)
+            ? "Gaussian Splatting" : "Point";
+
+    if (scene) {
+        ImGui::TextWrapped("Scene: %s  (id %d, %zu pts)",
+                           scene->getName().c_str(), activeId, scene->getSize());
+    } else {
+        ImGui::TextDisabled("Scene: (none selected)");
+    }
+    ImGui::Text("%zu scene(s), %zu pts total", world_.getScenes().size(), totalPoints);
+    ImGui::Text("Draw: %s  (%u pts shown)", mode, renderer_.getPointCount());
+
+    if (!importExportPanel_.lastStatus().empty())
+        ImGui::TextWrapped("Last I/O: %s", importExportPanel_.lastStatus().c_str());
+
+    if (runner_.isActive())
+        ImGui::Text("Scenario: running (%zu steps)", runner_.stepCount());
+    else if (runner_.hasFailed())
+        ImGui::TextWrapped("Scenario FAILED: %s", runner_.failMessage().c_str());
+}
 
 void PointCloudApp::syncRenderer() {
     renderer_.notifyWorldChanged();

@@ -91,7 +91,22 @@ cmake --build --preset windows-debug
 `PointCloudApp : VkAppBase` 直下。**`VPC` 名前空間**（コアライブラリの `Phantom::PC` とは別）。
 
 - `World`（`World.h`）— `PointCloudfScene` の集合を ID 管理する軽量な状態保持クラス（`addScene()`/`removeScene()`/`findById()`）。ポリゴンオーバーレイ（`PolygonMesh`）も `addPolygon()`/`clearPolygons()` で保持する。
-- `Menu : ::VKG::IVkUIPanel` — アルゴリズム切り替えメニュー兼 "Control" ウィンドウ所有者。各処理パネルは `IProcessView`（`getName()`/`onImGui(World&, activeSceneId, onRebuild)`）を実装する:
+- **GUI 構造（2026-09-07、`docs/todo/PLAN_pointcloudview_gui_restructuring.md` Phase 1〜3）**: PhysicsView と同じ
+  「メニューでページを選び、単一の "Control" ウィンドウに表示」方式へ再構築済み。
+  - `ControlPanelHost : ::VKG::IVkUIPanel`（`ControlPanelHost.{h,cpp}`）— 唯一の "Control" ウィンドウ。
+    `ControlPage`（`Scenes`/`Rendering`/`Processing`/`ImportExport`/`ScenarioBrowser`）を1つだけ表示し、
+    上部に共通ステータス（`PointCloudApp::drawStatusArea`）を出す。`page`/`visible`/`process` を
+    `pointcloudview_control_layout.ini` に保存（シナリオ実行時は `loadScenario()` が無効化）。
+  - `PointCloudMenu`（`PointCloudMenu.{h,cpp}`、旧 `Menu`）— 「PointCloud」メニュー。ページと処理を
+    *選択するだけ*で World 更新・パネル生成はしない。処理は `ProcessRegistry`（`ProcessId` enum +
+    カテゴリ表 Generate/Features/Filters/Segmentation/Fitting/Registration/Surface + `makeProcessView()`）に集約。
+  - `ProcessPanel : IEmbeddedPanel`（`ProcessPanel.{h,cpp}`）— Processing ページ。`ProcessId` ごとに
+    `IProcessView` を遅延生成し `std::array` で保持（パラメーターがセッション中残る）。Reset で当該パネルのみ破棄。
+  - `ImportExportPanel : IEmbeddedPanel` — Import/Export ページ。I/O は `PointCloudApp` コールバックへ委譲。
+  - Scenes/Rendering/ScenarioBrowser ページは既存 `SceneListPanel::onImGui()` /
+    `PointCloudRenderer::drawImGuiControls()` / `ScenarioBrowserPanel::drawEmbedded()` を
+    `FnEmbeddedPanel`（`IEmbeddedPanel.h`）で包む。
+- 各処理パネルは `IProcessView`（`getName()`/`onImGui(World&, activeSceneId, onRebuild)`）を実装する:
   - フィルタ/ダウンサンプル: `DensityBasedFilterView`/`CurvatureBasedFilterView`/`DownSamplerView`
   - 推定: `DensityEstimatorView`/`NormalEstimatorView`（`orientTowardsViewpoint` 対応）/`CurvatureEstimatorView`（スカラー曲率＋主曲率 k1/k2 モード）/`FPFHEstimatorView`/`BoundaryDetectorView`
   - 検出/フィッティング: `RansacPlaneDetectorView`/`RansacCylinderDetectorView`/`RansacSphereDetectorView`/`RansacConeDetectorView`
@@ -102,7 +117,14 @@ cmake --build --preset windows-debug
 - `CommandDispatcher : IScenarioDispatcher` — シナリオ用コマンド文字列ディスパッチャ。点群以外のスカラー結果（ICP fitness・hull 面積・inlier 数等）は `lastMetrics_` に格納し `GetLastMetric:<name>` で読み出す。
 - 描画: `PointCloudRenderer`/`VulkanPointCloudPipeline`（通常点群）、`VkGSPointRenderer`/`GSPointPresenter`（GS プレビュー、`PointRenderer` を利用）。
 
-**新しいアルゴリズムを追加する場合:** `IProcessView` を実装したパネルを追加し、`Menu.cpp` へメニュー配線（`#include` + `ImGui::MenuItem`）、`CommandDispatcher.cpp` へシナリオ用コマンドを追加する（ビルドは `PointCloud/CMakeLists.txt` の `file(GLOB)` で新規 `.cpp` を自動的に拾うため、明示的なファイル登録は不要）。
+**新しいアルゴリズムを追加する場合:** `IProcessView` を実装したパネルを追加し、`ProcessRegistry.{h,cpp}` に
+`ProcessId` 定数・`processName()`・カテゴリ表エントリ・`makeProcessView()` の分岐を足し（メニューは自動生成される）、
+`CommandDispatcher.cpp` へシナリオ用コマンドを追加する（ビルドは `PointCloud/CMakeLists.txt` の `file(GLOB)` で
+新規 `.cpp` を自動的に拾うため、明示的なファイル登録は不要）。
+
+**シェーダー:** `PointCloud/CMakeLists.txt` は `phantom_add_runtime_shaders()`（`../cmake/PhantomVulkanApp.cmake`）で
+`PointRenderer/shaders`・`PointCloudView/shaders`・`GSView/shaders` の GLSL を `glslc` で `.spv` 化して exe 横へ置く
+（`*.spv` は `.gitignore` 済み。同名は先に渡したディレクトリが優先 = PointCloudView は `PointRenderer/shaders` 優先）。
 
 ### GSView（`GSView/`）— Gaussian Splatting スタンドアロン ImGui + Vulkan アプリ
 
