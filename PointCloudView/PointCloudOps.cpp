@@ -11,17 +11,55 @@
 #include "RansacCylinderDetector.h"
 #include "RansacSphereDetector.h"
 #include "RansacConeDetector.h"
+#include "DBSCAN.h"
+#include "DistanceBasedClustering.h"
+#include "RegionGrowing.h"
+#include "GroundExtractor.h"
+#include "FPFHEstimator.h"
+#include "BoundaryDetector.h"
 
 #include <glm/gtc/constants.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <vector>
 
 namespace VPC {
 namespace ops {
 
 namespace {
+
+glm::vec3 hsvToRgb(float h, float s, float v)
+{
+    const float c  = v * s;
+    const float hh = h * 6.0f;
+    const float x  = c * (1.0f - std::fabs(std::fmod(hh, 2.0f) - 1.0f));
+    const float m  = v - c;
+    if (hh < 1.0f) return { c + m, x + m, m };
+    if (hh < 2.0f) return { x + m, c + m, m };
+    if (hh < 3.0f) return { m, c + m, x + m };
+    if (hh < 4.0f) return { m, x + m, c + m };
+    if (hh < 5.0f) return { x + m, m, c + m };
+    return { c + m, m, x + m };
+}
+
+glm::vec3 colorFromClusterId(int id)
+{
+    if (id < 0) return { 0.5f, 0.5f, 0.5f };
+    const float hue = std::fmod(static_cast<float>(id) * 0.61803398875f, 1.0f);
+    return hsvToRgb(hue, 0.85f, 1.0f);
+}
+
+std::vector<Phantom::PC::Point> toPoints(const std::vector<glm::vec3>& positions)
+{
+    std::vector<Phantom::PC::Point> pts;
+    pts.reserve(positions.size());
+    for (const auto& p : positions)
+        pts.emplace_back(static_cast<double>(p.x), static_cast<double>(p.y),
+                         static_cast<double>(p.z));
+    return pts;
+}
 
 // Common RANSAC front end: validate, run the detector's detect(), split the
 // active scene into "<name>Inliers" (primary) + "<name>Outliers", hide the
@@ -403,6 +441,283 @@ RansacConeResult detectCone(World& world, int activeSceneId, const RansacParams&
     r.halfAngleRad = model.halfAngleRad;
     r.inlierCount  = static_cast<int>(model.inliers.size());
     r.outcome.message = "Cone: " + std::to_string(r.inlierCount) + " inliers";
+    return r;
+}
+
+// --- Clustering ----------------------------------------------------------
+
+namespace {
+
+// Colour each source point by its per-point cluster id into a new scene, hide
+// the source. `clusterId(i)` returns the id for point i.
+template <class ClusterIdFn>
+ProcessOutcome emitClusterScene(World& world, PointCloudfScene& src,
+                                const char* resultName, ClusterIdFn clusterId)
+{
+    ProcessOutcome out;
+    const auto& positions = src.getPositions();
+    auto* result = world.addScene(resultName);
+    for (size_t i = 0; i < positions.size(); ++i)
+        result->add(positions[i], colorFromClusterId(clusterId(i)));
+    src.setVisible(false);
+    out.ok = true;
+    out.primarySceneId = result->getId();
+    return out;
+}
+
+} // namespace
+
+ClusterResult clusterDbscan(World& world, int activeSceneId, const DbscanParams& p)
+{
+    ClusterResult r;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene)                        { r.outcome.message = "no active scene"; return r; }
+    if (p.eps <= 0.f || p.minPts <= 0) { r.outcome.message = "invalid parameters"; return r; }
+
+    auto pts = toPoints(scene->getPositions());
+    Phantom::PC::DBSCANClustering clustering;
+    clustering.cluster(pts, p.eps, p.minPts);
+
+    int maxId = -1;
+    r.outcome = emitClusterScene(world, *scene, "DBSCANResult",
+        [&](size_t i) { maxId = std::max(maxId, pts[i].clusterID); return pts[i].clusterID; });
+    r.clusterCount = maxId + 1;
+    r.outcome.message = "DBSCAN: " + std::to_string(r.clusterCount) + " clusters";
+    return r;
+}
+
+ClusterResult clusterDistance(World& world, int activeSceneId, const DistanceClusterParams& p)
+{
+    ClusterResult r;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene)          { r.outcome.message = "no active scene"; return r; }
+    if (p.radius <= 0.f) { r.outcome.message = "invalid radius"; return r; }
+
+    auto pts = toPoints(scene->getPositions());
+    Phantom::PC::DistanceBasedClustering clustering;
+    clustering.DistanceBasedRegionGrowing(pts, p.radius);
+
+    int maxId = -1;
+    r.outcome = emitClusterScene(world, *scene, "RegionGrowingResult",
+        [&](size_t i) { maxId = std::max(maxId, pts[i].clusterID); return pts[i].clusterID; });
+    r.clusterCount = maxId + 1;
+    r.outcome.message = "Region growing: " + std::to_string(r.clusterCount) + " clusters";
+    return r;
+}
+
+ClusterResult segmentRegionGrowing(World& world, int activeSceneId, const RegionGrowParams& p)
+{
+    ClusterResult r;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene)              { r.outcome.message = "no active scene"; return r; }
+    if (!scene->hasNormals()){ r.outcome.message = "scene has no normals"; return r; }
+    if (p.curvatureRadius <= 0.f) { r.outcome.message = "invalid radius"; return r; }
+
+    const auto& positions = scene->getPositions();
+    const auto& normals   = scene->getNormals();
+
+    // Curvature isn't persisted on PointCloudfScene, so recompute it from the
+    // same radius used for the neighbourhood search.
+    Phantom::PC::CurvatureEstimator curvEstimator;
+    for (const auto& q : positions) curvEstimator.add(q);
+    curvEstimator.estimate(static_cast<double>(p.curvatureRadius));
+    const auto curvatures = curvEstimator.getCurvatures();
+
+    Phantom::PC::RegionGrowing regionGrowing;
+    for (size_t i = 0; i < positions.size(); ++i)
+        regionGrowing.add(positions[i], normals[i], curvatures[i]);
+
+    Phantom::PC::RegionGrowing::Params params;
+    params.kNeighbors             = static_cast<size_t>(std::max(1, p.kNeighbors));
+    params.smoothnessThresholdRad = p.smoothnessDeg * 3.14159265f / 180.f;
+    params.curvatureThreshold     = static_cast<double>(p.curvatureThreshold);
+    params.minClusterSize         = static_cast<size_t>(std::max(1, p.minClusterSize));
+    if (!regionGrowing.segment(params)) { r.outcome.message = "region growing failed"; return r; }
+
+    const auto labels = regionGrowing.getLabels();
+    r.outcome = emitClusterScene(world, *scene, "RegionGrowingNormalResult",
+        [&](size_t i) { return labels[i]; });
+    r.clusterCount = static_cast<int>(regionGrowing.getClusterCount());
+    r.outcome.message = "Region growing: " + std::to_string(r.clusterCount) + " clusters";
+    return r;
+}
+
+// --- Ground extraction -------------------------------------------------
+
+GroundResult extractGround(World& world, int activeSceneId, const GroundParams& p)
+{
+    GroundResult r;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene)            { r.outcome.message = "no active scene"; return r; }
+    if (p.cellSize <= 0.f) { r.outcome.message = "invalid cell size"; return r; }
+
+    const auto& positions = scene->getPositions();
+    Phantom::PC::GroundExtractor extractor;
+    for (const auto& q : positions) extractor.add(q);
+
+    Phantom::PC::GroundExtractor::Params params;
+    params.cellSize                  = p.cellSize;
+    params.slope                     = p.slope;
+    params.initialWindowSize         = p.initialWindowSize;
+    params.maxWindowSize             = p.maxWindowSize;
+    params.windowGrowthFactor        = p.windowGrowthFactor;
+    params.initialElevationThreshold = p.initialElevationThreshold;
+    params.maxElevationThreshold     = p.maxElevationThreshold;
+    params.finalElevationThreshold   = p.finalElevationThreshold;
+    if (!extractor.extract(params)) { r.outcome.message = "ground extraction failed"; return r; }
+
+    const auto flags = extractor.getGroundFlags();
+    auto* ground    = world.addScene("GroundPoints");
+    auto* nonGround = world.addScene("NonGroundPoints");
+    for (size_t i = 0; i < positions.size() && i < flags.size(); ++i) {
+        if (flags[i]) { ground->add(positions[i], glm::vec3(0.4f, 0.8f, 0.3f)); ++r.groundCount; }
+        else          { nonGround->add(positions[i], glm::vec3(0.7f, 0.45f, 0.2f)); ++r.nonGroundCount; }
+    }
+    scene->setVisible(false);
+
+    r.groundRatio = flags.empty() ? 0.0
+        : static_cast<double>(r.groundCount) / static_cast<double>(flags.size());
+    r.outcome.ok = true;
+    r.outcome.primarySceneId = ground->getId();
+    r.outcome.message = std::to_string(r.groundCount) + " ground / " +
+                        std::to_string(r.nonGroundCount) + " non-ground points";
+    return r;
+}
+
+// --- Curvature / FPFH / boundary -------------------------------------
+
+CurvatureResult estimateCurvature(World& world, int activeSceneId, const CurvatureParams& p)
+{
+    CurvatureResult r;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene)          { r.outcome.message = "no active scene"; return r; }
+    if (p.radius <= 0.f) { r.outcome.message = "invalid radius"; return r; }
+
+    const auto& positions = scene->getPositions();
+    Phantom::PC::CurvatureEstimator estimator;
+    for (const auto& q : positions) estimator.add(q);
+
+    if (p.principal) {
+        estimator.estimatePrincipal(p.radius);
+        const auto pc = estimator.getPrincipalCurvatures();
+        double maxAbs = 0.0, sumK1 = 0.0, sumK2 = 0.0;
+        for (const auto& c : pc) {
+            maxAbs = std::max({ maxAbs, std::abs(c.k1), std::abs(c.k2) });
+            sumK1 += c.k1; sumK2 += c.k2;
+        }
+        const double norm = (maxAbs > 0.0) ? maxAbs : 1.0;
+        auto* result = world.addScene("PrincipalCurvatureResult");
+        for (size_t i = 0; i < positions.size() && i < pc.size(); ++i) {
+            const float v = static_cast<float>(
+                std::max(std::abs(pc[i].k1), std::abs(pc[i].k2)) / norm);
+            result->add(positions[i], glm::vec3(v, v, v));
+        }
+        r.meanK1 = pc.empty() ? 0.0 : sumK1 / static_cast<double>(pc.size());
+        r.meanK2 = pc.empty() ? 0.0 : sumK2 / static_cast<double>(pc.size());
+        r.outcome.primarySceneId = result->getId();
+        r.outcome.message = "Principal curvature: meanK1=" + std::to_string(r.meanK1) +
+                            " meanK2=" + std::to_string(r.meanK2);
+    } else {
+        estimator.estimate(p.radius);
+        const auto curv = estimator.getCurvatures();
+        const double maxCurv = curv.empty() ? 1.0
+            : *std::max_element(curv.begin(), curv.end());
+        const double norm = (maxCurv > 0.0) ? maxCurv : 1.0;
+        auto* result = world.addScene("CurvatureResult");
+        for (size_t i = 0; i < positions.size() && i < curv.size(); ++i) {
+            const float v = static_cast<float>(curv[i] / norm);
+            result->add(positions[i], glm::vec3(v, v, v));
+        }
+        r.outcome.primarySceneId = result->getId();
+        r.outcome.message = "Estimated scalar curvature for " +
+                            std::to_string(curv.size()) + " points";
+    }
+    scene->setVisible(false);
+    r.outcome.ok = true;
+    return r;
+}
+
+FpfhResult estimateFpfh(World& world, int activeSceneId, const FpfhParams& p)
+{
+    FpfhResult r;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene)               { r.outcome.message = "no active scene"; return r; }
+    if (!scene->hasNormals()) { r.outcome.message = "scene has no normals"; return r; }
+    if (p.kNeighbors < 1)     { r.outcome.message = "invalid k"; return r; }
+
+    const auto& positions = scene->getPositions();
+    const auto& normals   = scene->getNormals();
+
+    Phantom::PC::FPFHEstimator estimator;
+    for (size_t i = 0; i < positions.size(); ++i) estimator.add(positions[i], normals[i]);
+    if (!estimator.estimate(static_cast<size_t>(p.kNeighbors))) {
+        r.outcome.message = "FPFH estimation failed";
+        return r;
+    }
+    const auto histograms = estimator.getHistograms();
+
+    Phantom::PC::FPFHEstimator::Histogram mean{};
+    mean.fill(0.f);
+    for (const auto& h : histograms)
+        for (size_t b = 0; b < h.size(); ++b)
+            mean[b] += h[b] / static_cast<float>(histograms.size());
+
+    std::vector<float> dist(histograms.size(), 0.f);
+    float maxDist = 0.f;
+    for (size_t i = 0; i < histograms.size(); ++i) {
+        float d = 0.f;
+        for (size_t b = 0; b < histograms[i].size(); ++b) {
+            const float diff = histograms[i][b] - mean[b];
+            d += diff * diff;
+        }
+        dist[i] = std::sqrt(d);
+        maxDist = std::max(maxDist, dist[i]);
+    }
+    const float norm = (maxDist > 0.f) ? maxDist : 1.f;
+
+    auto* result = world.addScene("FPFHResult");
+    for (size_t i = 0; i < positions.size(); ++i) {
+        const float v = dist[i] / norm;
+        result->add(positions[i], glm::vec3(v, 0.3f, 1.0f - v));
+    }
+    scene->setVisible(false);
+
+    r.outcome.ok = true;
+    r.outcome.primarySceneId = result->getId();
+    r.descriptorCount = static_cast<int>(histograms.size());
+    r.histogramSize   = static_cast<int>(Phantom::PC::FPFHEstimator::HistogramSize);
+    r.outcome.message = std::to_string(r.descriptorCount) + " descriptors (" +
+                        std::to_string(r.histogramSize) + "-dim)";
+    return r;
+}
+
+BoundaryResult detectBoundary(World& world, int activeSceneId, const BoundaryParams& p)
+{
+    BoundaryResult r;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene)               { r.outcome.message = "no active scene"; return r; }
+    if (!scene->hasNormals()) { r.outcome.message = "scene has no normals"; return r; }
+    if (p.radius <= 0.f)      { r.outcome.message = "invalid radius"; return r; }
+
+    const auto& positions = scene->getPositions();
+    const auto& normals   = scene->getNormals();
+
+    Phantom::PC::BoundaryDetector detector;
+    for (size_t i = 0; i < positions.size(); ++i) detector.add(positions[i], normals[i]);
+    detector.estimate(static_cast<double>(p.radius),
+                      p.angleThresholdDeg * 3.14159265f / 180.f);
+    const auto flags = detector.getBoundaryFlags();
+
+    auto* result = world.addScene("BoundaryResult");
+    for (size_t i = 0; i < positions.size() && i < flags.size(); ++i) {
+        if (flags[i]) { result->add(positions[i], glm::vec3(0.9f, 0.15f, 0.15f)); ++r.boundaryCount; }
+        else          { result->add(positions[i], glm::vec3(0.2f, 0.4f, 0.9f)); }
+    }
+    scene->setVisible(false);
+
+    r.outcome.ok = true;
+    r.outcome.primarySceneId = result->getId();
+    r.outcome.message = std::to_string(r.boundaryCount) + " boundary points";
     return r;
 }
 

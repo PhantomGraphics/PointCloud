@@ -1,8 +1,7 @@
 #pragma once
 
 #include "IProcessView.h"
-#include "CGLib/UIWidgets/Button.h"
-#include <string>
+#include "PointCloudOps.h"
 
 namespace VPC {
 
@@ -15,17 +14,14 @@ public:
                  const std::function<void(int)>& onResult) override;
 
 private:
-    float curvatureRadius_       = 0.1f;
-    int   kNeighbors_            = 30;
+    float curvatureRadius_        = 0.1f;
+    int   kNeighbors_             = 30;
     float smoothnessThresholdDeg_ = 5.0f;
-    float curvatureThreshold_    = 1.0f;
-    int   minClusterSize_        = 10;
+    float curvatureThreshold_     = 1.0f;
+    int   minClusterSize_         = 10;
 
-    bool        hasResult_    = false;
-    bool        succeeded_    = false;
-    std::string status_       = "Not executed yet";
-    size_t      clusterCount_ = 0;
-    Phantom::UI::Button runButton_{ "Run" };
+    bool               hasResult_ = false;
+    ops::ClusterResult result_;
 };
 
 } // namespace VPC

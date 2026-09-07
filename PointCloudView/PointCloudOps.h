@@ -111,5 +111,82 @@ RansacCylinderResult detectCylinder(World& world, int activeSceneId, const Ransa
 RansacSphereResult   detectSphere  (World& world, int activeSceneId, const RansacParams& p);
 RansacConeResult     detectCone    (World& world, int activeSceneId, const RansacParams& p);
 
+// --- Clustering / segmentation -----------------------------------------
+
+struct DbscanParams   { float eps = 0.02f; int minPts = 10; };
+struct DistanceClusterParams { float radius = 0.02f; };
+struct RegionGrowParams {
+    float curvatureRadius = 0.1f;
+    int   kNeighbors      = 30;
+    float smoothnessDeg   = 5.0f;
+    float curvatureThreshold = 1.0f;
+    int   minClusterSize  = 10;
+};
+
+struct ClusterResult {
+    ProcessOutcome outcome;
+    int clusterCount = 0;
+};
+
+// "DBSCANResult" -- per-cluster colour (grey for noise), source hidden.
+ClusterResult clusterDbscan(World& world, int activeSceneId, const DbscanParams& p);
+// "RegionGrowingResult" -- distance-based region growing, per-cluster colour.
+ClusterResult clusterDistance(World& world, int activeSceneId, const DistanceClusterParams& p);
+// "RegionGrowingNormalResult" -- normal/curvature region growing (needs normals),
+// per-cluster colour; curvature is recomputed from curvatureRadius.
+ClusterResult segmentRegionGrowing(World& world, int activeSceneId, const RegionGrowParams& p);
+
+// --- Ground extraction ------------------------------------------------
+
+struct GroundParams {
+    float cellSize                  = 1.0f;
+    float slope                     = 0.3f;
+    float initialWindowSize         = 1.0f;
+    float maxWindowSize             = 16.0f;
+    float windowGrowthFactor        = 2.0f;
+    float initialElevationThreshold = 0.2f;
+    float maxElevationThreshold     = 3.0f;
+    float finalElevationThreshold   = 0.3f;
+};
+
+struct GroundResult {
+    ProcessOutcome outcome;   // primarySceneId = "GroundPoints"
+    int   groundCount = 0;
+    int   nonGroundCount = 0;
+    double groundRatio = 0.0;
+};
+
+GroundResult extractGround(World& world, int activeSceneId, const GroundParams& p);
+
+// --- Curvature / FPFH / boundary ------------------------------------
+
+struct CurvatureParams {
+    float radius    = 0.05f;
+    bool  principal = false;   // false: scalar (PCA eigenvalue ratio); true: k1/k2
+};
+
+struct CurvatureResult {
+    ProcessOutcome outcome;    // "CurvatureResult" or "PrincipalCurvatureResult"
+    double meanK1 = 0.0;       // valid iff principal
+    double meanK2 = 0.0;
+};
+
+CurvatureResult estimateCurvature(World& world, int activeSceneId, const CurvatureParams& p);
+
+struct FpfhParams { int kNeighbors = 20; };
+struct FpfhResult {
+    ProcessOutcome outcome;    // "FPFHResult" (needs normals)
+    int descriptorCount = 0;
+    int histogramSize   = 0;
+};
+FpfhResult estimateFpfh(World& world, int activeSceneId, const FpfhParams& p);
+
+struct BoundaryParams { float radius = 0.1f; float angleThresholdDeg = 153.0f; };
+struct BoundaryResult {
+    ProcessOutcome outcome;    // "BoundaryResult" (needs normals)
+    int boundaryCount = 0;
+};
+BoundaryResult detectBoundary(World& world, int activeSceneId, const BoundaryParams& p);
+
 } // namespace ops
 } // namespace VPC

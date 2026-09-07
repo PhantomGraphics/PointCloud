@@ -1,8 +1,7 @@
 #pragma once
 
 #include "IProcessView.h"
-#include "CGLib/UIWidgets/Button.h"
-#include <string>
+#include "PointCloudOps.h"
 
 namespace VPC {
 
@@ -16,12 +15,8 @@ private:
     float searchRadius_      = 0.1f;
     float angleThresholdDeg_ = 153.0f; // ~0.85*pi, PCL BoundaryEstimation default
 
-    bool        hasResult_     = false;
-    bool        succeeded_     = false;
-    std::string status_        = "Not executed yet";
-    int         boundaryCount_ = 0;
-
-    Phantom::UI::Button runButton_{ "Run" };
+    bool                hasResult_ = false;
+    ops::BoundaryResult result_;
 };
 
 } // namespace VPC

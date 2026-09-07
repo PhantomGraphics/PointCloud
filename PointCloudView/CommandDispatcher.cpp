@@ -92,25 +92,6 @@ static std::vector<std::string> splitComma(const std::string& s) {
     return parts;
 }
 
-static glm::vec3 hsvToRgb(float h, float s, float v) {
-    const float c  = v * s;
-    const float hh = h * 6.0f;
-    const float x  = c * (1.0f - std::fabs(std::fmod(hh, 2.0f) - 1.0f));
-    const float m  = v - c;
-    if (hh < 1.0f) return { c + m, x + m, m };
-    if (hh < 2.0f) return { x + m, c + m, m };
-    if (hh < 3.0f) return { m, c + m, x + m };
-    if (hh < 4.0f) return { m, x + m, c + m };
-    if (hh < 5.0f) return { x + m, m, c + m };
-    return { c + m, m, x + m };
-}
-
-static glm::vec3 colorFromCluster(int id) {
-    if (id < 0) return { 0.5f, 0.5f, 0.5f };
-    const float hue = std::fmod(static_cast<float>(id) * 0.61803398875f, 1.0f);
-    return hsvToRgb(hue, 0.85f, 1.0f);
-}
-
 static float toFloat(const std::string& s, float def = 0.f) {
     float out = def;
     const auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), out);
@@ -427,56 +408,24 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "ClusterDbscan") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:ClusterDbscan expects eps,minPts";
-        const float eps    = toFloat(parts[0], 0.03f);
-        const int   minPts = toInt(parts[1], 8);
-        if (eps <= 0.f || minPts <= 0) return "Error:invalid parameters";
-
-        const auto& positions = scene->getPositions();
-        std::vector<Phantom::PC::Point> pts;
-        pts.reserve(positions.size());
-        for (const auto& p : positions)
-            pts.emplace_back(static_cast<double>(p.x),
-                             static_cast<double>(p.y),
-                             static_cast<double>(p.z));
-
-        Phantom::PC::DBSCANClustering clustering;
-        clustering.cluster(pts, eps, minPts);
-
-        auto* result = world_->addScene("DBSCANResult");
-        for (const auto& p : positions) result->add(p, glm::vec3(0.6f, 0.8f, 1.0f));
-        scene->setVisible(false);
-
-        activeId() = result->getId();
+        VPC::ops::DbscanParams p;
+        p.eps    = toFloat(parts[0], 0.03f);
+        p.minPts = toInt(parts[1], 8);
+        const auto r = VPC::ops::clusterDbscan(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ClusterRegionGrowing") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        const float radius = toFloat(arg, 0.03f);
-        if (radius <= 0.f) return "Error:invalid radius";
-
-        const auto& positions = scene->getPositions();
-        std::vector<Phantom::PC::Point> pts;
-        pts.reserve(positions.size());
-        for (const auto& p : positions)
-            pts.emplace_back(static_cast<double>(p.x),
-                             static_cast<double>(p.y),
-                             static_cast<double>(p.z));
-
-        Phantom::PC::DistanceBasedClustering clustering;
-        clustering.DistanceBasedRegionGrowing(pts, radius);
-
-        auto* result = world_->addScene("RegionGrowingResult");
-        for (const auto& p : positions) result->add(p, glm::vec3(0.8f, 0.7f, 1.0f));
-        scene->setVisible(false);
-
-        activeId() = result->getId();
+        VPC::ops::DistanceClusterParams p;
+        p.radius = toFloat(arg, 0.03f);
+        const auto r = VPC::ops::clusterDistance(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
@@ -498,120 +447,39 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "EstimatePrincipalCurvature") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        const float radius = toFloat(arg, 0.1f);
-        if (radius <= 0.f) return "Error:invalid radius";
-
-        const auto& positions = scene->getPositions();
-        Phantom::PC::CurvatureEstimator estimator;
-        for (const auto& p : positions) estimator.add(p);
-        estimator.estimatePrincipal(radius);
-        const auto pc = estimator.getPrincipalCurvatures();
-
-        double maxAbs = 0.0, sumK1 = 0.0, sumK2 = 0.0;
-        for (const auto& c : pc) {
-            maxAbs = std::max({ maxAbs, std::abs(c.k1), std::abs(c.k2) });
-            sumK1 += c.k1; sumK2 += c.k2;
-        }
-        const double norm = (maxAbs > 0.0) ? maxAbs : 1.0;
-
-        auto* result = world_->addScene("PrincipalCurvatureResult");
-        for (size_t i = 0; i < positions.size() && i < pc.size(); ++i) {
-            const float v = static_cast<float>(std::max(std::abs(pc[i].k1), std::abs(pc[i].k2)) / norm);
-            result->add(positions[i], glm::vec3(v, v, v));
-        }
-        scene->setVisible(false);
-
-        lastMetrics_["meanK1"] = std::to_string(pc.empty() ? 0.0 : sumK1 / static_cast<double>(pc.size()));
-        lastMetrics_["meanK2"] = std::to_string(pc.empty() ? 0.0 : sumK2 / static_cast<double>(pc.size()));
-
-        activeId() = result->getId();
+        VPC::ops::CurvatureParams p;
+        p.radius    = toFloat(arg, 0.1f);
+        p.principal = true;
+        const auto r = VPC::ops::estimateCurvature(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["meanK1"] = std::to_string(r.meanK1);
+        lastMetrics_["meanK2"] = std::to_string(r.meanK2);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "EstimateFPFH") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        if (!scene->hasNormals()) return "Error:scene has no normals";
-        const int k = toInt(arg, 20);
-        if (k < 1) return "Error:invalid k";
-
-        const auto& positions = scene->getPositions();
-        const auto& normals   = scene->getNormals();
-
-        Phantom::PC::FPFHEstimator estimator;
-        for (size_t i = 0; i < positions.size(); ++i) estimator.add(positions[i], normals[i]);
-        if (!estimator.estimate(static_cast<size_t>(k))) return "Error:FPFH estimation failed";
-        const auto histograms = estimator.getHistograms();
-
-        Phantom::PC::FPFHEstimator::Histogram mean{};
-        mean.fill(0.f);
-        for (const auto& h : histograms)
-            for (size_t b = 0; b < h.size(); ++b) mean[b] += h[b] / static_cast<float>(histograms.size());
-
-        std::vector<float> dist(histograms.size(), 0.f);
-        float maxDist = 0.f;
-        for (size_t i = 0; i < histograms.size(); ++i) {
-            float d = 0.f;
-            for (size_t b = 0; b < histograms[i].size(); ++b) {
-                const float diff = histograms[i][b] - mean[b];
-                d += diff * diff;
-            }
-            dist[i] = std::sqrt(d);
-            maxDist = std::max(maxDist, dist[i]);
-        }
-        const float norm = (maxDist > 0.f) ? maxDist : 1.f;
-
-        auto* result = world_->addScene("FPFHResult");
-        for (size_t i = 0; i < positions.size(); ++i) {
-            const float v = dist[i] / norm;
-            result->add(positions[i], glm::vec3(v, 0.3f, 1.0f - v));
-        }
-        scene->setVisible(false);
-
-        lastMetrics_["fpfhDim"] = std::to_string(Phantom::PC::FPFHEstimator::HistogramSize);
-
-        activeId() = result->getId();
+        VPC::ops::FpfhParams p;
+        p.kNeighbors = toInt(arg, 20);
+        const auto r = VPC::ops::estimateFpfh(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["fpfhDim"] = std::to_string(r.histogramSize);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "DetectBoundary") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        if (!scene->hasNormals()) return "Error:scene has no normals";
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:DetectBoundary expects radius,angleThresholdDeg";
-        const float radius       = toFloat(parts[0], 0.1f);
-        const float angleThresholdDeg = toFloat(parts[1], 153.0f);
-        if (radius <= 0.f) return "Error:invalid radius";
-        const float angleThresholdRad = angleThresholdDeg * 3.14159265f / 180.f;
-
-        const auto& positions = scene->getPositions();
-        const auto& normals   = scene->getNormals();
-
-        Phantom::PC::BoundaryDetector detector;
-        for (size_t i = 0; i < positions.size(); ++i) detector.add(positions[i], normals[i]);
-        detector.estimate(static_cast<double>(radius), angleThresholdRad);
-        const auto flags = detector.getBoundaryFlags();
-
-        auto* result = world_->addScene("BoundaryResult");
-        int boundaryCount = 0;
-        for (size_t i = 0; i < positions.size() && i < flags.size(); ++i) {
-            if (flags[i]) {
-                result->add(positions[i], glm::vec3(0.9f, 0.15f, 0.15f));
-                ++boundaryCount;
-            } else {
-                result->add(positions[i], glm::vec3(0.2f, 0.4f, 0.9f));
-            }
-        }
-        scene->setVisible(false);
-
-        lastMetrics_["boundaryCount"] = std::to_string(boundaryCount);
-
-        activeId() = result->getId();
+        VPC::ops::BoundaryParams p;
+        p.radius            = toFloat(parts[0], 0.1f);
+        p.angleThresholdDeg = toFloat(parts[1], 153.0f);
+        const auto r = VPC::ops::detectBoundary(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["boundaryCount"] = std::to_string(r.boundaryCount);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
@@ -641,82 +509,31 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "SegmentRegionGrowing") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        if (!scene->hasNormals()) return "Error:scene has no normals";
         const auto parts = splitComma(arg);
         if (parts.size() < 4) return "Error:SegmentRegionGrowing expects radius,kNeighbors,smoothnessDeg,curvatureThreshold";
-        const float radius         = toFloat(parts[0], 0.1f);
-        const int   kNeighbors     = toInt(parts[1], 30);
-        const float smoothnessDeg  = toFloat(parts[2], 5.0f);
-        const float curvatureThreshold = toFloat(parts[3], 1.0f);
-        if (radius <= 0.f) return "Error:invalid radius";
-
-        const auto& positions = scene->getPositions();
-        const auto& normals   = scene->getNormals();
-
-        // Curvature isn't persisted on PointCloudfScene, so it's recomputed here from the same
-        // radius (see PLAN §4 Phase C: RegionGrowingView note on self-contained operation).
-        Phantom::PC::CurvatureEstimator curvEstimator;
-        for (const auto& p : positions) curvEstimator.add(p);
-        curvEstimator.estimate(static_cast<double>(radius));
-        const auto curvatures = curvEstimator.getCurvatures();
-
-        Phantom::PC::RegionGrowing regionGrowing;
-        for (size_t i = 0; i < positions.size(); ++i)
-            regionGrowing.add(positions[i], normals[i], curvatures[i]);
-
-        Phantom::PC::RegionGrowing::Params params;
-        params.kNeighbors = static_cast<size_t>(std::max(1, kNeighbors));
-        params.smoothnessThresholdRad = smoothnessDeg * 3.14159265f / 180.f;
-        params.curvatureThreshold = static_cast<double>(curvatureThreshold);
-        if (!regionGrowing.segment(params)) return "Error:region growing failed";
-
-        const auto labels = regionGrowing.getLabels();
-        auto* result = world_->addScene("RegionGrowingNormalResult");
-        for (size_t i = 0; i < positions.size(); ++i)
-            result->add(positions[i], colorFromCluster(labels[i]));
-        scene->setVisible(false);
-
-        lastMetrics_["clusterCount"] = std::to_string(regionGrowing.getClusterCount());
-
-        activeId() = result->getId();
+        VPC::ops::RegionGrowParams p;
+        p.curvatureRadius    = toFloat(parts[0], 0.1f);
+        p.kNeighbors         = toInt(parts[1], 30);
+        p.smoothnessDeg      = toFloat(parts[2], 5.0f);
+        p.curvatureThreshold = toFloat(parts[3], 1.0f);
+        const auto r = VPC::ops::segmentRegionGrowing(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["clusterCount"] = std::to_string(r.clusterCount);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ExtractGround") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:ExtractGround expects cellSize,slope";
-        const float cellSize = toFloat(parts[0], 1.0f);
-        const float slope    = toFloat(parts[1], 0.3f);
-        if (cellSize <= 0.f) return "Error:invalid cell size";
-
-        const auto& positions = scene->getPositions();
-        Phantom::PC::GroundExtractor extractor;
-        for (const auto& p : positions) extractor.add(p);
-
-        Phantom::PC::GroundExtractor::Params params;
-        params.cellSize = cellSize;
-        params.slope    = slope;
-        if (!extractor.extract(params)) return "Error:ground extraction failed";
-        const auto groundFlags = extractor.getGroundFlags();
-
-        auto* ground = world_->addScene("GroundPoints");
-        auto* nonGround = world_->addScene("NonGroundPoints");
-        int groundCount = 0;
-        for (size_t i = 0; i < positions.size() && i < groundFlags.size(); ++i) {
-            if (groundFlags[i]) { ground->add(positions[i], glm::vec3(0.4f, 0.8f, 0.3f)); ++groundCount; }
-            else                { nonGround->add(positions[i], glm::vec3(0.7f, 0.45f, 0.2f)); }
-        }
-        scene->setVisible(false);
-
-        lastMetrics_["groundRatio"] = std::to_string(
-            groundFlags.empty() ? 0.0 : static_cast<double>(groundCount) / static_cast<double>(groundFlags.size()));
-
-        activeId() = ground->getId();
+        VPC::ops::GroundParams p;
+        p.cellSize = toFloat(parts[0], 1.0f);
+        p.slope    = toFloat(parts[1], 0.3f);
+        const auto r = VPC::ops::extractGround(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["groundRatio"] = std::to_string(r.groundRatio);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }

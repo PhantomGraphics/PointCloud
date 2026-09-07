@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IProcessView.h"
-#include "CGLib/UIWidgets/Button.h"
+#include "PointCloudOps.h"
 
 namespace VPC {
 
@@ -14,7 +14,8 @@ public:
 private:
     float eps_    = 0.02f;
     int   minPts_ = 10;
-    Phantom::UI::Button runButton_{ "Run" };
+    bool                hasResult_ = false;
+    ops::ClusterResult  result_;
 };
 
 } // namespace VPC
