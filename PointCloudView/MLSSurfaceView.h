@@ -1,8 +1,7 @@
 #pragma once
 
 #include "IProcessView.h"
-#include "CGLib/UIWidgets/Button.h"
-#include <string>
+#include "PointCloudOps.h"
 
 namespace VPC {
 
@@ -17,9 +16,8 @@ private:
     float upsampleRadius_ = 0.05f;
     float stepSize_       = 0.01f;
 
-    std::string status_ = "Not executed yet";
-    Phantom::UI::Button smoothButton_{ "Smooth" };
-    Phantom::UI::Button upsampleButton_{ "Upsample" };
+    bool               hasResult_ = false;
+    ops::ProcessOutcome lastOutcome_;
 };
 
 } // namespace VPC

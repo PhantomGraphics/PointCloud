@@ -3,29 +3,9 @@
 #include "World.h"
 #include "PointCloudfScene.h"
 #include "PointCloudFileLoader.h"
-#include "PointCloudOps.h"
+#include "PointCloudOps.h"   // every processing command now routes through VPC::ops
 
-#include "DownSampler.h"
-#include "NormalEstimator.h"
-#include "DensityBasedFilter.h"
-#include "CurvatureEstimator.h"
-#include "RansacPlaneDetector.h"
-#include "RansacCylinderDetector.h"
-#include "RansacSphereDetector.h"
-#include "RansacConeDetector.h"
-#include "DBSCAN.h"
-#include "DistanceBasedClustering.h"
-#include "RegionGrowing.h"
-#include "GroundExtractor.h"
-#include "FPFHEstimator.h"
-#include "BoundaryDetector.h"
-#include "ICPRegistration.h"
-#include "GlobalRegistration.h"
-#include "MLSSurface.h"
-#include "ConvexHull2D.h"
-#include "ConcaveHull2D.h"
-
-#include "CGLib/Math/Matrix3d.h"
+#include "CGLib/Math/Matrix3d.h"  // DuplicateSceneTransformed
 
 #include <algorithm>
 #include <charconv>
@@ -541,219 +521,86 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     // --- Phase D: MLS surface smoothing/upsampling, 2D convex/concave hull ---
 
     if (name == "MLSSmooth") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        const float radius = toFloat(arg, 0.1f);
-        if (radius <= 0.f) return "Error:invalid radius";
-
-        const auto& positions = scene->getPositions();
-        Phantom::PC::MLSSurface mls;
-        for (const auto& p : positions) mls.add(p);
-        mls.smooth(static_cast<double>(radius));
-        const auto smoothed = mls.getSmoothedPoints();
-
-        auto* result = world_->addScene("MLSSmoothed");
-        for (const auto& p : smoothed) result->add(p, glm::vec3(0.5f, 0.85f, 0.9f));
-        scene->setVisible(false);
-
-        activeId() = result->getId();
+        VPC::ops::MlsSmoothParams p;
+        p.radius = toFloat(arg, 0.1f);
+        const auto o = VPC::ops::mlsSmooth(*world_, activeId(), p);
+        if (!o.ok) return "Error:" + o.message;
+        activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "MLSUpsample") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 3) return "Error:MLSUpsample expects radius,upsampleRadius,stepSize";
-        const float radius         = toFloat(parts[0], 0.1f);
-        const float upsampleRadius = toFloat(parts[1], 0.05f);
-        const float stepSize       = toFloat(parts[2], 0.01f);
-        if (radius <= 0.f || stepSize <= 0.f) return "Error:invalid parameters";
-
-        const auto& positions = scene->getPositions();
-        Phantom::PC::MLSSurface mls;
-        for (const auto& p : positions) mls.add(p);
-        const auto upsampled = mls.upsample(static_cast<double>(radius), upsampleRadius, stepSize);
-        if (upsampled.empty()) return "Error:upsample produced no points";
-
-        auto* result = world_->addScene("MLSUpsampled");
-        for (const auto& p : upsampled) result->add(p, glm::vec3(0.9f, 0.7f, 0.9f));
-
-        activeId() = result->getId();
+        VPC::ops::MlsUpsampleParams p;
+        p.radius         = toFloat(parts[0], 0.1f);
+        p.upsampleRadius = toFloat(parts[1], 0.05f);
+        p.stepSize       = toFloat(parts[2], 0.01f);
+        const auto o = VPC::ops::mlsUpsample(*world_, activeId(), p);
+        if (!o.ok) return "Error:" + o.message;
+        activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ConvexHull2D") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-
-        Phantom::PC::ConvexHull2D hull;
-        for (const auto& p : scene->getPositions()) hull.add(p);
-        if (!hull.compute()) return "Error:convex hull failed";
-        const auto verts = hull.getHullPoints();
-
-        auto* result = world_->addScene("ConvexHullVertices");
-        for (const auto& v : verts) result->add(v, glm::vec3(0.3f, 0.9f, 0.6f));
-
-        world_->clearPolygons();
-        VPC::PolygonMesh mesh;
-        mesh.name = "ConvexHullPolygon";
-        for (const auto& v : verts) {
-            mesh.positions.insert(mesh.positions.end(), { v.x, v.y, v.z });
-            mesh.colors.insert(mesh.colors.end(), { 0.3f, 0.9f, 0.6f, 0.5f });
-        }
-        for (size_t i = 1; i + 1 < verts.size(); ++i) {
-            mesh.indices.push_back(0);
-            mesh.indices.push_back(static_cast<uint32_t>(i));
-            mesh.indices.push_back(static_cast<uint32_t>(i + 1));
-        }
-        world_->addPolygon(std::move(mesh));
-
-        lastMetrics_["hullArea"] = std::to_string(hull.getArea());
-
-        activeId() = result->getId();
+        const auto r = VPC::ops::convexHull2D(*world_, activeId());
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["hullArea"] = std::to_string(r.area);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ConcaveHull2D") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
-        const size_t k    = parts.empty() ? 3 : static_cast<size_t>(std::max(3, toInt(parts[0], 3)));
-        const size_t maxK = parts.size() < 2 ? 0 : static_cast<size_t>(std::max(0, toInt(parts[1], 0)));
-
-        Phantom::PC::ConcaveHull2D hull;
-        for (const auto& p : scene->getPositions()) hull.add(p);
-        if (!hull.compute(k, maxK)) return "Error:concave hull failed";
-        const auto verts = hull.getHullPoints();
-
-        auto* result = world_->addScene("ConcaveHullVertices");
-        for (const auto& v : verts) result->add(v, glm::vec3(0.9f, 0.6f, 0.3f));
-
-        world_->clearPolygons();
-        VPC::PolygonMesh mesh;
-        mesh.name = "ConcaveHullPolygon";
-        for (const auto& v : verts) {
-            mesh.positions.insert(mesh.positions.end(), { v.x, v.y, v.z });
-            mesh.colors.insert(mesh.colors.end(), { 0.9f, 0.6f, 0.3f, 0.5f });
-        }
-        for (size_t i = 1; i + 1 < verts.size(); ++i) {
-            mesh.indices.push_back(0);
-            mesh.indices.push_back(static_cast<uint32_t>(i));
-            mesh.indices.push_back(static_cast<uint32_t>(i + 1));
-        }
-        world_->addPolygon(std::move(mesh));
-
-        lastMetrics_["hullArea"] = std::to_string(hull.getArea());
-
-        activeId() = result->getId();
+        VPC::ops::ConcaveHullParams p;
+        p.k    = parts.empty()      ? 3 : toInt(parts[0], 3);
+        p.maxK = parts.size() < 2   ? 0 : toInt(parts[1], 0);
+        const auto r = VPC::ops::concaveHull2D(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["hullArea"] = std::to_string(r.area);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     // --- Phase A: ICP / global (FPFH+RANSAC) registration ---
 
-    if (name == "ICPAlign") {
-        auto* source = world_->findById(activeId());
-        if (!source) return "Error:no active scene";
+    if (name == "ICPAlign" || name == "ICPAlignPointToPlane") {
+        const bool p2p = (name == "ICPAlignPointToPlane");
         const auto parts = splitComma(arg);
-        if (parts.size() < 2) return "Error:ICPAlign expects targetId,maxIterations";
-        const int targetId     = toInt(parts[0], -1);
-        const int maxIterations = toInt(parts[1], 50);
-        auto* target = world_->findById(targetId);
-        if (!target) return "Error:target scene not found";
-
-        Phantom::PC::ICPRegistration icp;
-        Phantom::PC::ICPRegistration::Result result;
-        if (!icp.align(source->getPositions(), target->getPositions(), result, maxIterations))
-            return "Error:ICP alignment failed";
-
-        auto* aligned = world_->addScene("ICPAligned");
-        for (const auto& p : source->getPositions())
-            aligned->add(Phantom::PC::ICPRegistration::transformPoint(result, p), glm::vec3(0.3f, 1.0f, 0.5f));
-        source->setVisible(false);
-
-        lastMetrics_["fitness"]    = std::to_string(result.fitness);
-        lastMetrics_["iterations"] = std::to_string(result.iterations);
-        lastMetrics_["converged"]  = result.converged ? "Yes" : "No";
-        lastMetrics_["scale"]      = std::to_string(result.scale);
-
-        activeId() = aligned->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId());
-        return "Id:" + std::to_string(activeId());
-    }
-
-    if (name == "ICPAlignPointToPlane") {
-        auto* source = world_->findById(activeId());
-        if (!source) return "Error:no active scene";
-        const auto parts = splitComma(arg);
-        if (parts.size() < 2) return "Error:ICPAlignPointToPlane expects targetId,maxIterations";
-        const int targetId     = toInt(parts[0], -1);
-        const int maxIterations = toInt(parts[1], 50);
-        auto* target = world_->findById(targetId);
-        if (!target) return "Error:target scene not found";
-        if (!target->hasNormals()) return "Error:target has no normals";
-
-        Phantom::PC::ICPRegistration icp;
-        Phantom::PC::ICPRegistration::Result result;
-        if (!icp.alignPointToPlane(source->getPositions(), target->getPositions(), target->getNormals(),
-                                    result, maxIterations))
-            return "Error:ICP point-to-plane alignment failed";
-
-        auto* aligned = world_->addScene("ICPAlignedP2Plane");
-        for (const auto& p : source->getPositions())
-            aligned->add(Phantom::PC::ICPRegistration::transformPoint(result, p), glm::vec3(0.3f, 0.7f, 1.0f));
-        source->setVisible(false);
-
-        lastMetrics_["fitness"]    = std::to_string(result.fitness);
-        lastMetrics_["iterations"] = std::to_string(result.iterations);
-        lastMetrics_["converged"]  = result.converged ? "Yes" : "No";
-
-        activeId() = aligned->getId();
+        if (parts.size() < 2)
+            return p2p ? "Error:ICPAlignPointToPlane expects targetId,maxIterations"
+                       : "Error:ICPAlign expects targetId,maxIterations";
+        VPC::ops::IcpParams p;
+        p.targetSceneId = toInt(parts[0], -1);
+        p.maxIterations = toInt(parts[1], 50);
+        p.pointToPlane  = p2p;
+        const auto r = VPC::ops::icpAlign(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["fitness"]    = std::to_string(r.fitness);
+        lastMetrics_["iterations"] = std::to_string(r.iterations);
+        lastMetrics_["converged"]  = r.converged ? "Yes" : "No";
+        if (!p2p) lastMetrics_["scale"] = std::to_string(r.scale);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "GlobalRegister") {
-        auto* source = world_->findById(activeId());
-        if (!source) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 3) return "Error:GlobalRegister expects targetId,k,iterations";
-        const int targetId   = toInt(parts[0], -1);
-        const int k          = toInt(parts[1], 20);
-        const int iterations = toInt(parts[2], 1000);
-        auto* target = world_->findById(targetId);
-        if (!target) return "Error:target scene not found";
-        if (!source->hasNormals() || !target->hasNormals())
-            return "Error:source/target must have normals (run EstimateNormals first)";
-
-        Phantom::PC::FPFHEstimator sourceFpfh, targetFpfh;
-        const auto& sp = source->getPositions();
-        const auto& sn = source->getNormals();
-        for (size_t i = 0; i < sp.size(); ++i) sourceFpfh.add(sp[i], sn[i]);
-        const auto& tp = target->getPositions();
-        const auto& tn = target->getNormals();
-        for (size_t i = 0; i < tp.size(); ++i) targetFpfh.add(tp[i], tn[i]);
-        if (!sourceFpfh.estimate(static_cast<size_t>(k)) || !targetFpfh.estimate(static_cast<size_t>(k)))
-            return "Error:FPFH estimation failed";
-
-        Phantom::PC::GlobalRegistration globalReg;
-        Phantom::PC::GlobalRegistration::Result result;
-        if (!globalReg.align(sp, sourceFpfh.getHistograms(), tp, targetFpfh.getHistograms(),
-                              result, iterations))
-            return "Error:global registration failed";
-
-        auto* aligned = world_->addScene("GlobalRegAligned");
-        for (const auto& p : sp) aligned->add(result.rotation * p + result.translation, glm::vec3(1.0f, 0.5f, 0.8f));
-        source->setVisible(false);
-
-        lastMetrics_["inlierCount"] = std::to_string(result.inlierCount);
-        lastMetrics_["inlierRmse"]  = std::to_string(result.inlierRmse);
-
-        activeId() = aligned->getId();
+        VPC::ops::GlobalRegisterParams p;
+        p.targetSceneId = toInt(parts[0], -1);
+        p.fpfhK         = toInt(parts[1], 20);
+        p.iterations    = toInt(parts[2], 1000);
+        const auto r = VPC::ops::globalRegister(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["inlierCount"] = std::to_string(r.inlierCount);
+        lastMetrics_["inlierRmse"]  = std::to_string(r.inlierRmse);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }

@@ -17,6 +17,11 @@
 #include "GroundExtractor.h"
 #include "FPFHEstimator.h"
 #include "BoundaryDetector.h"
+#include "MLSSurface.h"
+#include "ConvexHull2D.h"
+#include "ConcaveHull2D.h"
+#include "ICPRegistration.h"
+#include "GlobalRegistration.h"
 
 #include <glm/gtc/constants.hpp>
 
@@ -718,6 +723,221 @@ BoundaryResult detectBoundary(World& world, int activeSceneId, const BoundaryPar
     r.outcome.ok = true;
     r.outcome.primarySceneId = result->getId();
     r.outcome.message = std::to_string(r.boundaryCount) + " boundary points";
+    return r;
+}
+
+// --- MLS surface --------------------------------------------------------
+
+ProcessOutcome mlsSmooth(World& world, int activeSceneId, const MlsSmoothParams& p)
+{
+    ProcessOutcome out;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene) { out.message = "no active scene"; return out; }
+
+    Phantom::PC::MLSSurface mls;
+    for (const auto& q : scene->getPositions()) mls.add(q);
+    mls.smooth(static_cast<double>(p.radius));
+    const auto smoothed = mls.getSmoothedPoints();
+
+    auto* result = world.addScene("MLSSmoothed");
+    for (const auto& q : smoothed) result->add(q, glm::vec3(0.5f, 0.85f, 0.9f));
+    scene->setVisible(false);
+
+    out.ok = true;
+    out.primarySceneId = result->getId();
+    out.message = "Smoothed " + std::to_string(smoothed.size()) + " points";
+    return out;
+}
+
+ProcessOutcome mlsUpsample(World& world, int activeSceneId, const MlsUpsampleParams& p)
+{
+    ProcessOutcome out;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene)          { out.message = "no active scene"; return out; }
+    if (p.radius <= 0.f || p.stepSize <= 0.f) { out.message = "invalid parameters"; return out; }
+
+    Phantom::PC::MLSSurface mls;
+    for (const auto& q : scene->getPositions()) mls.add(q);
+    const auto upsampled = mls.upsample(static_cast<double>(p.radius),
+                                        p.upsampleRadius, p.stepSize);
+    if (upsampled.empty()) { out.message = "upsample produced no points"; return out; }
+
+    auto* result = world.addScene("MLSUpsampled");
+    for (const auto& q : upsampled) result->add(q, glm::vec3(0.9f, 0.7f, 0.9f));
+
+    out.ok = true;
+    out.primarySceneId = result->getId();
+    out.message = "Generated " + std::to_string(upsampled.size()) + " new points";
+    return out;
+}
+
+// --- 2D hulls ----------------------------------------------------------
+
+namespace {
+
+// Emits "<name>Vertices" (primary) + a filled "<name>Polygon" overlay from a
+// closed polyline of hull vertices; hides the source.
+HullResult emitHull(World& world, PointCloudfScene& src, const char* name,
+                    const std::vector<glm::vec3>& verts, double area,
+                    const glm::vec3& colour)
+{
+    HullResult r;
+    auto* result = world.addScene(std::string(name) + "Vertices");
+    for (const auto& v : verts) result->add(v, colour);
+
+    world.clearPolygons();
+    PolygonMesh mesh;
+    mesh.name = std::string(name) + "Polygon";
+    for (const auto& v : verts) {
+        mesh.positions.insert(mesh.positions.end(), { v.x, v.y, v.z });
+        mesh.colors.insert(mesh.colors.end(), { colour.r, colour.g, colour.b, 0.5f });
+    }
+    for (size_t i = 1; i + 1 < verts.size(); ++i) {
+        mesh.indices.push_back(0);
+        mesh.indices.push_back(static_cast<uint32_t>(i));
+        mesh.indices.push_back(static_cast<uint32_t>(i + 1));
+    }
+    world.addPolygon(std::move(mesh));
+
+    src.setVisible(false);
+    r.outcome.ok = true;
+    r.outcome.primarySceneId = result->getId();
+    r.area = area;
+    r.vertexCount = static_cast<int>(verts.size());
+    r.outcome.message = std::to_string(r.vertexCount) + " hull vertices, area " +
+                        std::to_string(area);
+    return r;
+}
+
+} // namespace
+
+HullResult convexHull2D(World& world, int activeSceneId)
+{
+    HullResult r;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene) { r.outcome.message = "no active scene"; return r; }
+
+    Phantom::PC::ConvexHull2D hull;
+    for (const auto& q : scene->getPositions()) hull.add(q);
+    if (!hull.compute()) {
+        r.outcome.message = "convex hull failed (need >= 3 non-collinear points)";
+        return r;
+    }
+    return emitHull(world, *scene, "ConvexHull", hull.getHullPoints(), hull.getArea(),
+                    glm::vec3(0.3f, 0.9f, 0.6f));
+}
+
+HullResult concaveHull2D(World& world, int activeSceneId, const ConcaveHullParams& p)
+{
+    HullResult r;
+    auto* scene = world.findById(activeSceneId);
+    if (!scene) { r.outcome.message = "no active scene"; return r; }
+
+    Phantom::PC::ConcaveHull2D hull;
+    for (const auto& q : scene->getPositions()) hull.add(q);
+    if (!hull.compute(static_cast<size_t>(std::max(3, p.k)),
+                      static_cast<size_t>(std::max(0, p.maxK)))) {
+        r.outcome.message = "concave hull failed (need >= 3 distinct points)";
+        return r;
+    }
+    return emitHull(world, *scene, "ConcaveHull", hull.getHullPoints(), hull.getArea(),
+                    glm::vec3(0.9f, 0.6f, 0.3f));
+}
+
+// --- Registration ----------------------------------------------------
+
+IcpResult icpAlign(World& world, int sourceSceneId, const IcpParams& p)
+{
+    IcpResult r;
+    auto* source = world.findById(sourceSceneId);
+    if (!source) { r.outcome.message = "no active scene"; return r; }
+    auto* target = world.findById(p.targetSceneId);
+    if (!target) { r.outcome.message = "target scene not found"; return r; }
+
+    const auto kernel = static_cast<Phantom::PC::ICPRegistration::RobustKernel>(p.robustKernel);
+    Phantom::PC::ICPRegistration icp;
+    Phantom::PC::ICPRegistration::Result res;
+    bool ok = false;
+    if (p.pointToPlane) {
+        if (!target->hasNormals()) { r.outcome.message = "target has no normals"; return r; }
+        ok = icp.alignPointToPlane(source->getPositions(), target->getPositions(),
+                                   target->getNormals(), res, p.maxIterations, p.tolerance,
+                                   p.maxCorrespondenceDistance, kernel, p.robustKernelDelta);
+    } else {
+        ok = icp.align(source->getPositions(), target->getPositions(), res,
+                       p.maxIterations, p.tolerance, p.maxCorrespondenceDistance,
+                       kernel, p.robustKernelDelta, p.estimateScale);
+    }
+    if (!ok) {
+        r.outcome.message = p.pointToPlane ? "ICP point-to-plane alignment failed"
+                                           : "ICP alignment failed";
+        return r;
+    }
+
+    auto* aligned = world.addScene(p.pointToPlane ? "ICPAlignedP2Plane" : "ICPAligned");
+    const glm::vec3 colour = p.pointToPlane ? glm::vec3(0.3f, 0.7f, 1.0f)
+                                            : glm::vec3(0.3f, 1.0f, 0.5f);
+    for (const auto& q : source->getPositions())
+        aligned->add(Phantom::PC::ICPRegistration::transformPoint(res, q), colour);
+    source->setVisible(false);
+
+    r.outcome.ok = true;
+    r.outcome.primarySceneId = aligned->getId();
+    r.fitness    = res.fitness;
+    r.iterations = res.iterations;
+    r.converged  = res.converged;
+    r.scale      = res.scale;
+    r.outcome.message = "ICP: fitness " + std::to_string(res.fitness) +
+                        (res.converged ? " (converged)" : " (max iterations)");
+    return r;
+}
+
+GlobalRegisterResult globalRegister(World& world, int sourceSceneId, const GlobalRegisterParams& p)
+{
+    GlobalRegisterResult r;
+    auto* source = world.findById(sourceSceneId);
+    if (!source) { r.outcome.message = "no active scene"; return r; }
+    auto* target = world.findById(p.targetSceneId);
+    if (!target) { r.outcome.message = "target scene not found"; return r; }
+    if (!source->hasNormals() || !target->hasNormals()) {
+        r.outcome.message = "source/target must have normals (run EstimateNormals first)";
+        return r;
+    }
+
+    Phantom::PC::FPFHEstimator sourceFpfh, targetFpfh;
+    const auto& sp = source->getPositions();
+    const auto& sn = source->getNormals();
+    for (size_t i = 0; i < sp.size(); ++i) sourceFpfh.add(sp[i], sn[i]);
+    const auto& tp = target->getPositions();
+    const auto& tn = target->getNormals();
+    for (size_t i = 0; i < tp.size(); ++i) targetFpfh.add(tp[i], tn[i]);
+    if (!sourceFpfh.estimate(static_cast<size_t>(p.fpfhK)) ||
+        !targetFpfh.estimate(static_cast<size_t>(p.fpfhK))) {
+        r.outcome.message = "FPFH estimation failed";
+        return r;
+    }
+
+    Phantom::PC::GlobalRegistration globalReg;
+    Phantom::PC::GlobalRegistration::Result res;
+    if (!globalReg.align(sp, sourceFpfh.getHistograms(), tp, targetFpfh.getHistograms(), res,
+                         p.iterations, p.maxCorrespondenceDistance,
+                         static_cast<size_t>(p.sampleSize), p.edgeLengthTolerance,
+                         static_cast<size_t>(p.minInliers))) {
+        r.outcome.message = "global registration failed";
+        return r;
+    }
+
+    auto* aligned = world.addScene("GlobalRegAligned");
+    for (const auto& q : sp)
+        aligned->add(res.rotation * q + res.translation, glm::vec3(1.0f, 0.5f, 0.8f));
+    source->setVisible(false);
+
+    r.outcome.ok = true;
+    r.outcome.primarySceneId = aligned->getId();
+    r.inlierCount = static_cast<int>(res.inlierCount);
+    r.inlierRmse  = res.inlierRmse;
+    r.outcome.message = std::to_string(r.inlierCount) + " inlier correspondences, RMSE " +
+                        std::to_string(res.inlierRmse);
     return r;
 }
 

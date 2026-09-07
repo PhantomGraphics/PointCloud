@@ -1,8 +1,7 @@
 #pragma once
 
 #include "IProcessView.h"
-#include "CGLib/UIWidgets/Button.h"
-#include <string>
+#include "PointCloudOps.h"
 
 namespace VPC {
 
@@ -13,13 +12,8 @@ public:
                  const std::function<void(int)>& onResult) override;
 
 private:
-    bool        hasResult_ = false;
-    bool        succeeded_ = false;
-    std::string status_    = "Not executed yet";
-    float       area_        = 0.0f;
-    int         vertexCount_ = 0;
-
-    Phantom::UI::Button runButton_{ "Run" };
+    bool            hasResult_ = false;
+    ops::HullResult result_;
 };
 
 } // namespace VPC

@@ -1,57 +1,39 @@
 #include "MLSSurfaceView.h"
 
-#include "MLSSurface.h"
 #include "imgui.h"
-
-#include <glm/glm.hpp>
 
 namespace VPC {
 
 void MLSSurfaceView::onImGui(World& world, int activeSceneId,
                               const std::function<void(int)>& onResult)
 {
-    smoothButton_.setFunction([&world, activeSceneId, &onResult, this]() {
-        auto* scene = world.findById(activeSceneId);
-        if (scene == nullptr) { status_ = "Scene not found"; return; }
-
-        Phantom::PC::MLSSurface mls;
-        for (const auto& p : scene->getPositions()) mls.add(p);
-        mls.smooth(static_cast<double>(searchRadius_));
-        const auto smoothed = mls.getSmoothedPoints();
-
-        auto* result = world.addScene("MLSSmoothed");
-        for (const auto& p : smoothed) result->add(p, glm::vec3(0.5f, 0.85f, 0.9f));
-
-        scene->setVisible(false);
-        onResult(-1);
-        status_ = "Smoothed " + std::to_string(smoothed.size()) + " points";
-    });
-
-    upsampleButton_.setFunction([&world, activeSceneId, &onResult, this]() {
-        auto* scene = world.findById(activeSceneId);
-        if (scene == nullptr) { status_ = "Scene not found"; return; }
-
-        Phantom::PC::MLSSurface mls;
-        for (const auto& p : scene->getPositions()) mls.add(p);
-        const auto upsampled = mls.upsample(static_cast<double>(searchRadius_), upsampleRadius_, stepSize_);
-        if (upsampled.empty()) { status_ = "Upsample produced no points"; return; }
-
-        auto* result = world.addScene("MLSUpsampled");
-        for (const auto& p : upsampled) result->add(p, glm::vec3(0.9f, 0.7f, 0.9f));
-
-        onResult(-1);
-        status_ = "Generated " + std::to_string(upsampled.size()) + " new points";
-    });
-
-    ImGui::SliderFloat("Search Radius", &searchRadius_, 0.001f, 1.0f, "%.4f");
+    ImGui::SliderFloat("Search Radius",   &searchRadius_,   0.001f, 1.0f, "%.4f");
     ImGui::SliderFloat("Upsample Radius", &upsampleRadius_, 0.001f, 0.5f, "%.4f");
-    ImGui::SliderFloat("Step Size", &stepSize_, 0.001f, 0.2f, "%.4f");
+    ImGui::SliderFloat("Step Size",       &stepSize_,       0.001f, 0.2f, "%.4f");
 
-    ImGui::Separator();
-    ImGui::Text("Status: %s", status_.c_str());
-    smoothButton_.show();
+    if (ImGui::Button("Smooth")) {
+        ops::MlsSmoothParams p;
+        p.radius = searchRadius_;
+        lastOutcome_ = ops::mlsSmooth(world, activeSceneId, p);
+        hasResult_ = true;
+        if (lastOutcome_.ok) onResult(lastOutcome_.primarySceneId);
+    }
     ImGui::SameLine();
-    upsampleButton_.show();
+    if (ImGui::Button("Upsample")) {
+        ops::MlsUpsampleParams p;
+        p.radius         = searchRadius_;
+        p.upsampleRadius = upsampleRadius_;
+        p.stepSize       = stepSize_;
+        lastOutcome_ = ops::mlsUpsample(world, activeSceneId, p);
+        hasResult_ = true;
+        if (lastOutcome_.ok) onResult(lastOutcome_.primarySceneId);
+    }
+
+    if (hasResult_) {
+        const bool ok = lastOutcome_.ok;
+        ImGui::TextColored(ok ? ImVec4(0.4f, 0.9f, 0.4f, 1.f) : ImVec4(1.f, 0.5f, 0.3f, 1.f),
+                           "%s", lastOutcome_.message.c_str());
+    }
 }
 
 } // namespace VPC

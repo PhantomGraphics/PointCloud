@@ -1,8 +1,7 @@
 #pragma once
 
 #include "IProcessView.h"
-#include "CGLib/UIWidgets/Button.h"
-#include <string>
+#include "PointCloudOps.h"
 
 namespace VPC {
 
@@ -21,13 +20,8 @@ private:
     float edgeLengthTolerance_ = 0.15f;
     int   minInliers_      = 3;
 
-    bool        hasResult_  = false;
-    bool        succeeded_  = false;
-    std::string status_     = "Not executed yet";
-    size_t      inlierCount_ = 0;
-    float       inlierRmse_  = 0.0f;
-
-    Phantom::UI::Button runButton_{ "Run" };
+    bool                     hasResult_ = false;
+    ops::GlobalRegisterResult result_;
 };
 
 } // namespace VPC

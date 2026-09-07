@@ -1,8 +1,7 @@
 #pragma once
 
 #include "IProcessView.h"
-#include "CGLib/UIWidgets/Button.h"
-#include <string>
+#include "PointCloudOps.h"
 
 namespace VPC {
 
@@ -16,13 +15,8 @@ private:
     int k_    = 3;
     int maxK_ = 0; // 0 = "as many as needed"
 
-    bool        hasResult_ = false;
-    bool        succeeded_ = false;
-    std::string status_    = "Not executed yet";
-    float       area_        = 0.0f;
-    int         vertexCount_ = 0;
-
-    Phantom::UI::Button runButton_{ "Run" };
+    bool            hasResult_ = false;
+    ops::HullResult result_;
 };
 
 } // namespace VPC

@@ -188,5 +188,73 @@ struct BoundaryResult {
 };
 BoundaryResult detectBoundary(World& world, int activeSceneId, const BoundaryParams& p);
 
+// --- MLS surface -----------------------------------------------------
+
+struct MlsSmoothParams { float radius = 0.1f; };
+struct MlsUpsampleParams {
+    float radius         = 0.1f;
+    float upsampleRadius = 0.05f;
+    float stepSize       = 0.01f;
+};
+
+// "MLSSmoothed" (colour 0.5,0.85,0.9), source hidden.
+ProcessOutcome mlsSmooth(World& world, int activeSceneId, const MlsSmoothParams& p);
+// "MLSUpsampled" (colour 0.9,0.7,0.9). Source stays visible (new points are added).
+ProcessOutcome mlsUpsample(World& world, int activeSceneId, const MlsUpsampleParams& p);
+
+// --- 2D hulls -------------------------------------------------------
+
+struct ConcaveHullParams { int k = 3; int maxK = 0; }; // maxK 0 = unbounded
+
+struct HullResult {
+    ProcessOutcome outcome;   // "<Convex|Concave>HullVertices" + a "<...>Polygon" overlay
+    double area = 0.0;
+    int    vertexCount = 0;
+};
+
+HullResult convexHull2D (World& world, int activeSceneId);
+HullResult concaveHull2D(World& world, int activeSceneId, const ConcaveHullParams& p);
+
+// --- Registration -------------------------------------------------
+
+struct IcpParams {
+    int   targetSceneId = -1;
+    bool  pointToPlane  = false;
+    int   maxIterations = 50;
+    float tolerance     = 1.0e-6f;
+    float maxCorrespondenceDistance = 0.0f;
+    int   robustKernel  = 0;   // 0 None, 1 Huber, 2 Tukey
+    float robustKernelDelta = 1.0f;
+    bool  estimateScale = false;
+};
+
+struct IcpResult {
+    ProcessOutcome outcome;   // "ICPAligned" / "ICPAlignedP2Plane"
+    float fitness = 0.f;
+    int   iterations = 0;
+    bool  converged = false;
+    float scale = 1.f;
+};
+
+IcpResult icpAlign(World& world, int sourceSceneId, const IcpParams& p);
+
+struct GlobalRegisterParams {
+    int   targetSceneId  = -1;
+    int   fpfhK          = 20;
+    int   iterations     = 1000;
+    float maxCorrespondenceDistance = 0.05f;
+    int   sampleSize     = 3;
+    float edgeLengthTolerance = 0.15f;
+    int   minInliers     = 3;
+};
+
+struct GlobalRegisterResult {
+    ProcessOutcome outcome;   // "GlobalRegAligned"
+    int    inlierCount = 0;
+    double inlierRmse  = 0.0;
+};
+
+GlobalRegisterResult globalRegister(World& world, int sourceSceneId, const GlobalRegisterParams& p);
+
 } // namespace ops
 } // namespace VPC
