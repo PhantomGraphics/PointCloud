@@ -1,42 +1,26 @@
 #include "DensityBasedFilterView.h"
 
-#include "DensityBasedFilter.h"
 #include "imgui.h"
-
-#include <glm/glm.hpp>
 
 namespace VPC {
 
 void DensityBasedFilterView::onImGui(World& world, int activeSceneId,
                                       const std::function<void(int)>& onResult)
 {
-    runButton_.setFunction([&world, activeSceneId, &onResult, this]() {
-        auto* scene = world.findById(activeSceneId);
-        if (scene == nullptr) return;
-
-        const auto& positions = scene->getPositions();
-
-        Phantom::PC::DensityBasedFilter filter;
-        for (const auto& p : positions) {
-            filter.add(p);
-        }
-        filter.execute(searchRadius_);
-
-        const auto inlierIndices = filter.getInlierIndices();
-
-        auto* result = world.addScene("DensityFilterResult");
-        for (const auto idx : inlierIndices) {
-            if (idx >= 0 && static_cast<size_t>(idx) < positions.size()) {
-                result->add(positions[idx], glm::vec3(0.6f, 0.85f, 1.0f));
-            }
-        }
-
-        scene->setVisible(false);
-        onResult(-1);
-    });
-
     ImGui::SliderFloat("Search Radius", &searchRadius_, 0.001f, 1.0f, "%.4f");
-    runButton_.show();
+
+    if (ImGui::Button("Run")) {
+        ops::DensityFilterParams p;
+        p.radius = searchRadius_;
+        lastOutcome_ = ops::filterDensity(world, activeSceneId, p);
+        if (lastOutcome_.ok) onResult(lastOutcome_.primarySceneId);
+    }
+
+    if (!lastOutcome_.message.empty()) {
+        const ImVec4 col = lastOutcome_.ok ? ImVec4(0.4f, 0.9f, 0.4f, 1.0f)
+                                           : ImVec4(1.0f, 0.5f, 0.3f, 1.0f);
+        ImGui::TextColored(col, "%s", lastOutcome_.message.c_str());
+    }
 }
 
 } // namespace VPC

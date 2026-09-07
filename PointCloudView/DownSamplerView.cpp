@@ -17,7 +17,7 @@ void DownSamplerView::onImGui(World& world, int activeSceneId,
         // / selection (PLAN Phase 4).
         lastOutcome_ = ops::downSample(world, activeSceneId, p);
         if (lastOutcome_.ok)
-            onResult(lastOutcome_.resultSceneId);  // select the result + rebuild
+            onResult(lastOutcome_.primarySceneId);  // select the result + rebuild
     }
 
     if (!lastOutcome_.message.empty()) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IProcessView.h"
-#include "CGLib/UIWidgets/Button.h"
+#include "PointCloudOps.h"
 
 namespace VPC {
 
@@ -13,7 +13,7 @@ public:
 
 private:
     float searchRadius_ = 0.05f;
-    Phantom::UI::Button runButton_{ "Run" };
+    ops::ProcessOutcome lastOutcome_;
 };
 
 } // namespace VPC

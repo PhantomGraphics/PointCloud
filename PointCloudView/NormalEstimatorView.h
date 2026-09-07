@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IProcessView.h"
-#include "CGLib/UIWidgets/Button.h"
+#include "PointCloudOps.h"
 
 namespace VPC {
 
@@ -17,7 +17,7 @@ private:
     bool  orientToViewpoint_ = false;
     float viewpointX_ = 0.0f, viewpointY_ = 0.0f, viewpointZ_ = 0.0f;
 
-    Phantom::UI::Button runButton_{ "Run" };
+    ops::ProcessOutcome lastOutcome_;
 };
 
 } // namespace VPC

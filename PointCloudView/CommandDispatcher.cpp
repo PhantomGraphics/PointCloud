@@ -368,149 +368,60 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         const auto outcome = VPC::ops::downSample(*world_, activeId(), p);
         if (!outcome.ok) return "Error:" + outcome.message;
 
-        activeId() = outcome.resultSceneId;
+        activeId() = outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "EstimateNormals") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        const float radius = toFloat(arg, 0.1f);
-        if (radius <= 0.f) return "Error:invalid radius";
-
-        Phantom::PC::NormalEstimator estimator;
-        const auto& positions = scene->getPositions();
-        for (const auto& p : positions) estimator.add(p);
-        estimator.estimate(radius);
-        const auto normals = estimator.getNormals();
-
-        auto* result = world_->addScene("NormalResult");
-        for (size_t i = 0; i < positions.size() && i < normals.size(); ++i) {
-            const auto& n = normals[i];
-            result->add(positions[i],
-                        glm::vec3((n.x + 1.f) * 0.5f,
-                                  (n.y + 1.f) * 0.5f,
-                                  (n.z + 1.f) * 0.5f));
-        }
-        result->setNormals(normals);
-        scene->setVisible(false);
-
-        activeId() = result->getId();
+        VPC::ops::NormalParams p;
+        p.radius = toFloat(arg, 0.1f);
+        const auto o = VPC::ops::estimateNormals(*world_, activeId(), p);
+        if (!o.ok) return "Error:" + o.message;
+        activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "FilterDensity") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        const float radius = toFloat(arg, 0.1f);
-        if (radius <= 0.f) return "Error:invalid radius";
-
-        Phantom::PC::DensityBasedFilter filter;
-        const auto& positions = scene->getPositions();
-        for (const auto& p : positions) filter.add(p);
-        filter.execute(radius);
-
-        auto* result = world_->addScene("DensityFilterResult");
-        for (int idx : filter.getInlierIndices()) {
-            if (idx >= 0 && static_cast<size_t>(idx) < positions.size())
-                result->add(positions[idx], glm::vec3(0.6f, 0.85f, 1.0f));
-        }
-        scene->setVisible(false);
-
-        activeId() = result->getId();
+        VPC::ops::DensityFilterParams p;
+        p.radius = toFloat(arg, 0.1f);
+        const auto o = VPC::ops::filterDensity(*world_, activeId(), p);
+        if (!o.ok) return "Error:" + o.message;
+        activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "FilterCurvature") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:FilterCurvature expects radius,threshold";
-        const float radius    = toFloat(parts[0], 0.1f);
-        const float threshold = toFloat(parts[1], 0.01f);
-        if (radius <= 0.f) return "Error:invalid radius";
-
-        Phantom::PC::CurvatureEstimator estimator;
-        const auto& positions = scene->getPositions();
-        for (const auto& p : positions) estimator.add(p);
-        estimator.estimate(radius);
-        const auto curvatures = estimator.getCurvatures();
-
-        const double maxCurv = curvatures.empty() ? 1.0
-            : *std::max_element(curvatures.begin(), curvatures.end());
-        const double norm = (maxCurv > 0.0) ? maxCurv : 1.0;
-
-        auto* result = world_->addScene("CurvatureFilterResult");
-        for (size_t i = 0; i < positions.size() && i < curvatures.size(); ++i) {
-            if (curvatures[i] <= static_cast<double>(threshold)) {
-                const float v = static_cast<float>(curvatures[i] / norm);
-                result->add(positions[i], glm::vec3(v, v, v));
-            }
-        }
-        scene->setVisible(false);
-
-        activeId() = result->getId();
+        VPC::ops::CurvatureFilterParams p;
+        p.radius    = toFloat(parts[0], 0.1f);
+        p.threshold = toFloat(parts[1], 0.01f);
+        const auto o = VPC::ops::filterCurvature(*world_, activeId(), p);
+        if (!o.ok) return "Error:" + o.message;
+        activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "RansacPlane") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        const float threshold = toFloat(arg, 0.05f);
-
-        const auto& positions = scene->getPositions();
-        Phantom::PC::RansacPlaneDetector detector;
-        Phantom::PC::RansacPlaneDetector::PlaneModel model;
-        if (!detector.detect(positions, model, 200, threshold, 50))
-            return "Error:plane detection failed";
-
-        std::vector<bool> isInlier(positions.size(), false);
-        auto* inliers = world_->addScene("PlaneInliers");
-        for (const auto idx : model.inliers) {
-            if (idx < positions.size()) {
-                isInlier[idx] = true;
-                inliers->add(positions[idx], glm::vec3(0.2f, 0.9f, 0.3f));
-            }
-        }
-        auto* outliers = world_->addScene("PlaneOutliers");
-        for (size_t i = 0; i < positions.size(); ++i)
-            if (!isInlier[i]) outliers->add(positions[i], glm::vec3(0.8f, 0.2f, 0.2f));
-        scene->setVisible(false);
-
-        activeId() = inliers->getId();
+        VPC::ops::RansacParams p;
+        p.threshold = toFloat(arg, 0.05f);
+        const auto r = VPC::ops::detectPlane(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "RansacCylinder") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        const float threshold = toFloat(arg, 0.05f);
-
-        const auto& positions = scene->getPositions();
-        Phantom::PC::RansacCylinderDetector detector;
-        Phantom::PC::RansacCylinderDetector::CylinderModel model;
-        if (!detector.detect(positions, model, 200, threshold, 50))
-            return "Error:cylinder detection failed";
-
-        std::vector<bool> isInlier(positions.size(), false);
-        auto* inliers = world_->addScene("CylinderInliers");
-        for (const auto idx : model.inliers) {
-            if (idx < positions.size()) {
-                isInlier[idx] = true;
-                inliers->add(positions[idx], glm::vec3(0.2f, 0.7f, 1.0f));
-            }
-        }
-        auto* outliers = world_->addScene("CylinderOutliers");
-        for (size_t i = 0; i < positions.size(); ++i)
-            if (!isInlier[i]) outliers->add(positions[i], glm::vec3(0.8f, 0.2f, 0.2f));
-        scene->setVisible(false);
-
-        activeId() = inliers->getId();
+        VPC::ops::RansacParams p;
+        p.threshold = toFloat(arg, 0.05f);
+        const auto r = VPC::ops::detectCylinder(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
@@ -573,31 +484,15 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     // --- Phase B: normal orientation / principal curvature / FPFH / boundary ---
 
     if (name == "OrientNormals") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 4) return "Error:OrientNormals expects radius,vx,vy,vz";
-        const float radius = toFloat(parts[0], 0.1f);
-        const glm::vec3 viewpoint(toFloat(parts[1], 0.f), toFloat(parts[2], 0.f), toFloat(parts[3], 0.f));
-        if (radius <= 0.f) return "Error:invalid radius";
-
-        const auto& positions = scene->getPositions();
-        Phantom::PC::NormalEstimator estimator;
-        for (const auto& p : positions) estimator.add(p);
-        estimator.estimate(radius);
-        estimator.orientTowardsViewpoint(viewpoint);
-        const auto normals = estimator.getNormals();
-
-        auto* result = world_->addScene("OrientedNormalResult");
-        for (size_t i = 0; i < positions.size() && i < normals.size(); ++i) {
-            const auto& n = normals[i];
-            result->add(positions[i],
-                        glm::vec3((n.x + 1.f) * 0.5f, (n.y + 1.f) * 0.5f, (n.z + 1.f) * 0.5f));
-        }
-        result->setNormals(normals);
-        scene->setVisible(false);
-
-        activeId() = result->getId();
+        VPC::ops::NormalParams p;
+        p.radius            = toFloat(parts[0], 0.1f);
+        p.orientToViewpoint = true;
+        p.viewpoint = glm::vec3(toFloat(parts[1], 0.f), toFloat(parts[2], 0.f), toFloat(parts[3], 0.f));
+        const auto o = VPC::ops::estimateNormals(*world_, activeId(), p);
+        if (!o.ok) return "Error:" + o.message;
+        activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
@@ -724,63 +619,23 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     // --- Phase C: sphere/cone RANSAC, normal-based region growing, ground extraction ---
 
     if (name == "RansacSphere") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        const float threshold = toFloat(arg, 0.02f);
-
-        const auto& positions = scene->getPositions();
-        Phantom::PC::RansacSphereDetector detector;
-        Phantom::PC::RansacSphereDetector::SphereModel model;
-        if (!detector.detect(positions, model, 200, threshold, 50))
-            return "Error:sphere detection failed";
-
-        std::vector<bool> isInlier(positions.size(), false);
-        auto* inliers = world_->addScene("SphereInliers");
-        for (const auto idx : model.inliers) {
-            if (idx < positions.size()) {
-                isInlier[idx] = true;
-                inliers->add(positions[idx], glm::vec3(0.9f, 0.6f, 0.1f));
-            }
-        }
-        auto* outliers = world_->addScene("SphereOutliers");
-        for (size_t i = 0; i < positions.size(); ++i)
-            if (!isInlier[i]) outliers->add(positions[i], glm::vec3(0.8f, 0.2f, 0.2f));
-        scene->setVisible(false);
-
-        lastMetrics_["sphereRadius"] = std::to_string(model.radius);
-
-        activeId() = inliers->getId();
+        VPC::ops::RansacParams p;
+        p.threshold = toFloat(arg, 0.02f);
+        const auto r = VPC::ops::detectSphere(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["sphereRadius"] = std::to_string(r.radius);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }
 
     if (name == "RansacCone") {
-        auto* scene = world_->findById(activeId());
-        if (!scene) return "Error:no active scene";
-        const float threshold = toFloat(arg, 0.02f);
-
-        const auto& positions = scene->getPositions();
-        Phantom::PC::RansacConeDetector detector;
-        Phantom::PC::RansacConeDetector::ConeModel model;
-        if (!detector.detect(positions, model, 200, threshold, 50))
-            return "Error:cone detection failed";
-
-        std::vector<bool> isInlier(positions.size(), false);
-        auto* inliers = world_->addScene("ConeInliers");
-        for (const auto idx : model.inliers) {
-            if (idx < positions.size()) {
-                isInlier[idx] = true;
-                inliers->add(positions[idx], glm::vec3(1.0f, 0.7f, 0.2f));
-            }
-        }
-        auto* outliers = world_->addScene("ConeOutliers");
-        for (size_t i = 0; i < positions.size(); ++i)
-            if (!isInlier[i]) outliers->add(positions[i], glm::vec3(0.8f, 0.2f, 0.2f));
-        scene->setVisible(false);
-
-        lastMetrics_["coneHalfAngleRad"] = std::to_string(model.halfAngleRad);
-
-        activeId() = inliers->getId();
+        VPC::ops::RansacParams p;
+        p.threshold = toFloat(arg, 0.02f);
+        const auto r = VPC::ops::detectCone(*world_, activeId(), p);
+        if (!r.outcome.ok) return "Error:" + r.outcome.message;
+        lastMetrics_["coneHalfAngleRad"] = std::to_string(r.halfAngleRad);
+        activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
         return "Id:" + std::to_string(activeId());
     }

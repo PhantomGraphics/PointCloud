@@ -1,50 +1,28 @@
 #include "CurvatureBasedFilterView.h"
 
-#include "CurvatureEstimator.h"
 #include "imgui.h"
-
-#include <algorithm>
-#include <glm/glm.hpp>
 
 namespace VPC {
 
 void CurvatureBasedFilterView::onImGui(World& world, int activeSceneId,
                                         const std::function<void(int)>& onResult)
 {
-    runButton_.setFunction([&world, activeSceneId, &onResult, this]() {
-        auto* scene = world.findById(activeSceneId);
-        if (scene == nullptr || curvatureThreshold_ < 0.0f) return;
+    ImGui::SliderFloat("Search Radius",       &searchRadius_,       0.001f, 1.0f, "%.4f");
+    ImGui::SliderFloat("Curvature Threshold", &curvatureThreshold_, 0.0f,   1.0f, "%.4f");
 
-        const auto& positions = scene->getPositions();
+    if (ImGui::Button("Run")) {
+        ops::CurvatureFilterParams p;
+        p.radius    = searchRadius_;
+        p.threshold = curvatureThreshold_;
+        lastOutcome_ = ops::filterCurvature(world, activeSceneId, p);
+        if (lastOutcome_.ok) onResult(lastOutcome_.primarySceneId);
+    }
 
-        Phantom::PC::CurvatureEstimator estimator;
-        for (const auto& p : positions) {
-            estimator.add(p);
-        }
-        estimator.estimate(searchRadius_);
-
-        const auto curvatures = estimator.getCurvatures();
-
-        const double maxCurv = curvatures.empty()
-            ? 1.0
-            : *std::max_element(curvatures.begin(), curvatures.end());
-        const double norm = (maxCurv > 0.0) ? maxCurv : 1.0;
-
-        auto* result = world.addScene("CurvatureFilterResult");
-        for (size_t i = 0; i < positions.size() && i < curvatures.size(); ++i) {
-            if (curvatures[i] <= static_cast<double>(curvatureThreshold_)) {
-                const float v = static_cast<float>(curvatures[i] / norm);
-                result->add(positions[i], glm::vec3(v, v, v));
-            }
-        }
-
-        scene->setVisible(false);
-        onResult(-1);
-    });
-
-    ImGui::SliderFloat("Search Radius",        &searchRadius_,       0.001f, 1.0f, "%.4f");
-    ImGui::SliderFloat("Curvature Threshold",  &curvatureThreshold_, 0.0f,   1.0f, "%.4f");
-    runButton_.show();
+    if (!lastOutcome_.message.empty()) {
+        const ImVec4 col = lastOutcome_.ok ? ImVec4(0.4f, 0.9f, 0.4f, 1.0f)
+                                           : ImVec4(1.0f, 0.5f, 0.3f, 1.0f);
+        ImGui::TextColored(col, "%s", lastOutcome_.message.c_str());
+    }
 }
 
 } // namespace VPC
