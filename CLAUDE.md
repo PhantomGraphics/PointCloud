@@ -95,13 +95,19 @@ cmake --build --preset windows-debug
   「メニューでページを選び、単一の "Control" ウィンドウに表示」方式へ再構築済み。
   - `ControlPanelHost : ::VKG::IVkUIPanel`（`ControlPanelHost.{h,cpp}`）— 唯一の "Control" ウィンドウ。
     `ControlPage`（`Scenes`/`Rendering`/`Processing`/`ImportExport`/`ScenarioBrowser`）を1つだけ表示し、
-    上部に共通ステータス（`PointCloudApp::drawStatusArea`）を出す。`page`/`visible`/`process` を
-    `pointcloudview_control_layout.ini` に保存（シナリオ実行時は `loadScenario()` が無効化）。
+    上部に共通ステータス（`PointCloudApp::drawStatusArea`：対象シーン選択 Combo・総点数/可視点数・
+    描画モード・直近 I/O・シナリオ状態、対象シーンが非表示なら警告）を出す。`page`/`visible`/`process` を
+    `pointcloudview_control_layout.ini` に保存。**capture モード**（`--screenshot` またはシナリオ実行、
+    `PointCloudApp::setCaptureMode` / `loadScenario()`）ではこの ini・ImGui の `imgui.ini`（`IniFilename=nullptr`）・
+    Control ウィンドウ位置（`setFixedLayout`）の 3 つを独立に固定する。`main.cpp` の `--size WxH` /
+    `--page N` / `--process N` は検証キャプチャ用（capture モードは ini を読まないため明示指定する）。
   - `PointCloudMenu`（`PointCloudMenu.{h,cpp}`、旧 `Menu`）— 「PointCloud」メニュー。ページと処理を
     *選択するだけ*で World 更新・パネル生成はしない。処理は `ProcessRegistry`（`ProcessId` enum +
     カテゴリ表 Generate/Features/Filters/Segmentation/Fitting/Registration/Surface + `makeProcessView()`）に集約。
   - `ProcessPanel : IEmbeddedPanel`（`ProcessPanel.{h,cpp}`）— Processing ページ。`ProcessId` ごとに
     `IProcessView` を遅延生成し `std::array` で保持（パラメーターがセッション中残る）。Reset で当該パネルのみ破棄。
+    `blockReason()` が前提条件不足（点群未ロード／対象シーン未選択／Registration の参照シーン不足）を
+    判定し、理由を出して当該パネルを `BeginDisabled()` する（Generate* は空 World でも常時可）。
   - `ImportExportPanel : IEmbeddedPanel` — Import/Export ページ。I/O は `PointCloudApp` コールバックへ委譲。
   - Scenes/Rendering/ScenarioBrowser ページは既存 `SceneListPanel::onImGui()` /
     `PointCloudRenderer::drawImGuiControls()` / `ScenarioBrowserPanel::drawEmbedded()` を

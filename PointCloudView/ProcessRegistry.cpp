@@ -62,6 +62,24 @@ const char* processName(ProcessId id)
     }
 }
 
+bool processWorksOnEmptyWorld(ProcessId id)
+{
+    switch (id) {
+    case ProcessId::GenerateSphere:
+    case ProcessId::GenerateCylinder:
+    case ProcessId::GenerateRect:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool processNeedsReferenceScene(ProcessId id)
+{
+    return id == ProcessId::ICPRegistration ||
+           id == ProcessId::GlobalRegistration;
+}
+
 const char* categoryLabel(ProcessCategory category)
 {
     switch (category) {

@@ -1,5 +1,6 @@
 #include "PointCloudApp.h"
 
+#include <charconv>
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -9,6 +10,15 @@ int main(int argc, char* argv[]) {
     std::string scenarioPath;
     std::string filePath;
     bool        noExitOnComplete = false;
+    bool        captureMode      = false;
+    int         winW = 1280, winH = 720;
+    int         startupPage = -1, startupProcess = -1;
+
+    auto parseInt = [](std::string_view s, int fallback) {
+        int v = fallback;
+        std::from_chars(s.data(), s.data() + s.size(), v);
+        return v;
+    };
 
     for (int i = 1; i < argc; ++i) {
         std::string_view arg = argv[i];
@@ -16,7 +26,26 @@ int main(int argc, char* argv[]) {
             scenarioPath = argv[++i];
         } else if (arg == "--no-exit-on-complete") {
             noExitOnComplete = true;
-        } else if ((arg == "--screenshot" || arg == "--screenshot-frame") && i + 1 < argc) {
+        } else if (arg == "--size" && i + 1 < argc) {
+            std::string_view s = argv[++i];
+            const auto x = s.find('x');
+            int w = 0, h = 0;
+            if (x != std::string_view::npos &&
+                std::from_chars(s.data(), s.data() + x, w).ec == std::errc() &&
+                std::from_chars(s.data() + x + 1, s.data() + s.size(), h).ec == std::errc() &&
+                w > 0 && h > 0) {
+                winW = w; winH = h;
+            }
+        } else if (arg == "--page" && i + 1 < argc) {
+            startupPage = parseInt(argv[++i], -1);
+        } else if (arg == "--process" && i + 1 < argc) {
+            startupProcess = parseInt(argv[++i], -1);
+        } else if (arg == "--screenshot" && i + 1 < argc) {
+            captureMode = true;
+            ++i; // path consumed by VkAppBase::run()
+        } else if (arg.rfind("--screenshot=", 0) == 0) {
+            captureMode = true;
+        } else if (arg == "--screenshot-frame" && i + 1 < argc) {
             ++i; // consumed by VkAppBase::run()
         } else if (arg.rfind("--screenshot-frame=", 0) == 0) {
             // no extra arg
@@ -25,7 +54,9 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    VPC::PointCloudApp app(1280, 720, "Vulkan Point Cloud Viewer [experimental]");
+    VPC::PointCloudApp app(winW, winH, "Vulkan Point Cloud Viewer [experimental]");
+    app.setCaptureMode(captureMode);
+    app.setStartupSelection(startupPage, startupProcess);
 
     if (!filePath.empty()) {
         std::string error;

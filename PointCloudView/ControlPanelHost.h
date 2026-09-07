@@ -51,6 +51,11 @@ public:
     // imgui.ini (Phase 3 "Reset Layout").
     void resetLayout();
 
+    // Pins the Control window to a fixed position/size every frame (instead of
+    // ImGuiCond_Once) so validation captures are reproducible regardless of any
+    // imgui.ini on disk.
+    void setFixedLayout(bool v) { fixedLayout_ = v; }
+
     void onImGui() override;
 
 private:
@@ -60,6 +65,7 @@ private:
     std::array<IEmbeddedPanel*, kControlPageCount> panels_{};
     ControlPage activePage_ = ControlPage::Scenes;
     bool visible_ = true;
+    bool fixedLayout_ = false;
     std::function<void()> statusDrawer_;
     std::function<int()>  processGetter_;
     std::function<void(int)> processSetter_;

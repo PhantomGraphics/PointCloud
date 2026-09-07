@@ -55,10 +55,45 @@ void ProcessPanel::drawContents()
     }
     ImGui::Spacing();
 
-    if (world_ && pActiveSceneId_) {
-        view->onImGui(*world_, *pActiveSceneId_,
-                      [this]() { if (onWorldChanged_) onWorldChanged_(); });
+    // The page always opens; when a precondition is missing we show why and
+    // grey the whole panel (its Run button included) rather than let it fail
+    // silently (docs/todo/PLAN_pointcloudview_gui_restructuring.md section 3).
+    const std::string reason = blockReason();
+    if (!reason.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.3f, 1.0f));
+        ImGui::TextWrapped("Cannot run: %s", reason.c_str());
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+        ImGui::Separator();
     }
+
+    if (!world_ || !pActiveSceneId_) return;
+
+    const bool blocked = !reason.empty();
+    if (blocked) ImGui::BeginDisabled();
+    view->onImGui(*world_, *pActiveSceneId_,
+                  [this]() { if (onWorldChanged_) onWorldChanged_(); });
+    if (blocked) ImGui::EndDisabled();
+}
+
+std::string ProcessPanel::blockReason() const
+{
+    if (processWorksOnEmptyWorld(activeProcess_)) return {};  // Generate*
+
+    if (!world_ || world_->isEmpty())
+        return "load or generate a point cloud first.";
+
+    const int activeId = pActiveSceneId_ ? *pActiveSceneId_ : -1;
+    if (!world_->findById(activeId))
+        return "select a target scene (Scenes page, or the selector in the "
+               "status area above).";
+
+    if (processNeedsReferenceScene(activeProcess_) &&
+        world_->getScenes().size() < 2)
+        return "this needs a second scene as the registration reference "
+               "(load or generate one more).";
+
+    return {};
 }
 
 } // namespace VPC

@@ -55,11 +55,23 @@ void SceneListPanel::onImGui() {
     ImGui::EndChild();
 
     if (removeId >= 0) {
-        if (*pId_ == removeId) *pId_ = -1;
+        const bool removedActive = (*pId_ == removeId);
         world_->removeScene(removeId);
+
+        // Settle the active-scene id BEFORE notifying so the renderer and any
+        // process panel never observe (or push) the deleted id. When the
+        // active scene is the one removed, fall back to the first remaining
+        // scene, or -1 if none are left.
+        if (removedActive) {
+            *pId_ = world_->getScenes().empty()
+                        ? -1
+                        : world_->getScenes().front()->getId();
+        }
+
         if (onWorldChanged_) onWorldChanged_();
-        if (*pId_ < 0 && !world_->getScenes().empty())
-            *pId_ = world_->getScenes().front()->getId();
+        // Signal the active-scene change too (normal-line / active-scene state),
+        // not just the world rebuild.
+        if (removedActive && onSceneSelectionChanged_) onSceneSelectionChanged_();
     }
 }
 

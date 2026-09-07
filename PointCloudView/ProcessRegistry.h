@@ -71,6 +71,14 @@ struct ProcessMenuItem {
 // Display name of a process (matches IProcessView::getName()).
 const char* processName(ProcessId id);
 
+// True for the Generate* processes: they synthesize a new scene and so are
+// usable even with an empty World.
+bool processWorksOnEmptyWorld(ProcessId id);
+
+// True for the registration processes: they need a second scene to act as the
+// alignment reference, picked from a combo inside the panel.
+bool processNeedsReferenceScene(ProcessId id);
+
 const char* categoryLabel(ProcessCategory category);
 
 // Menu items filed under a category, in menu order.

@@ -5,6 +5,7 @@
 
 #include "../PointCloud/GSPointCloud.h"
 
+#include <cfloat>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -159,7 +160,8 @@ bool PointCloudApp::savePointCloudToFile(const std::string& path,
 }
 
 bool PointCloudApp::loadScenario(const std::string& jsonPath) {
-    // Scenario runs must not read or write the interactive Control layout.
+    // Scenario runs must not read or write any interactive layout state.
+    setCaptureMode(true);
     disableInteractiveLayoutPersistence();
     return runner_.load(jsonPath);
 }
@@ -221,6 +223,26 @@ void PointCloudApp::onCleanup() {
     ::VKG::VkAppBase::onCleanup();
 }
 
+void PointCloudApp::onImGuiReady() {
+    if (captureMode_) {
+        // No imgui.ini read/write: the captured frame must not depend on a
+        // stray file from a previous interactive session.
+        ImGui::GetIO().IniFilename = nullptr;
+        controlHost_.setFixedLayout(true);
+        disableInteractiveLayoutPersistence();
+    }
+
+    if (startupProcess_ >= 0 && startupProcess_ < kProcessCount) {
+        processPanel_.setProcess(static_cast<ProcessId>(startupProcess_));
+        controlHost_.setPage(ControlPage::Processing);
+        controlHost_.setVisible(true);
+    }
+    if (startupPage_ >= 0 && startupPage_ < static_cast<int>(kControlPageCount)) {
+        controlHost_.setPage(static_cast<ControlPage>(startupPage_));
+        controlHost_.setVisible(true);
+    }
+}
+
 void PointCloudApp::onImGui() {
     drawMenuBar();
     ::VKG::VkAppBase::onImGui();
@@ -257,24 +279,50 @@ void PointCloudApp::drawMenuBar() {
     ImGui::EndMainMenuBar();
 }
 
+void PointCloudApp::selectScene(int id) {
+    renderer_.setActiveSceneId(id);
+    renderer_.notifySceneSelectionChanged();
+}
+
 void PointCloudApp::drawStatusArea() {
     const int activeId = renderer_.getActiveSceneId();
     auto* scene = world_.findById(activeId);
 
-    size_t totalPoints = 0;
-    for (const auto& s : world_.getScenes()) totalPoints += s->getSize();
+    size_t totalPoints = 0, visiblePoints = 0;
+    for (const auto& s : world_.getScenes()) {
+        totalPoints += s->getSize();
+        if (s->isVisible()) visiblePoints += s->getSize();
+    }
 
     const char* mode =
         (renderer_.getRenderMode() == PointCloudRenderer::RenderMode::GaussianSplatting)
             ? "Gaussian Splatting" : "Point";
 
-    if (scene) {
-        ImGui::TextWrapped("Scene: %s  (id %d, %zu pts)",
-                           scene->getName().c_str(), activeId, scene->getSize());
-    } else {
-        ImGui::TextDisabled("Scene: (none selected)");
+    // Target scene = what every process page acts on. Selectable from here so
+    // you never have to leave the current page to switch it. This is distinct
+    // from per-scene draw visibility (the Scenes page checkboxes).
+    const std::string preview = scene ? scene->getName() : "(none selected)";
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##targetScene", preview.c_str())) {
+        for (const auto& s : world_.getScenes()) {
+            const int id = s->getId();
+            const std::string label = s->getName() + " (id " +
+                std::to_string(id) + ", " + std::to_string(s->getSize()) + " pts" +
+                (s->isVisible() ? ")" : ", hidden)");
+            if (ImGui::Selectable(label.c_str(), id == activeId))
+                selectScene(id);
+        }
+        ImGui::EndCombo();
     }
-    ImGui::Text("%zu scene(s), %zu pts total", world_.getScenes().size(), totalPoints);
+    ImGui::SameLine();
+    ImGui::TextDisabled("target");
+
+    if (scene && !scene->isVisible())
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f),
+                           "Target scene is hidden (toggle it on the Scenes page).");
+
+    ImGui::Text("%zu scene(s)  |  %zu pts total, %zu visible",
+                world_.getScenes().size(), totalPoints, visiblePoints);
     ImGui::Text("Draw: %s  (%u pts shown)", mode, renderer_.getPointCount());
 
     if (!importExportPanel_.lastStatus().empty())

@@ -86,8 +86,9 @@ void ControlPanelHost::onImGui()
         return;
     }
 
-    ImGui::SetNextWindowPos(ImVec2(10.f, 35.f), ImGuiCond_Once);
-    ImGui::SetNextWindowSize(ImVec2(430.f, 620.f), ImGuiCond_Once);
+    const ImGuiCond cond = fixedLayout_ ? ImGuiCond_Always : ImGuiCond_Once;
+    ImGui::SetNextWindowPos(ImVec2(10.f, 35.f), cond);
+    ImGui::SetNextWindowSize(ImVec2(430.f, 620.f), cond);
     if (!ImGui::Begin("Control", &visible_)) {
         ImGui::End();
         saveLayoutIfChanged();

@@ -7,6 +7,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <string>
 
 namespace VPC {
 
@@ -32,6 +33,9 @@ public:
 
 private:
     IProcessView* viewFor(ProcessId id);
+
+    // Non-empty = the active process cannot run yet; the string says why.
+    std::string blockReason() const;
 
     World*     world_          = nullptr;
     const int* pActiveSceneId_ = nullptr;
