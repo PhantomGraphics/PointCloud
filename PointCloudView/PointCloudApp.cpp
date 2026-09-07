@@ -53,7 +53,8 @@ PointCloudApp::PointCloudApp(int width, int height, const std::string& title)
     processPanel_.init(
         &world_,
         renderer_.getActiveSceneIdPtr(),
-        [this]() { syncRenderer(); });
+        [this]() { syncRenderer(); },
+        [this](int id) { selectScene(id); });
 
     importExportPanel_.init(
         &renderer_,
@@ -63,8 +64,9 @@ PointCloudApp::PointCloudApp(int width, int height, const std::string& title)
     menu_.init(&controlHost_, &processPanel_);
 
     dispatcher_.setWorld(&world_);
+    dispatcher_.setActiveSceneIdRef(renderer_.getActiveSceneIdPtr());
     dispatcher_.setOnWorldChanged([this](int id) {
-        renderer_.setActiveSceneId(id);
+        renderer_.setActiveSceneId(id);  // re-flag dirty; id already == shared value
         syncRenderer();
     });
     scenarioBrowser_.setHost(this);

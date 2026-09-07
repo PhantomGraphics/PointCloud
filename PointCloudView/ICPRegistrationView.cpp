@@ -9,9 +9,9 @@
 namespace VPC {
 
 void ICPRegistrationView::onImGui(World& world, int activeSceneId,
-                                   const std::function<void()>& onRebuild)
+                                   const std::function<void(int)>& onResult)
 {
-    runButton_.setFunction([&world, activeSceneId, &onRebuild, this]() {
+    runButton_.setFunction([&world, activeSceneId, &onResult, this]() {
         hasResult_ = false;
         succeeded_ = false;
 
@@ -45,7 +45,7 @@ void ICPRegistrationView::onImGui(World& world, int activeSceneId,
                          glm::vec3(0.3f, 1.0f, 0.5f));
         }
         source->setVisible(false);
-        onRebuild();
+        onResult(-1);
 
         hasResult_  = true;
         succeeded_  = true;

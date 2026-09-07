@@ -8,9 +8,9 @@
 namespace VPC {
 
 void MLSSurfaceView::onImGui(World& world, int activeSceneId,
-                              const std::function<void()>& onRebuild)
+                              const std::function<void(int)>& onResult)
 {
-    smoothButton_.setFunction([&world, activeSceneId, &onRebuild, this]() {
+    smoothButton_.setFunction([&world, activeSceneId, &onResult, this]() {
         auto* scene = world.findById(activeSceneId);
         if (scene == nullptr) { status_ = "Scene not found"; return; }
 
@@ -23,11 +23,11 @@ void MLSSurfaceView::onImGui(World& world, int activeSceneId,
         for (const auto& p : smoothed) result->add(p, glm::vec3(0.5f, 0.85f, 0.9f));
 
         scene->setVisible(false);
-        onRebuild();
+        onResult(-1);
         status_ = "Smoothed " + std::to_string(smoothed.size()) + " points";
     });
 
-    upsampleButton_.setFunction([&world, activeSceneId, &onRebuild, this]() {
+    upsampleButton_.setFunction([&world, activeSceneId, &onResult, this]() {
         auto* scene = world.findById(activeSceneId);
         if (scene == nullptr) { status_ = "Scene not found"; return; }
 
@@ -39,7 +39,7 @@ void MLSSurfaceView::onImGui(World& world, int activeSceneId,
         auto* result = world.addScene("MLSUpsampled");
         for (const auto& p : upsampled) result->add(p, glm::vec3(0.9f, 0.7f, 0.9f));
 
-        onRebuild();
+        onResult(-1);
         status_ = "Generated " + std::to_string(upsampled.size()) + " new points";
     });
 

@@ -6,9 +6,9 @@
 namespace VPC {
 
 void PoissonSurfaceView::onImGui(World& world, int activeSceneId,
-                                  const std::function<void()>& onRebuild)
+                                  const std::function<void(int)>& onResult)
 {
-    runButton_.setFunction([&world, activeSceneId, &onRebuild, this]() {
+    runButton_.setFunction([&world, activeSceneId, &onResult, this]() {
         vertexCount_   = 0;
         triangleCount_ = 0;
 
@@ -65,7 +65,7 @@ void PoissonSurfaceView::onImGui(World& world, int activeSceneId,
         vertexCount_   = static_cast<int>(result.vertices.size());
         triangleCount_ = static_cast<int>(result.faces.size());
         status_ = "Done";
-        onRebuild();
+        onResult(-1);
     });
 
     ImGui::SliderInt  ("Resolution",      &resolution_,     32,   256);

@@ -10,7 +10,7 @@ class PCCylinderView : public IProcessView {
 public:
     const char* getName() const override { return "Generate Cylinder"; }
     void onImGui(World& world, int activeSceneId,
-                 const std::function<void()>& onRebuild) override;
+                 const std::function<void(int)>& onResult) override;
 
 private:
     Phantom::UI::Vector3dView centerView_{ "Center" };

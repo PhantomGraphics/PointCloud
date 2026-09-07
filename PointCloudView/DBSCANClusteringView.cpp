@@ -36,9 +36,9 @@ glm::vec3 colorFromCluster(int id)
 } // namespace
 
 void DBSCANClusteringView::onImGui(World& world, int activeSceneId,
-                                    const std::function<void()>& onRebuild)
+                                    const std::function<void(int)>& onResult)
 {
-    runButton_.setFunction([&world, activeSceneId, &onRebuild, this]() {
+    runButton_.setFunction([&world, activeSceneId, &onResult, this]() {
         auto* scene = world.findById(activeSceneId);
         if (scene == nullptr || eps_ <= 0.0f || minPts_ <= 0) return;
 
@@ -62,7 +62,7 @@ void DBSCANClusteringView::onImGui(World& world, int activeSceneId,
         }
 
         scene->setVisible(false);
-        onRebuild();
+        onResult(-1);
     });
 
     ImGui::SliderFloat("Eps",     &eps_,    0.001f, 1.0f, "%.4f");

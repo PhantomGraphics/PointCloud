@@ -9,9 +9,9 @@
 namespace VPC {
 
 void CurvatureEstimatorView::onImGui(World& world, int activeSceneId,
-                                      const std::function<void()>& onRebuild)
+                                      const std::function<void(int)>& onResult)
 {
-    runButton_.setFunction([&world, activeSceneId, &onRebuild, this]() {
+    runButton_.setFunction([&world, activeSceneId, &onResult, this]() {
         auto* scene = world.findById(activeSceneId);
         if (scene == nullptr) return;
 
@@ -57,7 +57,7 @@ void CurvatureEstimatorView::onImGui(World& world, int activeSceneId,
         }
 
         scene->setVisible(false);
-        onRebuild();
+        onResult(-1);
     });
 
     ImGui::SliderFloat("Search Radius", &searchRadius_, 0.001f, 1.0f, "%.4f");

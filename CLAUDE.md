@@ -108,6 +108,11 @@ cmake --build --preset windows-debug
     `IProcessView` を遅延生成し `std::array` で保持（パラメーターがセッション中残る）。Reset で当該パネルのみ破棄。
     `blockReason()` が前提条件不足（点群未ロード／対象シーン未選択／Registration の参照シーン不足）を
     判定し、理由を出して当該パネルを `BeginDisabled()` する（Generate* は空 World でも常時可）。
+  - **GUI/シナリオ経路の共通化（Phase 4、進行中）**: 処理ロジックを `PointCloudOps.{h,cpp}`（`VPC::ops::`）へ
+    型付き関数として順次移し、`*View`（GUI）と `CommandDispatcher`（シナリオ）が同じ関数を呼ぶ。DownSample
+    が移行済み（`ops::downSample`）。`IProcessView::onImGui` の第3引数は `std::function<void(int)> onResult`
+    （新 active scene id、-1 = 維持）。`CommandDispatcher` は自前の `activeId_` を廃し
+    `renderer_.getActiveSceneIdPtr()` を `setActiveSceneIdRef()` で共有——GUI 選択とシナリオ対象が一致する。
   - `ImportExportPanel : IEmbeddedPanel` — Import/Export ページ。I/O は `PointCloudApp` コールバックへ委譲。
   - Scenes/Rendering/ScenarioBrowser ページは既存 `SceneListPanel::onImGui()` /
     `PointCloudRenderer::drawImGuiControls()` / `ScenarioBrowserPanel::drawEmbedded()` を

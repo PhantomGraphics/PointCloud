@@ -10,7 +10,7 @@ class GroundExtractorView : public IProcessView {
 public:
     const char* getName() const override { return "Ground Extractor"; }
     void onImGui(World& world, int activeSceneId,
-                 const std::function<void()>& onRebuild) override;
+                 const std::function<void(int)>& onResult) override;
 
 private:
     float cellSize_                  = 1.0f;

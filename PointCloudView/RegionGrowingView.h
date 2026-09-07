@@ -12,7 +12,7 @@ class RegionGrowingView : public IProcessView {
 public:
     const char* getName() const override { return "Region Growing (Normal/Curvature)"; }
     void onImGui(World& world, int activeSceneId,
-                 const std::function<void()>& onRebuild) override;
+                 const std::function<void(int)>& onResult) override;
 
 private:
     float curvatureRadius_       = 0.1f;

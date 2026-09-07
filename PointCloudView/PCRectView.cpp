@@ -7,9 +7,9 @@
 namespace VPC {
 
 void PCRectView::onImGui(World& world, int /*activeSceneId*/,
-                          const std::function<void()>& onRebuild)
+                          const std::function<void(int)>& onResult)
 {
-    generateButton_.setFunction([&world, &onRebuild, this]() {
+    generateButton_.setFunction([&world, &onResult, this]() {
         if (uCount_ <= 0 || vCount_ <= 0) return;
 
         const auto ov = originView_.getValue();
@@ -30,7 +30,7 @@ void PCRectView::onImGui(World& world, int /*activeSceneId*/,
             }
         }
 
-        onRebuild();
+        onResult(-1);
     });
 
     originView_.show();

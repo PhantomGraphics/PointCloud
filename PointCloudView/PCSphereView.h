@@ -10,7 +10,7 @@ class PCSphereView : public IProcessView {
 public:
     const char* getName() const override { return "Generate Sphere"; }
     void onImGui(World& world, int activeSceneId,
-                 const std::function<void()>& onRebuild) override;
+                 const std::function<void(int)>& onResult) override;
 
 private:
     Phantom::UI::Vector3dView centerView_{ "Center" };

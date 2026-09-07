@@ -19,8 +19,12 @@ namespace VPC {
 // from the active scene id.
 class ProcessPanel : public IEmbeddedPanel {
 public:
+    // onWorldChanged: rebuild the renderer after the World changed.
+    // onSelectScene:  make the given scene id the active/target scene (a run
+    //                 that produced a result scene reports it here, PLAN Phase 4).
     void init(World* world, const int* pActiveSceneId,
-              std::function<void()> onWorldChanged);
+              std::function<void()> onWorldChanged,
+              std::function<void(int)> onSelectScene);
 
     void setProcess(ProcessId id);
     ProcessId getProcess() const { return activeProcess_; }
@@ -39,7 +43,8 @@ private:
 
     World*     world_          = nullptr;
     const int* pActiveSceneId_ = nullptr;
-    std::function<void()> onWorldChanged_;
+    std::function<void()>    onWorldChanged_;
+    std::function<void(int)> onSelectScene_;
 
     ProcessId activeProcess_ = ProcessId::None;
     std::array<std::unique_ptr<IProcessView>, kProcessCount> views_{};

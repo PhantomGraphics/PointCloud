@@ -5,11 +5,13 @@
 namespace VPC {
 
 void ProcessPanel::init(World* world, const int* pActiveSceneId,
-                        std::function<void()> onWorldChanged)
+                        std::function<void()> onWorldChanged,
+                        std::function<void(int)> onSelectScene)
 {
     world_          = world;
     pActiveSceneId_ = pActiveSceneId;
     onWorldChanged_ = std::move(onWorldChanged);
+    onSelectScene_  = std::move(onSelectScene);
 }
 
 void ProcessPanel::setProcess(ProcessId id)
@@ -71,8 +73,10 @@ void ProcessPanel::drawContents()
 
     const bool blocked = !reason.empty();
     if (blocked) ImGui::BeginDisabled();
-    view->onImGui(*world_, *pActiveSceneId_,
-                  [this]() { if (onWorldChanged_) onWorldChanged_(); });
+    view->onImGui(*world_, *pActiveSceneId_, [this](int newActiveId) {
+        if (newActiveId >= 0 && onSelectScene_) onSelectScene_(newActiveId);
+        if (onWorldChanged_) onWorldChanged_();
+    });
     if (blocked) ImGui::EndDisabled();
 }
 

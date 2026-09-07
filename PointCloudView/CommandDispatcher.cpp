@@ -3,6 +3,7 @@
 #include "World.h"
 #include "PointCloudfScene.h"
 #include "PointCloudFileLoader.h"
+#include "PointCloudOps.h"
 
 #include "DownSampler.h"
 #include "NormalEstimator.h"
@@ -136,8 +137,8 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
     if (name == "Clear") {
         world_->clear();
-        activeId_ = -1;
-        if (onWorldChanged_) onWorldChanged_(activeId_);
+        activeId() = -1;
+        if (onWorldChanged_) onWorldChanged_(activeId());
         return "OK";
     }
 
@@ -151,19 +152,19 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "GetScenePointCount") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         return "Count:" + std::to_string(scene->getSize());
     }
 
     if (name == "GetSceneHasNormals") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         return scene->hasNormals() ? "Yes" : "No";
     }
 
     if (name == "GetSceneNormalCount") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         return "Count:" + std::to_string(scene->getNormals().size());
     }
@@ -177,8 +178,8 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         int id = toInt(arg, -1);
         auto* scene = world_->findById(id);
         if (!scene) return "Error:scene not found";
-        activeId_ = id;
-        if (onWorldChanged_) onWorldChanged_(activeId_);
+        activeId() = id;
+        if (onWorldChanged_) onWorldChanged_(activeId());
         return "OK";
     }
 
@@ -205,9 +206,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
             result->add(pos, glm::vec3(0.6f, 0.8f, 1.0f));
         }
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "GenerateCylinder") {
@@ -226,9 +227,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
             result->add(pos, glm::vec3(0.8f, 0.6f, 1.0f));
         }
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "GenerateRect") {
@@ -247,9 +248,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
             }
         }
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "GenerateCone") {
@@ -272,9 +273,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
             result->add(pos, glm::vec3(1.0f, 0.8f, 0.5f));
         }
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "GenerateGroundScene") {
@@ -308,13 +309,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
             result->add(glm::vec3(x, y, z), glm::vec3(0.9f, 0.5f, 0.3f));
         }
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "DuplicateSceneTransformed") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 4) return "Error:DuplicateSceneTransformed expects tx,ty,tz,rotDegY";
@@ -332,9 +333,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
             result->add(rot * p + translation, glm::vec3(0.9f, 0.9f, 0.3f));
         }
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     // --- File I/O ---
@@ -351,38 +352,29 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         for (size_t i = 0; i < data.size(); ++i)
             scene->add(data.positions[i], data.colors[i]);
 
-        activeId_ = scene->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = scene->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     // --- Processing (operate on active scene) ---
 
     if (name == "DownSample") {
-        auto* scene = world_->findById(activeId_);
-        if (!scene) return "Error:no active scene";
-        const float cellSize = toFloat(arg, 0.05f);
-        if (cellSize <= 0.f) return "Error:invalid cell size";
+        // Shared with DownSamplerView (GUI) so both paths match exactly
+        // (PLAN Phase 4). The old inline error strings are preserved by
+        // prefixing "Error:" to the outcome message.
+        VPC::ops::DownSampleParams p;
+        p.cellSize = toFloat(arg, 0.05f);
+        const auto outcome = VPC::ops::downSample(*world_, activeId(), p);
+        if (!outcome.ok) return "Error:" + outcome.message;
 
-        Phantom::PC::DownSampler downSampler;
-        for (const auto& p : scene->getPositions()) downSampler.add(p);
-        downSampler.execute(cellSize);
-        const auto sampled = downSampler.getDownSampled();
-        if (sampled.empty()) return "Error:downsample produced empty result";
-
-        const float ratio = static_cast<float>(sampled.size()) /
-                            static_cast<float>(scene->getPositions().size());
-        auto* result = world_->addScene("DownSampleResult");
-        for (const auto& p : sampled) result->add(p, glm::vec3(ratio, ratio, ratio));
-        scene->setVisible(false);
-
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = outcome.resultSceneId;
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "EstimateNormals") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const float radius = toFloat(arg, 0.1f);
         if (radius <= 0.f) return "Error:invalid radius";
@@ -404,13 +396,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         result->setNormals(normals);
         scene->setVisible(false);
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "FilterDensity") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const float radius = toFloat(arg, 0.1f);
         if (radius <= 0.f) return "Error:invalid radius";
@@ -427,13 +419,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         }
         scene->setVisible(false);
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "FilterCurvature") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:FilterCurvature expects radius,threshold";
@@ -460,13 +452,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         }
         scene->setVisible(false);
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "RansacPlane") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const float threshold = toFloat(arg, 0.05f);
 
@@ -489,13 +481,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
             if (!isInlier[i]) outliers->add(positions[i], glm::vec3(0.8f, 0.2f, 0.2f));
         scene->setVisible(false);
 
-        activeId_ = inliers->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = inliers->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "RansacCylinder") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const float threshold = toFloat(arg, 0.05f);
 
@@ -518,13 +510,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
             if (!isInlier[i]) outliers->add(positions[i], glm::vec3(0.8f, 0.2f, 0.2f));
         scene->setVisible(false);
 
-        activeId_ = inliers->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = inliers->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ClusterDbscan") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:ClusterDbscan expects eps,minPts";
@@ -547,13 +539,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         for (const auto& p : positions) result->add(p, glm::vec3(0.6f, 0.8f, 1.0f));
         scene->setVisible(false);
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ClusterRegionGrowing") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const float radius = toFloat(arg, 0.03f);
         if (radius <= 0.f) return "Error:invalid radius";
@@ -573,15 +565,15 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         for (const auto& p : positions) result->add(p, glm::vec3(0.8f, 0.7f, 1.0f));
         scene->setVisible(false);
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     // --- Phase B: normal orientation / principal curvature / FPFH / boundary ---
 
     if (name == "OrientNormals") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 4) return "Error:OrientNormals expects radius,vx,vy,vz";
@@ -605,13 +597,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         result->setNormals(normals);
         scene->setVisible(false);
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "EstimatePrincipalCurvature") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const float radius = toFloat(arg, 0.1f);
         if (radius <= 0.f) return "Error:invalid radius";
@@ -639,13 +631,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         lastMetrics_["meanK1"] = std::to_string(pc.empty() ? 0.0 : sumK1 / static_cast<double>(pc.size()));
         lastMetrics_["meanK2"] = std::to_string(pc.empty() ? 0.0 : sumK2 / static_cast<double>(pc.size()));
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "EstimateFPFH") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         if (!scene->hasNormals()) return "Error:scene has no normals";
         const int k = toInt(arg, 20);
@@ -686,13 +678,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
         lastMetrics_["fpfhDim"] = std::to_string(Phantom::PC::FPFHEstimator::HistogramSize);
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "DetectBoundary") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         if (!scene->hasNormals()) return "Error:scene has no normals";
         const auto parts = splitComma(arg);
@@ -724,15 +716,15 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
         lastMetrics_["boundaryCount"] = std::to_string(boundaryCount);
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     // --- Phase C: sphere/cone RANSAC, normal-based region growing, ground extraction ---
 
     if (name == "RansacSphere") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const float threshold = toFloat(arg, 0.02f);
 
@@ -757,13 +749,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
         lastMetrics_["sphereRadius"] = std::to_string(model.radius);
 
-        activeId_ = inliers->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = inliers->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "RansacCone") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const float threshold = toFloat(arg, 0.02f);
 
@@ -788,13 +780,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
         lastMetrics_["coneHalfAngleRad"] = std::to_string(model.halfAngleRad);
 
-        activeId_ = inliers->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = inliers->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "SegmentRegionGrowing") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         if (!scene->hasNormals()) return "Error:scene has no normals";
         const auto parts = splitComma(arg);
@@ -833,13 +825,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
         lastMetrics_["clusterCount"] = std::to_string(regionGrowing.getClusterCount());
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ExtractGround") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:ExtractGround expects cellSize,slope";
@@ -869,15 +861,15 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         lastMetrics_["groundRatio"] = std::to_string(
             groundFlags.empty() ? 0.0 : static_cast<double>(groundCount) / static_cast<double>(groundFlags.size()));
 
-        activeId_ = ground->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = ground->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     // --- Phase D: MLS surface smoothing/upsampling, 2D convex/concave hull ---
 
     if (name == "MLSSmooth") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const float radius = toFloat(arg, 0.1f);
         if (radius <= 0.f) return "Error:invalid radius";
@@ -892,13 +884,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         for (const auto& p : smoothed) result->add(p, glm::vec3(0.5f, 0.85f, 0.9f));
         scene->setVisible(false);
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "MLSUpsample") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 3) return "Error:MLSUpsample expects radius,upsampleRadius,stepSize";
@@ -916,13 +908,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         auto* result = world_->addScene("MLSUpsampled");
         for (const auto& p : upsampled) result->add(p, glm::vec3(0.9f, 0.7f, 0.9f));
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ConvexHull2D") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
 
         Phantom::PC::ConvexHull2D hull;
@@ -949,13 +941,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
         lastMetrics_["hullArea"] = std::to_string(hull.getArea());
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ConcaveHull2D") {
-        auto* scene = world_->findById(activeId_);
+        auto* scene = world_->findById(activeId());
         if (!scene) return "Error:no active scene";
         const auto parts = splitComma(arg);
         const size_t k    = parts.empty() ? 3 : static_cast<size_t>(std::max(3, toInt(parts[0], 3)));
@@ -985,15 +977,15 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
         lastMetrics_["hullArea"] = std::to_string(hull.getArea());
 
-        activeId_ = result->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = result->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     // --- Phase A: ICP / global (FPFH+RANSAC) registration ---
 
     if (name == "ICPAlign") {
-        auto* source = world_->findById(activeId_);
+        auto* source = world_->findById(activeId());
         if (!source) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:ICPAlign expects targetId,maxIterations";
@@ -1017,13 +1009,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         lastMetrics_["converged"]  = result.converged ? "Yes" : "No";
         lastMetrics_["scale"]      = std::to_string(result.scale);
 
-        activeId_ = aligned->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = aligned->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "ICPAlignPointToPlane") {
-        auto* source = world_->findById(activeId_);
+        auto* source = world_->findById(activeId());
         if (!source) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:ICPAlignPointToPlane expects targetId,maxIterations";
@@ -1048,13 +1040,13 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         lastMetrics_["iterations"] = std::to_string(result.iterations);
         lastMetrics_["converged"]  = result.converged ? "Yes" : "No";
 
-        activeId_ = aligned->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = aligned->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     if (name == "GlobalRegister") {
-        auto* source = world_->findById(activeId_);
+        auto* source = world_->findById(activeId());
         if (!source) return "Error:no active scene";
         const auto parts = splitComma(arg);
         if (parts.size() < 3) return "Error:GlobalRegister expects targetId,k,iterations";
@@ -1089,9 +1081,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         lastMetrics_["inlierCount"] = std::to_string(result.inlierCount);
         lastMetrics_["inlierRmse"]  = std::to_string(result.inlierRmse);
 
-        activeId_ = aligned->getId();
-        if (onWorldChanged_) onWorldChanged_(activeId_);
-        return "Id:" + std::to_string(activeId_);
+        activeId() = aligned->getId();
+        if (onWorldChanged_) onWorldChanged_(activeId());
+        return "Id:" + std::to_string(activeId());
     }
 
     return "Error:unknown command '" + cmd + "'";

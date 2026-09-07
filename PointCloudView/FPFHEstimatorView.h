@@ -13,7 +13,7 @@ class FPFHEstimatorView : public IProcessView {
 public:
     const char* getName() const override { return "FPFH Estimator"; }
     void onImGui(World& world, int activeSceneId,
-                 const std::function<void()>& onRebuild) override;
+                 const std::function<void(int)>& onResult) override;
 
 private:
     int kNeighbors_ = 20;

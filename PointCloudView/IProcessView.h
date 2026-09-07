@@ -18,9 +18,11 @@ public:
     /// @brief Render ImGui widgets and execute processing.
     /// @param world         Scene management object.
     /// @param activeSceneId Currently selected scene ID.
-    /// @param onRebuild     Callback to trigger GPU vertex buffer rebuild.
+    /// @param onResult      Call after a run completes: pass the new active scene
+    ///                      id, or -1 to leave the current selection unchanged.
+    ///                      Either way it triggers the GPU vertex-buffer rebuild.
     virtual void onImGui(World& world, int activeSceneId,
-                         const std::function<void()>& onRebuild) = 0;
+                         const std::function<void(int)>& onResult) = 0;
 };
 
 } // namespace VPC

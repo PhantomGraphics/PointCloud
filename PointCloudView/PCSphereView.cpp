@@ -9,9 +9,9 @@
 namespace VPC {
 
 void PCSphereView::onImGui(World& world, int /*activeSceneId*/,
-                            const std::function<void()>& onRebuild)
+                            const std::function<void(int)>& onResult)
 {
-    generateButton_.setFunction([&world, &onRebuild, this]() {
+    generateButton_.setFunction([&world, &onResult, this]() {
         if (radius_ <= 0.0f || count_ <= 0) return;
 
         std::mt19937 rng(std::random_device{}());
@@ -34,7 +34,7 @@ void PCSphereView::onImGui(World& world, int /*activeSceneId*/,
             result->add(pos, glm::vec3(0.6f, 0.8f, 1.0f));
         }
 
-        onRebuild();
+        onResult(-1);
     });
 
     centerView_.show();

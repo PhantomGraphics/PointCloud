@@ -9,7 +9,7 @@ class CurvatureBasedFilterView : public IProcessView {
 public:
     const char* getName() const override { return "Curvature Filter"; }
     void onImGui(World& world, int activeSceneId,
-                 const std::function<void()>& onRebuild) override;
+                 const std::function<void(int)>& onResult) override;
 
 private:
     float curvatureThreshold_ = 0.05f;

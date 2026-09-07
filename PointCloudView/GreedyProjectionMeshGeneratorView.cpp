@@ -6,9 +6,9 @@
 namespace VPC {
 
 void GreedyProjectionMeshGeneratorView::onImGui(World& world, int activeSceneId,
-                                                 const std::function<void()>& onRebuild)
+                                                 const std::function<void(int)>& onResult)
 {
-    runButton_.setFunction([&world, activeSceneId, &onRebuild, this]() {
+    runButton_.setFunction([&world, activeSceneId, &onResult, this]() {
         triangleCount_ = 0;
         auto* scene = world.findById(activeSceneId);
         if (scene == nullptr) { status_ = "Scene not found"; return; }
@@ -44,7 +44,7 @@ void GreedyProjectionMeshGeneratorView::onImGui(World& world, int activeSceneId,
 
         triangleCount_ = static_cast<int>(triangles.size());
         status_ = "Done";
-        onRebuild();
+        onResult(-1);
     });
 
     ImGui::Text("Points will be meshed using greedy projection.");

@@ -9,7 +9,7 @@ class GreedyProjectionMeshGeneratorView : public IProcessView {
 public:
     const char* getName() const override { return "Greedy Projection Mesh"; }
     void onImGui(World& world, int activeSceneId,
-                 const std::function<void()>& onRebuild) override;
+                 const std::function<void(int)>& onResult) override;
 
 private:
     Phantom::UI::Button runButton_{ "Generate Mesh" };
