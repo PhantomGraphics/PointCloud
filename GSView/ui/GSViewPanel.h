@@ -17,6 +17,7 @@ public:
 
 	void setSplatCount(size_t n) { splatCount_ = n; }
 	void setParticleCount(size_t n) { particleCount_ = n; }
+	void setParticleCapacity(size_t n) { particleCapacity_ = n; }
 	void setFPS(float fps) { fps_ = fps; }
 	void setCurrentMode(RenderMode mode) { currentMode_ = mode; }
 	void setDebugSplat(const DebugSplatInfo& d) { debugSplat_ = d; }
@@ -39,6 +40,7 @@ private:
 	float pbvrParticleSize_ = 4.0f;
 	size_t splatCount_ = 0;
 	size_t particleCount_ = 0;
+	size_t particleCapacity_ = 0;
 	float fps_ = 0.0f;
 
 	std::function<void(RenderMode)> onModeChanged_;

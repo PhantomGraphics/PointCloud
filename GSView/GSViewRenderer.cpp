@@ -149,6 +149,11 @@ uint32_t GSViewRenderer::getSplatCount() const
 	return gsCloud_ ? static_cast<uint32_t>(gsCloud_->points.size()) : 0u;
 }
 
+uint64_t GSViewRenderer::getDataGeneration() const
+{
+	return gsCloud_ ? gsCloud_->generation : 0u;
+}
+
 void GSViewRenderer::handleMouseButton(bool leftPressed)
 {
 	isDragging_ = leftPressed;
@@ -221,8 +226,8 @@ void GSViewRenderer::onRender(VkCommandBuffer cmd, uint32_t frameIndex)
 		return;
 	}
 
-	const uint32_t particleCount = computePBVR_.getTotalVertexCount();
-	if (particleCount == 0 || !computePBVR_.isValid()) return;
+	const uint32_t drawCount = computePBVR_.getDrawCount();
+	if (drawCount == 0 || !computePBVR_.isValid()) return;
 
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pbvrPipeline_.getPipeline());
 
@@ -234,7 +239,7 @@ void GSViewRenderer::onRender(VkCommandBuffer cmd, uint32_t frameIndex)
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
 		pbvrPipeline_.getLayout(), 0, 1, &set, 0, nullptr);
 
-	vkCmdDraw(cmd, particleCount, 1, 0, 0);
+	vkCmdDraw(cmd, drawCount, 1, 0, 0);
 }
 
 void GSViewRenderer::onCleanup(VkDevice device)

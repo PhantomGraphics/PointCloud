@@ -61,8 +61,9 @@ cmake --build --preset windows-debug
 .\PointCloud\GSView\run_gs_scenarios.ps1 -Configuration Debug
 ```
 
-シナリオ JSON は `PointCloud\GSView\scenarios\`（`default_state.json`・`load_ply.json`・`load_splat.json`・`load_error.json`・`large_file.json`・`params_sortbased.json`・`params_pbvr.json`・`render_mode.json` の 8 本）で、いずれも合成データのみで完結する
-（外部ダウンロード不要。`large_file.json` は合成生成の `gs_large_scene.ply` を使う）。
+シナリオ JSON は `PointCloud\GSView\scenarios\`（`default_state.json`・`load_ply.json`・`load_splat.json`・`load_error.json`・`large_file.json`・`params_sortbased.json`・`params_pbvr.json`・`render_mode.json`・`reload_same_count.json` の 9 本）で、いずれも合成データのみで完結する
+（外部ダウンロード不要。`large_file.json` は合成生成の `gs_large_scene.ply`、`reload_same_count.json` は `gs_sphere.ply`＋同数の `gs_sphere_b.ply` を使う）。
+`run_gs_scenarios.ps1` は実行前に `download_gs_samples.ps1`（不足ファイルのみ生成）を自動で呼ぶため、空の `samples/gs` からでも通る。
 
 ## Architecture
 
@@ -146,10 +147,12 @@ cmake --build --preset windows-debug
 
 ### GSView（`GSView/`）— Gaussian Splatting スタンドアロン ImGui + Vulkan アプリ
 
-`GSViewApp : VkAppBase` 直下。**`GSView` 名前空間**。ソートベース GS 描画と PBVR（Particle-Based Volume Rendering）風描画の 2 モードに対応。
+`GSViewApp : VkAppBase` 直下。**`GSView` 名前空間**。ソートベース GS 描画と `PBVR3DExperimental`（3D Gaussian → 世界空間パーティクル、旧称 "PBVR"）描画の 2 モードに対応。
+`docs/todo/PLAN_gsview_gaussian_point_pbvr.md` に沿って GPS 準拠経路・参照経路を今後追加予定。
 
-- `GSComputePBVR` — Vulkan Compute（`gs_pbvr_gen.comp`）による GPU 上での PBVR 用パーティクル生成。シングルパス + alpha=0 カリング方式（CPU 生成から移行済み）。
-- `GSParticleGenerator` — パーティクル生成の共通処理。
+- `RenderMode`（`GSViewRenderer.h`）— `SortBased` / `PBVR3DExperimental`。シナリオコマンド `SetRenderMode` は旧名 `PBVR` を後方互換エイリアスとして受け付ける（正準名は `PBVR3DExperimental`）。
+- `GSComputePBVR` — Vulkan Compute（`gs_pbvr_gen.comp`）による GPU 上での `PBVR3DExperimental` 用パーティクル生成。シングルパス + alpha=0 カリング方式。入力 SSBO キャッシュは `GSPointCloud::generation`（ロード毎に増える世代番号）で判定するので、同数の別 PLY を連続ロードしても更新される。`capacity`（バッファ容量）/ `generatedCount`（実生成数、全透明なら 0）/ `drawCount` を区別して公開。
+- `GSView/reference/GSParticleGenerator`（`GSView::reference`）— `PBVR3DExperimental` の CPU 参照実装。**描画経路では未使用**。`PointCloudTest`（`GSParticleGeneratorTest`）が粒子数式と決定性を固定する。Phase 1 の CPU oracle の土台。
 - `GSViewRenderer` — `PointRenderer` の `VkGSPointRenderer` を用いた GS スプラット描画。
 - `GSViewCommandDispatcher : IScenarioDispatcher` — シナリオ用コマンド文字列ディスパッチャ。
 

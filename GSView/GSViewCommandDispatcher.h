@@ -37,6 +37,8 @@ private:
     std::string cmdGetStatus();
     std::string cmdGetSplatCount();
     std::string cmdGetParticleCount();
+    std::string cmdGetParticleCapacity();
+    std::string cmdGetDataGeneration();
     std::string cmdGetRenderMode();
     std::string cmdGetSplatSizeScale();
     std::string cmdGetSortPointSize();

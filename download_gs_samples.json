@@ -7,6 +7,12 @@
       "params": { "n": 2000, "radius": 1.0 }
     },
     {
+      "file": "gs_sphere_b.ply",
+      "label": "sphere variant (2 000 splats, larger radius) -- same count, different content as gs_sphere",
+      "generator": "sphere",
+      "params": { "n": 2000, "radius": 2.0 }
+    },
+    {
       "file": "gs_cube.ply",
       "label": "cube    (3 000 splats)",
       "generator": "cube",

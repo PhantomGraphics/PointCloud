@@ -31,9 +31,21 @@ public:
                   const Phantom::VKG::VulkanCommandPool& pool,
                   const Phantom::PointCloud::GSPointCloud& cloud);
 
-    VkBuffer getVertexBuffer()     const { return outputBuf_.getBuffer(); }
-    uint32_t getTotalVertexCount() const { return totalCount_; }
-    bool     isValid()             const { return pipeline_.isValid(); }
+    VkBuffer getVertexBuffer() const { return outputBuf_.getBuffer(); }
+
+    // --- Three distinct counts (Phase 0, step 2) --------------------------------
+    // capacity      : vertices the output buffer can hold  = numSplats * maxParticlesPerSplat.
+    // generatedCount: sum of the per-splat particle counts actually produced this dispatch
+    //                 (can be 0 when every splat is fully transparent).
+    // drawCount     : vertices handed to vkCmdDraw. The current single-pass shader writes one
+    //                 slot per capacity entry (padding slots get alpha=0 and are culled in the
+    //                 vertex shader), so this equals capacity while any particle exists, else 0.
+    //                 Compaction to exactly generatedCount is Phase 2 work.
+    uint32_t getCapacity()       const { return capacity_; }
+    uint32_t getGeneratedCount() const { return generatedCount_; }
+    uint32_t getDrawCount()      const { return drawCount_; }
+
+    bool     isValid()           const { return pipeline_.isValid(); }
 
 private:
     struct PushConstants {
@@ -50,10 +62,13 @@ private:
     VkDescriptorSet                descSet_  = VK_NULL_HANDLE;
     Phantom::VKG::VulkanComputePipeline     pipeline_;
 
-    uint32_t totalCount_      = 0;
-    uint32_t cachedNumSplats_ = 0;
-    uint32_t maxPPS_          = 8;
-    float    densityScale_    = 1.0f;
+    uint32_t capacity_         = 0;
+    uint32_t generatedCount_   = 0;
+    uint32_t drawCount_        = 0;
+    uint32_t cachedNumSplats_  = 0;
+    uint64_t cachedGeneration_ = 0;
+    uint32_t maxPPS_           = 8;
+    float    densityScale_     = 1.0f;
 
     void rebuildInputBuf(const Phantom::VKG::VulkanContext& ctx,
                          const Phantom::VKG::VulkanCommandPool& pool,

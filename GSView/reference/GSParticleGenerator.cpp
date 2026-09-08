@@ -1,4 +1,4 @@
-﻿#include "GSParticleGenerator.h"
+#include "GSParticleGenerator.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -18,36 +18,44 @@ float sigmoid(float x)
 
 } // namespace
 
-namespace GSView {
+namespace GSView::reference {
 
-Phantom::Volume::ParticleSet GSParticleGenerator::generate(const Phantom::PointCloud::GSPointCloud& gs) const
+int GSParticleGenerator::particleCountForSplat(const Phantom::PointCloud::GSPoint& p) const
 {
-	Phantom::Volume::ParticleSet set;
+	const int maxPPS = std::max(0, maxParticlesPerSplat_);
+	const float scaled = densityScale_ * sigmoid(p.opacity) * static_cast<float>(maxPPS);
+	const long ni = std::lround(scaled);
+	if (ni <= 0) return 0;
+	return std::min(static_cast<int>(ni), maxPPS);
+}
+
+CpuParticleSet GSParticleGenerator::generate(const Phantom::PointCloud::GSPointCloud& gs) const
+{
+	rng_.seed(seed_);
+
+	CpuParticleSet set;
 	if (gs.points.empty()) {
 		return set;
 	}
 
-	size_t totalEstimate = 0;
-	for (const auto& p : gs.points) {
-		const float opacity = sigmoid(p.opacity);
-		const float scaledCount = densityScale_ * opacity * static_cast<float>(std::max(1, maxParticlesPerSplat_));
-		totalEstimate += static_cast<size_t>(std::max(1, static_cast<int>(std::lround(scaledCount))));
-	}
+	std::size_t totalEstimate = 0;
+	for (const auto& p : gs.points)
+		totalEstimate += static_cast<std::size_t>(particleCountForSplat(p));
 	set.particles.reserve(totalEstimate);
 
 	std::normal_distribution<float> normal(0.0f, 1.0f);
 
 	for (const auto& p : gs.points) {
+		const int particleCount = particleCountForSplat(p);
+		if (particleCount == 0) continue;
+
 		const float opacity = sigmoid(p.opacity);
-		const float scaledCount = densityScale_ * opacity * static_cast<float>(std::max(1, maxParticlesPerSplat_));
-		const int particleCount = std::max(1, static_cast<int>(std::lround(scaledCount)));
+		const glm::mat3 L = cholesky(computeCovariance(p));
 
-		glm::mat3 L = cholesky(computeCovariance(p));
-
-		glm::vec3 baseColor(
-			glm::clamp(0.5f + 0.28209f * p.f_dc[0], 0.0f, 1.0f),
-			glm::clamp(0.5f + 0.28209f * p.f_dc[1], 0.0f, 1.0f),
-			glm::clamp(0.5f + 0.28209f * p.f_dc[2], 0.0f, 1.0f));
+		const glm::vec3 baseColor(
+			glm::clamp(0.5f + 0.28209479177387814f * p.f_dc[0], 0.0f, 1.0f),
+			glm::clamp(0.5f + 0.28209479177387814f * p.f_dc[1], 0.0f, 1.0f),
+			glm::clamp(0.5f + 0.28209479177387814f * p.f_dc[2], 0.0f, 1.0f));
 
 		const float alphaPerParticle = opacity / static_cast<float>(particleCount);
 		const glm::vec3 weightedColor = baseColor * alphaPerParticle;
@@ -55,7 +63,7 @@ Phantom::Volume::ParticleSet GSParticleGenerator::generate(const Phantom::PointC
 		const glm::vec3 center(p.x, p.y, p.z);
 		for (int i = 0; i < particleCount; ++i) {
 			const glm::vec3 n(normal(rng_), normal(rng_), normal(rng_));
-			Phantom::Volume::Particle particle;
+			CpuParticle particle;
 			particle.pos = center + L * n;
 			particle.color = weightedColor;
 			set.particles.push_back(particle);
@@ -116,4 +124,4 @@ glm::mat3 GSParticleGenerator::cholesky(const glm::mat3& A) const
 	return L;
 }
 
-} // namespace GSView
+} // namespace GSView::reference

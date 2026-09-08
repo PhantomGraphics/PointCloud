@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -13,6 +14,15 @@
 using namespace Phantom::PointCloud;
 
 namespace {
+
+// Process-global data-generation counter. Every successful GSPointCloud load gets
+// a fresh value so downstream GPU caches can detect a content change even when the
+// splat count is unchanged.
+static std::uint64_t nextGeneration()
+{
+    static std::atomic<std::uint64_t> counter{0};
+    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
 
 struct PropertyDef {
     std::string type;
@@ -320,5 +330,6 @@ bool GSPointCloud::readFromFile(const std::string& filename)
     }
 
     this->points = std::move(result);
+    this->generation = nextGeneration();
     return true;
 }

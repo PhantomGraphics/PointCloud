@@ -120,13 +120,16 @@ void main() {
     // Sigmoid-activated opacity
     float op = 1.0 / (1.0 + exp(-sp.opacity));
 
-    // Particle count for this splat
-    int Ni = max(1, int(round(pc.densityScale * op * float(pc.maxParticlesPerSplat))));
+    // Particle count for this splat. Lower bound is 0 (Phase 0): a fully transparent
+    // splat emits nothing instead of being forced to one point. Upper bound is the
+    // per-splat capacity. Must match GSComputePBVR::particleCountForSplat() on the CPU.
+    int Ni = clamp(int(round(pc.densityScale * op * float(pc.maxParticlesPerSplat))),
+                   0, int(pc.maxParticlesPerSplat));
 
     // Color from DC spherical harmonics term
     vec3 col = clamp(vec3(sp.f_dc0, sp.f_dc1, sp.f_dc2) * 0.28209479177 + 0.5,
                      0.0, 1.0);
-    float apc = op / float(Ni);  // per-particle alpha
+    float apc = (Ni > 0) ? op / float(Ni) : 0.0;  // per-particle alpha
 
     // Covariance = R * S^2 * R^T
     vec3 sc  = vec3(exp(sp.s0), exp(sp.s1), exp(sp.s2));

@@ -35,9 +35,9 @@ void GSViewPanel::onImGui()
 		}
 	}
 	ImGui::SameLine();
-	if (ImGui::RadioButton("PBVR", modeIdx == 1)) {
-		if (currentMode_ != RenderMode::PBVR) {
-			currentMode_ = RenderMode::PBVR;
+	if (ImGui::RadioButton("PBVR 3D (exp.)", modeIdx == 1)) {
+		if (currentMode_ != RenderMode::PBVR3DExperimental) {
+			currentMode_ = RenderMode::PBVR3DExperimental;
 			changed = true;
 		}
 	}
@@ -63,7 +63,7 @@ void GSViewPanel::onImGui()
 
 	ImGui::Separator();
 	ImGui::Text("Loaded splats:    %zu", splatCount_);
-	ImGui::Text("Particles (PBVR): %zu", particleCount_);
+	ImGui::Text("Particles (PBVR): %zu / %zu cap", particleCount_, particleCapacity_);
 	ImGui::Text("FPS: %.1f", fps_);
 
 	ImGui::End();

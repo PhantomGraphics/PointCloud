@@ -97,6 +97,7 @@ void GSViewApp::onUpdate(uint32_t frameIndex)
 	::VKG::VkAppBase::onUpdate(frameIndex);
 	panel_.setSplatCount(renderer_.getSplatCount());
 	panel_.setParticleCount(renderer_.getParticleCount());
+	panel_.setParticleCapacity(renderer_.getParticleCapacity());
 	panel_.setFPS(ImGui::GetIO().Framerate);
 	panel_.setCurrentMode(renderer_.getRenderMode());
 	panel_.setDebugSplat(renderer_.getDebugSplat());

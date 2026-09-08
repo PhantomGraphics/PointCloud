@@ -6,7 +6,8 @@
 #include "../PointCloud/GSPointCloud.h"
 #include "../../CGLib/Volume/VolumeRenderer/PBVRPipeline.h"
 
-#include <stdexcept>
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 
 // Layout must match the GLSL shader structs exactly.
@@ -18,6 +19,23 @@ static_assert(offsetof(Phantom::Volume::PBVRVertex, color) == 12,
     "PBVRVertex color offset changed — update gs_pbvr_gen.comp accordingly");
 
 namespace GSView {
+
+namespace {
+
+// Per-splat particle count. Must stay in lock-step with gs_pbvr_gen.comp:
+//   Ni = clamp(round(densityScale * sigmoid(opacity) * maxPPS), 0, maxPPS)
+// Note the lower bound is 0 (Phase 0): a fully transparent splat produces no
+// particles instead of being forced to emit one.
+static uint32_t particleCountForSplat(const Phantom::PointCloud::GSPoint& p,
+                                      float densityScale, uint32_t maxPPS)
+{
+    const float op = 1.0f / (1.0f + std::exp(-p.opacity));
+    const long  ni = std::lround(densityScale * op * static_cast<float>(maxPPS));
+    if (ni <= 0) return 0u;
+    return std::min<uint32_t>(static_cast<uint32_t>(ni), maxPPS);
+}
+
+} // namespace
 
 void GSComputePBVR::create(const Phantom::VKG::VulkanContext& ctx)
 {
@@ -55,8 +73,11 @@ void GSComputePBVR::destroy(VkDevice device)
     descSet_ = VK_NULL_HANDLE;
     outputBuf_.destroy(device);
     inputBuf_.destroy(device);
-    totalCount_      = 0;
-    cachedNumSplats_ = 0;
+    capacity_         = 0;
+    generatedCount_   = 0;
+    drawCount_        = 0;
+    cachedNumSplats_  = 0;
+    cachedGeneration_ = 0;
 }
 
 void GSComputePBVR::setParams(float densityScale, int maxParticlesPerSplat)
@@ -70,16 +91,19 @@ void GSComputePBVR::dispatch(const Phantom::VKG::VulkanContext& ctx,
                               const Phantom::PointCloud::GSPointCloud& cloud)
 {
     if (cloud.points.empty()) {
-        totalCount_ = 0;
+        capacity_ = generatedCount_ = drawCount_ = 0;
         return;
     }
 
     const uint32_t numSplats = static_cast<uint32_t>(cloud.points.size());
 
-    // Rebuild input SSBO when cloud size changes
-    if (numSplats != cachedNumSplats_) {
+    // Rebuild the input SSBO whenever the splat count OR the data generation changes.
+    // Keying on generation alone would suffice, but the count guard keeps the first
+    // dispatch after create() working for callers that reuse a cloud with generation 0.
+    if (numSplats != cachedNumSplats_ || cloud.generation != cachedGeneration_) {
         rebuildInputBuf(ctx, pool, cloud);
-        cachedNumSplats_ = numSplats;
+        cachedNumSplats_  = numSplats;
+        cachedGeneration_ = cloud.generation;
     }
 
     // Rebuild output buffer when capacity is insufficient
@@ -90,7 +114,18 @@ void GSComputePBVR::dispatch(const Phantom::VKG::VulkanContext& ctx,
         rebuildOutputBuf(ctx, pool, numSplats);
     }
 
-    totalCount_ = neededVerts;
+    capacity_ = neededVerts;
+
+    // Mirror the shader's per-splat particle-count formula on the CPU so the UI and
+    // scenario commands can report the real generated count (0 when all transparent).
+    uint64_t generated = 0;
+    for (const auto& p : cloud.points)
+        generated += particleCountForSplat(p, densityScale_, maxPPS_);
+    generatedCount_ = static_cast<uint32_t>(std::min<uint64_t>(generated, capacity_));
+
+    // Padding slots are culled in the vertex shader, so we still submit the whole
+    // capacity — but skip the draw entirely when nothing was generated.
+    drawCount_ = (generatedCount_ > 0) ? capacity_ : 0;
 
     PushConstants pc{numSplats, maxPPS_, densityScale_, 0u};
 

@@ -88,11 +88,18 @@ if(PHANTOM_GTEST_FOUND)
     file(GLOB POINTCLOUDTEST_SOURCES ${POINTCLOUD_ROOT}/PointCloudTest/*.cpp)
     list(FILTER POINTCLOUDTEST_SOURCES EXCLUDE REGEX "pch\\.cpp$")
 
-    add_executable(PointCloudTest ${POINTCLOUDTEST_SOURCES})
+    add_executable(PointCloudTest
+        ${POINTCLOUDTEST_SOURCES}
+        # CPU reference for the PBVR3DExperimental particle generation (not on any
+        # render path -- see the file header). Pinned by GSParticleGeneratorTest.cpp.
+        ${POINTCLOUD_ROOT}/GSView/reference/GSParticleGenerator.cpp
+    )
 
     target_include_directories(PointCloudTest PRIVATE
         ${REPO_ROOT}
         ${POINTCLOUD_ROOT}/PointCloudTest
+        ${POINTCLOUD_ROOT}/GSView/reference
+        ${CGLIB_ROOT}/ThirdParty/glm-0.9.9.8
     )
 
     target_link_libraries(PointCloudTest PRIVATE
@@ -202,7 +209,6 @@ add_executable(GSView
     ${POINTCLOUD_ROOT}/GSView/GSViewCommandDispatcher.cpp
     ${POINTCLOUD_ROOT}/GSView/GSViewRenderer.cpp
     ${POINTCLOUD_ROOT}/GSView/GSComputePBVR.cpp
-    ${POINTCLOUD_ROOT}/GSView/GSParticleGenerator.cpp
     ${POINTCLOUD_ROOT}/GSView/ui/GSViewPanel.cpp
     ${POINTCLOUD_ROOT}/GSView/ui/GSViewMenuBar.cpp
 )

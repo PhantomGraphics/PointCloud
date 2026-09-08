@@ -83,6 +83,8 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetStatus")              return cmdGetStatus();
     if (name == "GetSplatCount")          return cmdGetSplatCount();
     if (name == "GetParticleCount")       return cmdGetParticleCount();
+    if (name == "GetParticleCapacity")    return cmdGetParticleCapacity();
+    if (name == "GetDataGeneration")      return cmdGetDataGeneration();
     if (name == "GetRenderMode")          return cmdGetRenderMode();
     if (name == "GetSplatSizeScale")      return cmdGetSplatSizeScale();
     if (name == "GetSortPointSize")       return cmdGetSortPointSize();
@@ -125,10 +127,23 @@ std::string GSViewCommandDispatcher::cmdGetParticleCount()
     return "Count:" + std::to_string(renderer_->getParticleCount());
 }
 
+std::string GSViewCommandDispatcher::cmdGetParticleCapacity()
+{
+    if (!renderer_) return "Count:0";
+    return "Count:" + std::to_string(renderer_->getParticleCapacity());
+}
+
+std::string GSViewCommandDispatcher::cmdGetDataGeneration()
+{
+    if (!renderer_) return "Val:0";
+    return "Val:" + std::to_string(renderer_->getDataGeneration());
+}
+
 std::string GSViewCommandDispatcher::cmdGetRenderMode()
 {
     if (!renderer_) return "Val:SortBased";
-    return renderer_->getRenderMode() == RenderMode::PBVR ? "Val:PBVR" : "Val:SortBased";
+    return renderer_->getRenderMode() == RenderMode::PBVR3DExperimental
+               ? "Val:PBVR3DExperimental" : "Val:SortBased";
 }
 
 std::string GSViewCommandDispatcher::cmdGetSplatSizeScale()
@@ -172,8 +187,10 @@ std::string GSViewCommandDispatcher::cmdSetRenderMode(const std::string& mode)
         renderer_->setRenderMode(RenderMode::SortBased);
         return "OK";
     }
-    if (mode == "PBVR") {
-        renderer_->setRenderMode(RenderMode::PBVR);
+    // "PBVR" is a temporary backward-compat alias for the renamed experimental mode
+    // (Phase 0). Old scenario files keep working; new ones use the canonical name.
+    if (mode == "PBVR3DExperimental" || mode == "PBVR") {
+        renderer_->setRenderMode(RenderMode::PBVR3DExperimental);
         return "OK";
     }
     return "Error:unknown mode " + mode;

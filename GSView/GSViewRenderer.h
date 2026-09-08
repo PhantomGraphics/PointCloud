@@ -21,7 +21,11 @@ namespace Phantom::PointCloud { struct GSPointCloud; }
 
 namespace GSView {
 
-enum class RenderMode { SortBased, PBVR };
+// Render paths. PBVR3DExperimental is the object-space "3D Gaussian -> world-space
+// particles" prototype (renamed from the old "PBVR" mode in Phase 0 of
+// docs/todo/PLAN_gsview_gaussian_point_pbvr.md). Screen-space GPS / ReferenceSplat
+// modes are added in later phases.
+enum class RenderMode { SortBased, PBVR3DExperimental };
 
 struct DebugSplatInfo {
     float rawScale[3]  = {};
@@ -47,8 +51,10 @@ public:
 	void setDensityScale(float s);
 	void setMaxParticlesPerSplat(int n);
 	void setPbvrParticleSize(float s);
-	size_t getParticleCount() const { return computePBVR_.getTotalVertexCount(); }
+	size_t getParticleCount() const { return computePBVR_.getGeneratedCount(); }
+	size_t getParticleCapacity() const { return computePBVR_.getCapacity(); }
 	uint32_t getSplatCount() const;
+	uint64_t getDataGeneration() const;
 	const DebugSplatInfo& getDebugSplat() const { return debugSplat_; }
 	bool isGSAvailable() const { return sortRenderer_.isGaussianSplattingAvailable(); }
 

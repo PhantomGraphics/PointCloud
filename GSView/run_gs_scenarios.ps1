@@ -1,6 +1,11 @@
 # run_gs_scenarios.ps1 - Run all GSView scenario tests
 # Usage: .\PointCloud\GSView\run_gs_scenarios.ps1 [-Configuration Debug|Release]
-# Run from the repository root or the PointCloud\GSView directory.
+# Run from the Phantom root or the PointCloud\GSView directory.
+#
+# Locates the Phantom root by its build markers (CMakePresets.json +
+# cmake\PhantomVulkanApp.cmake), matching run_pc_scenarios.ps1 -- the older
+# "Phantom2026.sln" lookup pointed at the pre-submodule outer tree whose build
+# directory is now stale.
 
 param(
     [string]$Configuration = "Debug"
@@ -8,13 +13,15 @@ param(
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot  = $scriptDir
-while ($repoRoot -and -not (Test-Path (Join-Path $repoRoot "Phantom2026.sln"))) {
+while ($repoRoot -and -not (
+        (Test-Path (Join-Path $repoRoot "CMakePresets.json")) -and
+        (Test-Path (Join-Path $repoRoot "cmake\PhantomVulkanApp.cmake")))) {
     $parent = Split-Path -Parent $repoRoot
     if ($parent -eq $repoRoot) { $repoRoot = $null; break }
     $repoRoot = $parent
 }
 if (-not $repoRoot) {
-    Write-Host "ERROR: Could not locate repository root (Phantom2026.sln)"
+    Write-Host "ERROR: Could not locate the Phantom root (CMakePresets.json + cmake\PhantomVulkanApp.cmake)"
     exit 1
 }
 $preset    = "windows-$($Configuration.ToLower())"
@@ -24,6 +31,22 @@ $scenDir   = Join-Path $scriptDir "scenarios"
 if (-not (Test-Path $exe)) {
     Write-Host "ERROR: Executable not found: $exe"
     exit 1
+}
+
+# Prerequisite: make sure the synthetic GS sample data the scenarios load actually
+# exists. download_gs_samples.ps1 only generates missing files, so this is cheap on
+# repeat runs and removes the dependency on a pre-populated samples/gs directory.
+$genScript = Join-Path $scriptDir "..\download_gs_samples.ps1"
+if (Test-Path $genScript) {
+    Write-Host "Ensuring synthetic GS samples exist ..."
+    try {
+        & $genScript
+    } catch {
+        Write-Host "ERROR: sample generation failed: $_"
+        exit 1
+    }
+} else {
+    Write-Host "WARNING: $genScript not found; assuming samples/gs is already populated"
 }
 
 $scenarios = Get-ChildItem "$scenDir\*.json" | Sort-Object Name

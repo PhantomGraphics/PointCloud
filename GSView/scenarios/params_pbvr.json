@@ -4,8 +4,8 @@
     { "label": "Load sphere for PBVR params",
       "command": "LoadPLY:../samples/gs/gs_sphere.ply",
       "expect_prefix": "OK:" },
-    { "label": "Switch to PBVR",
-      "command": "SetRenderMode:PBVR",
+    { "label": "Switch to PBVR3DExperimental",
+      "command": "SetRenderMode:PBVR3DExperimental",
       "expect": "OK" },
     { "label": "Set density scale to 2",
       "command": "SetDensityScale:2",
@@ -27,6 +27,9 @@
       "expect": "Val:6" },
     { "label": "Particles exist after param change",
       "command": "GetParticleCount",
+      "expect_prefix": "Count:", "expect_not": "Count:0" },
+    { "label": "Capacity is reported and non-zero",
+      "command": "GetParticleCapacity",
       "expect_prefix": "Count:", "expect_not": "Count:0" }
   ]
 }
