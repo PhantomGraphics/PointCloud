@@ -118,6 +118,21 @@ void GSViewRenderer::setGSCloud(const Phantom::PointCloud::GSPointCloud* cloud)
 	gsCloud_ = cloud;
 	sceneDirty_ = true;
 	pbvrDirty_ = true;
+	gaussianPoint_.setGSCloud(cloud);
+}
+
+void GSViewRenderer::setGaussianPointParams(const GaussianPointRenderer::Params& p)
+{
+	const bool sppChanged = p.sppSide != gpParams_.sppSide;
+	gpParams_ = p;
+	gaussianPoint_.setParams(gpParams_);
+	if (sppChanged) gpExtentDirty_ = true;  // subpixel buffers are sized by spp
+}
+
+void GSViewRenderer::recordGaussianPointCompute(VkCommandBuffer cmd, uint32_t frameIndex)
+{
+	if (mode_ == RenderMode::GaussianPoint)
+		gaussianPoint_.recordCompute(cmd, frameIndex);
 }
 
 void GSViewRenderer::setSortPointSize(float s)
@@ -194,6 +209,11 @@ void GSViewRenderer::onInit(Phantom::VKG::VulkanContext& ctx, const Phantom::VKG
 	computePBVR_.create(ctx);
 	computePBVR_.setParams(densityScale_, maxParticlesPerSplat_);
 	pbvrDirty_ = true;
+
+	gaussianPoint_.onInit(ctx, pool, renderPass, framesInFlight);
+	gaussianPoint_.setParams(gpParams_);
+	gaussianPoint_.setGSCloud(gsCloud_);
+	gpExtentDirty_ = true;
 }
 
 void GSViewRenderer::onUpdate(uint32_t frameIndex)
@@ -217,12 +237,34 @@ void GSViewRenderer::onUpdate(uint32_t frameIndex)
 	ubo.mvp = mvp;
 	ubo.particleSize = pbvrParticleSize_;
 	pbvrPipeline_.updateUBO(frameIndex, ubo);
+
+	// GaussianPoint: (re)create extent-dependent buffers, then push camera + params.
+	if (gpExtentDirty_ && extent_.width > 0 && extent_.height > 0) {
+		gaussianPoint_.onResize(*ctx_, *pool_, extent_);
+		gpExtentDirty_ = false;
+	}
+	{
+		GaussianPointRenderer::Camera cam;
+		cam.view = glm::lookAt(eye, camTarget_, glm::vec3(0.f, 1.f, 0.f));
+		const float tanFovY = std::tan(glm::radians(45.f) * 0.5f);
+		cam.focalY = (static_cast<float>(extent_.height) * 0.5f) / tanFovY;
+		cam.focalX = cam.focalY;
+		cam.cx = static_cast<float>(extent_.width) * 0.5f;
+		cam.cy = static_cast<float>(extent_.height) * 0.5f;
+		gaussianPoint_.setCamera(cam);
+		gaussianPoint_.update(*ctx_, *pool_, frameIndex);
+	}
 }
 
 void GSViewRenderer::onRender(VkCommandBuffer cmd, uint32_t frameIndex)
 {
 	if (mode_ == RenderMode::SortBased) {
 		sortRenderer_.onRender(cmd, frameIndex);
+		return;
+	}
+
+	if (mode_ == RenderMode::GaussianPoint) {
+		gaussianPoint_.recordComposite(cmd, frameIndex);
 		return;
 	}
 
@@ -247,6 +289,7 @@ void GSViewRenderer::onCleanup(VkDevice device)
 	sortRenderer_.onCleanup(device);
 	computePBVR_.destroy(device);
 	pbvrPipeline_.destroy(device);
+	gaussianPoint_.onCleanup(device);
 	ctx_ = nullptr;
 	pool_ = nullptr;
 }

@@ -47,6 +47,17 @@ private:
     std::string cmdGetPbvrParticleSize();
     std::string cmdGetGSAvailable();
 
+    // GaussianPoint (Phase 2)
+    std::string cmdGetGaussianPointAvailable();
+    std::string cmdGetGpSpp();
+    std::string cmdGetGpSeedMode();
+    std::string cmdGetGpDensityScale();
+    std::string cmdGetGpGeneratedCount();
+    std::string cmdGetGpStats();
+    std::string cmdSetGpSpp(const std::string& arg);
+    std::string cmdSetGpSeedMode(const std::string& arg);
+    std::string cmdSetGpDensityScale(const std::string& arg);
+
     // Mutation commands
     std::string cmdSetRenderMode(const std::string& mode);
     std::string cmdSetSplatSizeScale(const std::string& arg);

@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "GSComputePBVR.h"
+#include "GaussianPointRenderer.h"
 
 #include "../PointRenderer/include/VkPointRenderer.h"
 #include "../PointRenderer/include/VkPointScene.h"
@@ -21,11 +22,11 @@ namespace Phantom::PointCloud { struct GSPointCloud; }
 
 namespace GSView {
 
-// Render paths. PBVR3DExperimental is the object-space "3D Gaussian -> world-space
-// particles" prototype (renamed from the old "PBVR" mode in Phase 0 of
-// docs/todo/PLAN_gsview_gaussian_point_pbvr.md). Screen-space GPS / ReferenceSplat
-// modes are added in later phases.
-enum class RenderMode { SortBased, PBVR3DExperimental };
+// Render paths (docs/todo/PLAN_gsview_gaussian_point_pbvr.md):
+//   SortBased          - legacy sorted point-sprite splatting.
+//   PBVR3DExperimental - object-space "3D Gaussian -> world-space particles" (Phase 0 rename).
+//   GaussianPoint      - GPS-style screen-space stochastic-opaque-point renderer (Phase 2).
+enum class RenderMode { SortBased, PBVR3DExperimental, GaussianPoint };
 
 struct DebugSplatInfo {
     float rawScale[3]  = {};
@@ -53,6 +54,14 @@ public:
 	void setPbvrParticleSize(float s);
 	size_t getParticleCount() const { return computePBVR_.getGeneratedCount(); }
 	size_t getParticleCapacity() const { return computePBVR_.getCapacity(); }
+
+	// GaussianPoint (Phase 2)
+	bool isGaussianPointAvailable() const { return gaussianPoint_.isAvailable(); }
+	GaussianPointRenderer::Stats getGaussianPointStats() const { return gaussianPoint_.getStats(); }
+	void setGaussianPointParams(const GaussianPointRenderer::Params& p);
+	const GaussianPointRenderer::Params& getGaussianPointParams() const { return gpParams_; }
+	// Records the GaussianPoint compute passes; call from the app's onPreRender.
+	void recordGaussianPointCompute(VkCommandBuffer cmd, uint32_t frameIndex);
 	uint32_t getSplatCount() const;
 	uint64_t getDataGeneration() const;
 	const DebugSplatInfo& getDebugSplat() const { return debugSplat_; }
@@ -61,7 +70,10 @@ public:
 	void handleMouseButton(bool leftPressed);
 	void handleMouseMove(double x, double y);
 	void handleScroll(double dy);
-	void setExtent(VkExtent2D ext) { extent_ = ext; }
+	void setExtent(VkExtent2D ext) {
+		if (ext.width != extent_.width || ext.height != extent_.height) gpExtentDirty_ = true;
+		extent_ = ext;
+	}
 
 	void onInit(Phantom::VKG::VulkanContext& ctx, const Phantom::VKG::VulkanCommandPool& pool,
 				VkRenderPass renderPass, uint32_t framesInFlight) override;
@@ -82,6 +94,9 @@ private:
 	float pbvrParticleSize_     = 4.0f;
 	bool  pbvrDirty_            = true;
 
+	GaussianPointRenderer gaussianPoint_;
+	GaussianPointRenderer::Params gpParams_;
+
 	float camTheta_ = 0.4f;
 	float camPhi_ = 0.5f;
 	float camDist_ = 3.0f;
@@ -95,6 +110,7 @@ private:
 	const Phantom::PointCloud::GSPointCloud* gsCloud_ = nullptr;
 	DebugSplatInfo debugSplat_;
 	VkExtent2D extent_{ 1280, 720 };
+	bool gpExtentDirty_ = true;
 	const Phantom::VKG::VulkanContext* ctx_ = nullptr;
 	const Phantom::VKG::VulkanCommandPool* pool_ = nullptr;
 

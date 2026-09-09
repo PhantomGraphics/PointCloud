@@ -1,0 +1,47 @@
+#version 450
+
+// GaussianPoint MVP -- resolve: average the spp subpixel samples of each pixel.
+// A covered subpixel contributes its stored colour; an empty one contributes the
+// background. mean == expected coverage-composited colour (see the CPU oracle
+// GaussianPointMath::compositeExpected).
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(std430, binding = 1) readonly buffer DepthB    { uint depthBuf[]; };
+layout(std430, binding = 2) readonly buffer ColorB    { uint colorBuf[]; };
+layout(std430, binding = 3)          buffer ResolvedB { uint resolvedBuf[]; };
+layout(std430, binding = 4)          buffer StatsB    { uint stats[]; };
+
+layout(std140, binding = 5) uniform Params {
+    mat4  view;
+    vec4  p0;
+    vec4  p1;
+    uvec4 dims;   // width, height, spp, sppSide
+    uvec4 ctrl;
+    vec4  p2;
+    vec4  bg;
+} u;
+
+void main() {
+    uvec2 gid = gl_GlobalInvocationID.xy;
+    if (gid.x >= u.dims.x || gid.y >= u.dims.y) return;
+
+    uint spp  = u.dims.z;
+    uint base = (gid.y * u.dims.x + gid.x) * spp;
+
+    vec3 acc = vec3(0.0);
+    uint covered = 0u;
+    for (uint s = 0u; s < spp; ++s) {
+        if (depthBuf[base + s] != 0xFFFFFFFFu) {
+            acc += unpackUnorm4x8(colorBuf[base + s]).rgb;
+            covered++;
+        }
+    }
+
+    float cov = float(covered) / float(spp);
+    vec3  avg = covered > 0u ? acc / float(covered) : vec3(0.0);
+    vec3  outc = avg * cov + u.bg.rgb * (1.0 - cov);
+
+    resolvedBuf[gid.y * u.dims.x + gid.x] = packUnorm4x8(vec4(outc, 1.0));
+    if (covered > 0u) atomicAdd(stats[2], covered);
+}

@@ -8,12 +8,14 @@ void GSViewPanel::init(
 	std::function<void(RenderMode)> onModeChanged,
 	std::function<void(float)> onSortParamsChanged,
 	std::function<void(float, int, float)> onPBVRParamsChanged,
-	std::function<void(float)> onSplatSizeChanged)
+	std::function<void(float)> onSplatSizeChanged,
+	std::function<void(int, int, float)> onGpParamsChanged)
 {
 	onModeChanged_ = std::move(onModeChanged);
 	onSortParamsChanged_ = std::move(onSortParamsChanged);
 	onPBVRParamsChanged_ = std::move(onPBVRParamsChanged);
 	onSplatSizeChanged_ = std::move(onSplatSizeChanged);
+	onGpParamsChanged_ = std::move(onGpParamsChanged);
 }
 
 void GSViewPanel::onImGui()
@@ -26,22 +28,23 @@ void GSViewPanel::onImGui()
 	}
 
 	ImGui::Text("Render Mode:");
-	const int modeIdx = (currentMode_ == RenderMode::SortBased) ? 0 : 1;
-	bool changed = false;
-	if (ImGui::RadioButton("Sort-Based", modeIdx == 0)) {
-		if (currentMode_ != RenderMode::SortBased) {
-			currentMode_ = RenderMode::SortBased;
-			changed = true;
+	auto radio = [&](const char* label, RenderMode m) {
+		if (ImGui::RadioButton(label, currentMode_ == m) && currentMode_ != m) {
+			currentMode_ = m;
+			if (onModeChanged_) onModeChanged_(currentMode_);
 		}
-	}
+	};
+	radio("Sort-Based", RenderMode::SortBased);
 	ImGui::SameLine();
-	if (ImGui::RadioButton("PBVR 3D (exp.)", modeIdx == 1)) {
-		if (currentMode_ != RenderMode::PBVR3DExperimental) {
-			currentMode_ = RenderMode::PBVR3DExperimental;
-			changed = true;
-		}
+	radio("PBVR 3D (exp.)", RenderMode::PBVR3DExperimental);
+	ImGui::SameLine();
+	if (gpAvailable_) {
+		radio("Gaussian Point", RenderMode::GaussianPoint);
+	} else {
+		ImGui::BeginDisabled();
+		ImGui::RadioButton("Gaussian Point", false);
+		ImGui::EndDisabled();
 	}
-	if (changed && onModeChanged_) onModeChanged_(currentMode_);
 
 	ImGui::Separator();
 
@@ -52,13 +55,28 @@ void GSViewPanel::onImGui()
 
 		bool sizeChanged = ImGui::SliderFloat("Splat Scale", &splatSizeScale_, 100.f, 5000.f);
 		if (sizeChanged && onSplatSizeChanged_) onSplatSizeChanged_(splatSizeScale_);
-	} else {
+	} else if (currentMode_ == RenderMode::PBVR3DExperimental) {
 		bool pbvrChanged = false;
 		pbvrChanged |= ImGui::SliderFloat("Density Scale", &densityScale_, 0.1f, 10.0f);
 		pbvrChanged |= ImGui::SliderInt("Max Particles/Splat", &maxParticlesPerSplat_, 1, 32);
 		pbvrChanged |= ImGui::SliderFloat("Particle Size", &pbvrParticleSize_, 1.0f, 16.0f);
 		if (pbvrChanged && onPBVRParamsChanged_)
 			onPBVRParamsChanged_(densityScale_, maxParticlesPerSplat_, pbvrParticleSize_);
+	} else { // GaussianPoint
+		bool gpChanged = false;
+		int sppIdx = gpSppSide_ - 1;
+		if (ImGui::Combo("SPP", &sppIdx, "1\0" "4\0" "9\0" "16\0")) {
+			gpSppSide_ = sppIdx + 1;
+			gpChanged = true;
+		}
+		if (ImGui::Combo("Seed Mode", &gpSeedMode_, "Deterministic\0" "Frame-varying\0"))
+			gpChanged = true;
+		gpChanged |= ImGui::SliderFloat("Density Scale##gp", &gpDensityScale_, 0.1f, 4.0f);
+		if (gpChanged && onGpParamsChanged_)
+			onGpParamsChanged_(gpSppSide_, gpSeedMode_, gpDensityScale_);
+		ImGui::Spacing();
+		ImGui::Text("expected/generated: %u / %u", gpExpected_, gpGenerated_);
+		ImGui::Text("active samples / drawn: %u / %u", gpActive_, gpDrawn_);
 	}
 
 	ImGui::Separator();

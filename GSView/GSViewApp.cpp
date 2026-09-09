@@ -26,6 +26,13 @@ GSViewApp::GSViewApp(int width, int height, const std::string& title)
 		},
 		[this](float scale) {
 			renderer_.setSplatSizeScale(scale);
+		},
+		[this](int sppSide, int seedMode, float density) {
+			auto p = renderer_.getGaussianPointParams();
+			p.sppSide = sppSide;
+			p.seedMode = seedMode;
+			p.densityScale = density;
+			renderer_.setGaussianPointParams(p);
 		});
 
 	menuBar_.init(
@@ -103,6 +110,16 @@ void GSViewApp::onUpdate(uint32_t frameIndex)
 	panel_.setDebugSplat(renderer_.getDebugSplat());
 	panel_.setGSAvailable(renderer_.isGSAvailable());
 	panel_.setSplatSizeScale(renderer_.getSplatSizeScale());
+	panel_.setGaussianPointAvailable(renderer_.isGaussianPointAvailable());
+	{
+		const auto s = renderer_.getGaussianPointStats();
+		panel_.setGaussianPointStats(s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints);
+	}
+}
+
+void GSViewApp::onPreRender(VkCommandBuffer cmd, uint32_t frameIndex)
+{
+	renderer_.recordGaussianPointCompute(cmd, frameIndex);
 }
 
 void GSViewApp::onSwapChainCreated()

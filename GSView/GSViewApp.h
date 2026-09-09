@@ -39,6 +39,7 @@ public:
 protected:
 	void onInit() override;
 	void onUpdate(uint32_t frameIndex) override;
+	void onPreRender(VkCommandBuffer cmd, uint32_t frameIndex) override;
 	void onSwapChainCreated() override;
 	void onImGui() override;
 	void onCleanup() override;
