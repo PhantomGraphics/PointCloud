@@ -2,9 +2,9 @@
 
 // GaussianPoint -- fused project + count + splat, run twice via a push constant:
 // pass 0 writes nearest depth (atomicMin on a uint32 key), pass 1 writes the
-// winning colour (half3 stored in a uvec2, guarded by an exact depth-key match).
-// 32-bit two-pass; correctness-equivalent to a packed uint64 atomicMin without
-// needing shaderBufferInt64Atomics. See docs/todo/PLAN_gsview_gaussian_point_pbvr.md.
+// winning colour (logarithmic HDR uint, guarded by an exact depth-key match).
+// A second atomicMin resolves exact depth ties deterministically without needing
+// shaderBufferInt64Atomics. See docs/todo/PLAN_gsview_gaussian_point_pbvr.md.
 // Colour is evaluated in LINEAR space (SH, 3DGS eval_sh) -- tone mapping / gamma
 // happen once at composite. The maths mirrors GSView/GaussianPointMath.cpp.
 
@@ -20,8 +20,8 @@ struct GsPoint {
 };
 layout(std430, binding = 0) readonly buffer InBuf   { GsPoint splats[]; };
 layout(std430, binding = 1)          buffer DepthB  { uint  depthBuf[]; };
-layout(std430, binding = 2)          buffer ColorB  { uvec2 colorBuf[]; };  // packHalf2x16(rg), packHalf2x16(b,0)
-layout(std430, binding = 4)          buffer StatsB  { uint  stats[]; };     // 0:expected*256 1:generated 2:activeSamples 3:drawnPoints
+layout(std430, binding = 2)          buffer ColorB  { uint colorBuf[]; };  // deterministic logarithmic 11/11/10-bit HDR
+layout(std430, binding = 4)          buffer StatsB  { uint  stats[]; };     // 0:expected*256 1:generated 2:active 3:drawn 4:candidates 5:accum sets
 layout(std430, binding = 6) readonly buffer ShRestB { float shRest[]; };
 
 layout(std140, binding = 5) uniform Params {
@@ -34,7 +34,7 @@ layout(std140, binding = 5) uniform Params {
     vec4  bg;      // background rgb, unused
     vec4  camPos;  // world-space camera position, unused
     uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, unused
-    vec4  p3;      // gamma, unused, unused, unused
+    vec4  p3;      // gamma, unused, budgetThin, SH storage stride/channel
 } u;
 
 layout(push_constant) uniform PC { uint pass; } pc; // 0 = depth, 1 = colour
@@ -50,6 +50,13 @@ uint pcg(uint v) {
 }
 struct RS { uint s; };
 float rnd(inout RS r) { r.s = pcg(r.s); return float(r.s) * (1.0 / 4294967296.0); }
+
+uint packLinearColor(vec3 color) {
+    vec3 encoded = clamp(log2(max(color, vec3(0.0)) + vec3(1.0)) / 16.0,
+                         vec3(0.0), vec3(1.0));
+    uvec3 quantized = uvec3(round(encoded * vec3(2047.0, 2047.0, 1023.0)));
+    return quantized.x | (quantized.y << 11u) | (quantized.z << 22u);
+}
 
 float dilogSeries(float x) {
     float t = x, s = x;
@@ -86,7 +93,7 @@ float sampleRadius(float o, float uu) {
     float D = dilog(o);
     float y = min(invDilog((1.0 - uu) * D), o);
     if (y <= 0.0) return 12.0;
-    return sqrt(max(0.0, -2.0 * log(y / o)));
+    return min(12.0, sqrt(max(0.0, -2.0 * log(y / o))));
 }
 
 mat3 quatToR(float w, float x, float y, float z) {
@@ -109,7 +116,7 @@ vec3 evalSH(uint id, vec3 dc, vec3 dir) {
     int deg = int(u.ctrl2.y);
     vec3 result = u.p1.z * dc;
     if (deg >= 1) {
-        int R = (deg + 1) * (deg + 1) - 1;
+        int R = max(int(u.p3.w), (deg + 1) * (deg + 1) - 1);
         uint base = id * uint(3 * R);
         float x = dir.x, y = dir.y, z = dir.z;
         #define SH(k) vec3(shRest[base + uint(k)], shRest[base + uint(R) + uint(k)], shRest[base + uint(2*R) + uint(k)])
@@ -169,15 +176,18 @@ void splatOne(uint id) {
     float cd = cc3[1][1] + u.p1.y;
     float det = ca * cd - cb * cb;
     if (det <= 1e-9) return;
-    // Sub-pixel footprint cull (both projected stddevs below the threshold).
+    float lambdaMax = 0.5 * (ca + cd + sqrt(max((ca - cd) * (ca - cd) + 4.0 * cb * cb, 0.0)));
+    // Sub-pixel footprint cull in principal-axis space.
     float cullPx = u.p2.y;
-    if (cullPx > 0.0 && ca < cullPx * cullPx && cd < cullPx * cullPx) return;
+    if (cullPx > 0.0 && lambdaMax < cullPx * cullPx) return;
 
     float mu =  fx * (cam.x / tz) + u.p0.z;
     float mv = -fy * (cam.y / tz) + u.p0.w;
 
-    // Frustum cull: skip Gaussians whose 3-sigma screen footprint is entirely off-screen.
-    float ext = 3.0 * sqrt(max(ca, cd));
+    // Frustum cull using the full bounded sampling footprint.
+    // sampleRadius() is bounded by 12 sigma, so this is conservative for every
+    // point the shader can generate, including rotated anisotropic footprints.
+    float ext = 12.0 * sqrt(lambdaMax);
     if (mu + ext < 0.0 || mu - ext >= float(u.dims.x) ||
         mv + ext < 0.0 || mv - ext >= float(u.dims.y)) return;
 
@@ -218,7 +228,7 @@ void splatOne(uint id) {
     uint dkey = orderedDepthKey(tz);
     vec3 vdir = normalize(world - u.camPos.xyz);
     vec3 lin  = evalSH(id, vec3(sp.f0, sp.f1, sp.f2), vdir);
-    uvec2 packed = uvec2(packHalf2x16(lin.xy), packHalf2x16(vec2(lin.z, 0.0)));
+    uint packed = packLinearColor(lin);
 
     uint W_ = u.dims.x, H_ = u.dims.y, side = u.dims.w, sppI = u.dims.z;
     uint drawn = 0u;
@@ -238,7 +248,9 @@ void splatOne(uint id) {
         if (pc.pass == 0u) {
             atomicMin(depthBuf[sidx], dkey);
         } else if (depthBuf[sidx] == dkey) {
-            colorBuf[sidx] = packed;
+            // Atomic colour tie-break makes equal-depth splats deterministic and
+            // independent of invocation scheduling and input order.
+            atomicMin(colorBuf[sidx], packed);
         }
         drawn++;
     }

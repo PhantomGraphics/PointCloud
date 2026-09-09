@@ -1,4 +1,4 @@
-#include "GaussianPointOracle.h"
+﻿#include "GaussianPointOracle.h"
 
 #include <glm/gtc/matrix_inverse.hpp>
 
@@ -64,6 +64,25 @@ void defaultPrincipalPoint(OracleCamera& c, int W, int H)
     }
 }
 
+std::vector<gpm::Gaussian2D> projectLayers(const std::vector<Gaussian3D>& scene,
+                                           const OracleCamera& cam)
+{
+    std::vector<gpm::Gaussian2D> layers;
+    layers.reserve(scene.size());
+    for (const auto& g : scene) {
+        const Projected p = project(g, cam);
+        if (!p.visible) continue;
+        gpm::Gaussian2D layer;
+        layer.mean = p.mean;
+        layer.cov = p.cov2d;
+        layer.opacity = p.opacity;
+        layer.color = p.color;
+        layer.depth = p.depth;
+        layers.push_back(layer);
+    }
+    return layers;
+}
+
 } // namespace
 
 Image renderAnalytic(const std::vector<Gaussian3D>& scene, OracleCamera cam,
@@ -71,21 +90,7 @@ Image renderAnalytic(const std::vector<Gaussian3D>& scene, OracleCamera cam,
 {
     defaultPrincipalPoint(cam, W, H);
 
-    std::vector<Projected> proj;
-    proj.reserve(scene.size());
-    for (const auto& g : scene) {
-        Projected p = project(g, cam);
-        if (p.visible) proj.push_back(p);
-    }
-
-    std::vector<gpm::Gaussian2D> layers(proj.size());
-    for (size_t i = 0; i < proj.size(); ++i) {
-        layers[i].mean = proj[i].mean;
-        layers[i].cov = proj[i].cov2d;
-        layers[i].opacity = proj[i].opacity;
-        layers[i].color = proj[i].color;
-        layers[i].depth = proj[i].depth;
-    }
+    const std::vector<gpm::Gaussian2D> layers = projectLayers(scene, cam);
 
     Image img(static_cast<size_t>(W) * H);
     for (int y = 0; y < H; ++y) {
@@ -94,6 +99,25 @@ Image renderAnalytic(const std::vector<Gaussian3D>& scene, OracleCamera cam,
             img[static_cast<size_t>(y) * W + x] =
                 gpm::compositeExpected(layers, p, background, 1.0);
         }
+    }
+    return img;
+}
+
+Image renderAnalyticSamples(const std::vector<Gaussian3D>& scene, OracleCamera cam,
+                            int W, int H, const glm::dvec3& background,
+                            const std::vector<glm::ivec2>& pixels)
+{
+    defaultPrincipalPoint(cam, W, H);
+    const std::vector<gpm::Gaussian2D> layers = projectLayers(scene, cam);
+    Image img;
+    img.reserve(pixels.size());
+    for (const glm::ivec2& px : pixels) {
+        if (px.x < 0 || px.x >= W || px.y < 0 || px.y >= H) {
+            img.push_back(background);
+            continue;
+        }
+        img.push_back(gpm::compositeExpected(
+            layers, glm::dvec2(px.x + 0.5, px.y + 0.5), background, 1.0));
     }
     return img;
 }

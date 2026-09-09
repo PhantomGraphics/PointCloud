@@ -36,7 +36,13 @@ void GSViewPanel::onImGui()
 	};
 	radio("Sort-Based", RenderMode::SortBased);
 	ImGui::SameLine();
-	radio("PBVR 3D (exp.)", RenderMode::PBVR3DExperimental);
+	if (gpAvailable_) {
+		radio("PBVR 3D (exp.)", RenderMode::PBVR3DExperimental);
+	} else {
+		ImGui::BeginDisabled();
+		ImGui::RadioButton("PBVR 3D (exp.)", false);
+		ImGui::EndDisabled();
+	}
 	ImGui::SameLine();
 	if (gpAvailable_) {
 		radio("Gaussian Point", RenderMode::GaussianPoint);
@@ -67,6 +73,7 @@ void GSViewPanel::onImGui()
 			onPBVRParamsChanged_(densityScale_, maxParticlesPerSplat_, pbvrParticleSize_, pbvr3dMethod_);
 		ImGui::Spacing();
 		ImGui::Text("expected/generated: %u / %u", gpStats_.expectedCount, gpStats_.generatedCount);
+		ImGui::Text("candidates / drawn: %u / %u", gpStats_.candidateCount, gpStats_.drawnPoints);
 		ImGui::Text("active / accum frames: %u / %u", gpStats_.activeSamples, gpStats_.accumFrames);
 		ImGui::Text("GPU: %.2f ms", gpStats_.computeMs);
 	} else { // GaussianPoint

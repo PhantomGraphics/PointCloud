@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // -----------------------------------------------------------------------------
 // GaussianPointOracle -- CPU rendering + image metrics for verification
@@ -52,6 +52,11 @@ using Image = std::vector<glm::dvec3>;   // row-major, size W*H
 Image renderAnalytic(const std::vector<Gaussian3D>& scene,
                      OracleCamera cam, int W, int H,
                      const glm::dvec3& background);
+
+Image renderAnalyticSamples(const std::vector<Gaussian3D>& scene,
+                            OracleCamera cam, int W, int H,
+                            const glm::dvec3& background,
+                            const std::vector<glm::ivec2>& pixels);
 
 // CPU port of the GPU pipeline. `numSets` independent sample sets are averaged
 // (each with a distinct frame seed), mirroring progressive accumulation.

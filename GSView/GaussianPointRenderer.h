@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // -----------------------------------------------------------------------------
 // GaussianPointRenderer -- GPS-style screen-space Gaussian-Point renderer
@@ -8,13 +8,13 @@
 //   1. clear the per-subpixel depth/colour/stats buffers (vkCmdFillBuffer)
 //   2. gps_splat.comp pass 0  -- project each Gaussian, Poisson-count points,
 //      scatter them, atomicMin the nearest depth key per subpixel
-//   3. gps_splat.comp pass 1  -- re-scatter, write the winning colour
-//   4. gps_resolve.comp       -- average the spp subpixels -> resolved image buf
+//   3. gps_splat.comp pass 1  -- re-scatter, atomically select the winning colour
+//   4. gps_resolve.comp       -- average subpixels and update progressive history
 //   5. gps_composite (graphics, inside the swapchain pass) -- blit to screen
 //
-// MVP scope: DC colour, single background colour, camera driven by the caller.
-// No SH, no temporal accumulation, no occlusion culling, no scan/compaction
-// (one thread per Gaussian; padding-free work-lists are Phase 5).
+// Current scope includes SH degree 0..3, temporal accumulation, conservative
+// frustum/footprint culling, point-budget thinning, and the PBVR3D comparison.
+// Scan/compaction and hierarchical occlusion remain future work.
 // -----------------------------------------------------------------------------
 
 #include "../../CGLib/VulkanGraphics/VulkanBuffer.h"
@@ -29,6 +29,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace Phantom::VKG { class VulkanContext; class VulkanCommandPool; }
 namespace Phantom::PointCloud { struct GSPointCloud; }
@@ -82,10 +83,11 @@ public:
 
     struct Stats {
         uint32_t expectedCount  = 0;   // sum of per-Gaussian E[N], rounded
-        uint32_t generatedCount = 0;   // sum of Poisson counts
+        uint32_t generatedCount = 0;   // accepted/generated points before viewport clipping
         uint32_t activeSamples  = 0;   // covered subpixels after resolve
         uint32_t drawnPoints    = 0;   // points that landed on screen
-        uint32_t accumFrames    = 0;   // frames since the last accumulation reset
+        uint32_t candidateCount = 0;   // PBVR candidate points before view-conditioned thinning
+        uint32_t accumFrames    = 0;   // sample sets in the displayed frame-slot accumulator
         int      shDegreeData   = 0;   // SH degree present in the loaded data
         // GPU pass times in ms (0 when timestamps are unsupported), lagged one frame.
         float    clearMs = 0.f, splatDepthMs = 0.f, splatColorMs = 0.f, resolveMs = 0.f, computeMs = 0.f;
@@ -125,6 +127,10 @@ public:
     // Called from GSViewRenderer::onRender (inside the swapchain render pass).
     void recordComposite(VkCommandBuffer cmd, uint32_t frameIndex);
 
+    // Synchronously copies the last completed frame-slot accumulator for
+    // verification commands. This is never used on the normal render path.
+    bool readAccumulationLinear(std::vector<glm::vec4>& out);
+
 private:
     struct ParamsUBO {
         glm::mat4  view;
@@ -136,7 +142,7 @@ private:
         glm::vec4  bg;    // background rgb, 0
         glm::vec4  camPos; // world-space camera position, 0
         glm::uvec4 ctrl2; // resetAccum, shDegree, tonemapMode, pbvr3dMethod
-        glm::vec4  p3;    // gamma, basePointsPerSplat, 0, 0
+        glm::vec4  p3;    // gamma, basePointsPerSplat, budgetThin, SH storage stride/channel
     };
     struct PushConstants { uint32_t pass; };
 
@@ -157,7 +163,6 @@ private:
     // Progressive accumulation reset bookkeeping. resetPending_ counts down over
     // `frames_` frames so both frame-in-flight accumulators restart.
     uint32_t resetPending_ = kMaxFrames;
-    uint32_t framesSinceReset_ = 0;
     glm::mat4 lastView_{ 0.0f };
     uint64_t  lastChangeHash_ = 0;
 
@@ -173,10 +178,11 @@ private:
 
     // per-frame buffers
     std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> depthBuf_;
-    std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> colorBuf_;   // uvec2 per subpixel (half3)
+    std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> colorBuf_;   // packed logarithmic HDR RGB per subpixel
     std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> accumBuf_;   // vec4 per pixel (rgb sum, count)
     std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> statsBuf_;    // host-visible
     std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> paramsUbo_;   // host-visible
+    Phantom::VKG::VulkanBuffer readbackBuf_;                         // validation-only
 
     // compute
     Phantom::VKG::VulkanDescriptorSetLayout computeDsl_;

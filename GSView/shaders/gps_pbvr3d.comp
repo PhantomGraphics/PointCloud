@@ -11,8 +11,9 @@
 //   2 ViewConditioned generate an extinction-count candidate set, then keep each
 //                     particle with probability  gpsTarget / Ncand, where
 //                     gpsTarget = spp * 2*pi*sqrt(det Sigma2d) * Li2(o) * densityScale.
-// Positions are drawn once in world space (Cholesky of R S^2 R^T); the same 3D
-// sample set is re-used every frame (only the frame seed changes for averaging).
+// Positions are regenerated deterministically in both passes. Deterministic seed
+// mode reproduces one world-space set; frame-varying mode draws independent sets.
+// Persistent cross-frame sample storage is intentionally not claimed here.
 
 layout(local_size_x = 64) in;
 
@@ -26,7 +27,7 @@ struct GsPoint {
 };
 layout(std430, binding = 0) readonly buffer InBuf   { GsPoint splats[]; };
 layout(std430, binding = 1)          buffer DepthB  { uint  depthBuf[]; };
-layout(std430, binding = 2)          buffer ColorB  { uvec2 colorBuf[]; };
+layout(std430, binding = 2)          buffer ColorB  { uint colorBuf[]; };  // deterministic logarithmic 11/11/10-bit HDR
 layout(std430, binding = 4)          buffer StatsB  { uint  stats[]; };
 layout(std430, binding = 6) readonly buffer ShRestB { float shRest[]; };
 
@@ -40,7 +41,7 @@ layout(std140, binding = 5) uniform Params {
     vec4  bg;
     vec4  camPos;
     uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, pbvr3dMethod
-    vec4  p3;      // gamma, basePointsPerSplat, unused, unused
+    vec4  p3;      // gamma, basePointsPerSplat, budgetThin, SH storage stride/channel
 } u;
 
 layout(push_constant) uniform PC { uint pass; } pc;
@@ -56,6 +57,12 @@ uint pcg(uint v) {
 }
 struct RS { uint s; };
 float rnd(inout RS r) { r.s = pcg(r.s); return float(r.s) * (1.0 / 4294967296.0); }
+uint packLinearColor(vec3 color) {
+    vec3 encoded = clamp(log2(max(color, vec3(0.0)) + vec3(1.0)) / 16.0,
+                         vec3(0.0), vec3(1.0));
+    uvec3 quantized = uvec3(round(encoded * vec3(2047.0, 2047.0, 1023.0)));
+    return quantized.x | (quantized.y << 11u) | (quantized.z << 22u);
+}
 vec2 boxMuller(inout RS r) {
     float u1 = max(rnd(r), 1e-7), u2 = rnd(r);
     float rad = sqrt(-2.0 * log(u1));
@@ -108,7 +115,7 @@ vec3 evalSH(uint id, vec3 dc, vec3 dir) {
     int deg = int(u.ctrl2.y);
     vec3 result = u.p1.z * dc;
     if (deg >= 1) {
-        int R = (deg + 1) * (deg + 1) - 1;
+        int R = max(int(u.p3.w), (deg + 1) * (deg + 1) - 1);
         uint base = id * uint(3 * R);
         float x = dir.x, y = dir.y, z = dir.z;
         #define SH(k) vec3(shRest[base + uint(k)], shRest[base + uint(R) + uint(k)], shRest[base + uint(2*R) + uint(k)])
@@ -159,10 +166,6 @@ void splatOne(uint id) {
     float op = 1.0 / (1.0 + exp(-sp.opacity));
     if (op < u.p1.w) return;
 
-    // Frustum cull on the projected 3-sigma footprint.
-    float mu =  u.p0.x * (cam.x / tzc) + u.p0.z;
-    float mv = -u.p0.y * (cam.y / tzc) + u.p0.w;
-
     vec3 sc  = vec3(exp(sp.s0), exp(sp.s1), exp(sp.s2));
     mat3 R   = quatToR(sp.r0, sp.r1, sp.r2, sp.r3);
     mat3 S2  = mat3(sc.x*sc.x, 0, 0,  0, sc.y*sc.y, 0,  0, 0, sc.z*sc.z);
@@ -174,9 +177,9 @@ void splatOne(uint id) {
 
     vec3 fc2 = footprintCov2d(cam, cov3);
     float det2d = max(fc2.x * fc2.z - fc2.y * fc2.y, 0.0);
-    float ext = 3.0 * sqrt(max(fc2.x, fc2.z));
-    if (mu + ext < 0.0 || mu - ext >= float(u.dims.x) ||
-        mv + ext < 0.0 || mv - ext >= float(u.dims.y)) return;
+    // Do not cull from the linearised centre footprint here. A 3D Gaussian can
+    // cross the near plane and perspective-project far outside that bound; the
+    // per-particle viewport test below is the correctness-preserving cull.
 
     uint method = u.ctrl2.w;
     float dS   = u.p2.z;
@@ -219,16 +222,18 @@ void splatOne(uint id) {
 
     vec3 vdir = normalize(world - u.camPos.xyz);
     vec3 lin  = evalSH(id, vec3(sp.f0, sp.f1, sp.f2), vdir);
-    uvec2 packed = uvec2(packHalf2x16(lin.xy), packHalf2x16(vec2(lin.z, 0.0)));
+    uint packed = packLinearColor(lin);
 
     uint W_ = u.dims.x, H_ = u.dims.y, side = u.dims.w, sppI = u.dims.z;
     float fx = u.p0.x, fy = u.p0.y, cx = u.p0.z, cy = u.p0.w;
+    uint generated = 0u;
     uint drawn = 0u;
     for (int i = 0; i < Ni; ++i) {
         vec2 ab = boxMuller(rs);
         vec2 cdn = boxMuller(rs);
         vec3 z = vec3(ab.x, ab.y, cdn.x);
         if (method == 2u && rnd(rs) >= keepProb) continue;
+        generated++;
 
         vec3 pw  = world + L3 * z;
         vec3 pc3 = (u.view * vec4(pw, 1.0)).xyz;
@@ -247,15 +252,16 @@ void splatOne(uint id) {
         if (pc.pass == 0u) {
             atomicMin(depthBuf[sidx], dkey);
         } else if (depthBuf[sidx] == dkey) {
-            colorBuf[sidx] = packed;
+            atomicMin(colorBuf[sidx], packed);
         }
         drawn++;
     }
 
     if (pc.pass == 0u) {
         atomicAdd(stats[0], uint(lambda * keepProb * 256.0));
-        atomicAdd(stats[1], uint(drawn));
+        atomicAdd(stats[1], generated);
         atomicAdd(stats[3], drawn);
+        atomicAdd(stats[4], uint(Ni));
     }
 }
 

@@ -68,6 +68,8 @@ public:
 	const GaussianPointRenderer::Params& getGaussianPointParams() const { return gpParams_; }
 	// Records the GaussianPoint compute passes; call from the app's onPreRender.
 	void recordGaussianPointCompute(VkCommandBuffer cmd, uint32_t frameIndex);
+	bool validateGaussianPointOracle(double& psnrAll, double& psnrForeground,
+	                                size_t& foregroundSamples);
 	uint32_t getSplatCount() const;
 	uint64_t getDataGeneration() const;
 	const DebugSplatInfo& getDebugSplat() const { return debugSplat_; }

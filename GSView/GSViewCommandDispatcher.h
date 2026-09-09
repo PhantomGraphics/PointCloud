@@ -58,6 +58,7 @@ private:
     std::string cmdGetGpProfile();
     std::string cmdGetGpTimings();
     std::string cmdGetGpPointBudget();
+    std::string cmdValidateGpOracle();
     std::string cmdSetGpPointBudget(const std::string& arg);
     std::string cmdGetGpShDegree();
     std::string cmdGetGpTonemap();

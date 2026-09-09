@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 
 // Phase 1 of docs/todo/PLAN_gsview_gaussian_point_pbvr.md: the pure CPU maths
 // core and the analytic per-pixel coverage oracle. No Vulkan.
@@ -7,6 +7,7 @@
 
 #include <glm/gtc/quaternion.hpp>
 
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -421,6 +422,21 @@ TEST(GaussianPointMath, EvalSHHigherDegreesStayFinite)
 	                              glm::normalize(glm::dvec3(0.3, -0.7, 0.5)));
 	EXPECT_TRUE(std::isfinite(got.r) && std::isfinite(got.g) && std::isfinite(got.b));
 	EXPECT_GE(got.r, 0.0);
+}
+
+TEST(GaussianPointMath, EvalSHLowerDegreeUsesLoadedDataStride)
+{
+    // Degree-3 storage has 15 coefficients per channel. Evaluating only degree 1
+    // must still address G/B at offsets 15/30, not at offsets 3/6.
+    std::array<double, 45> rest{};
+    rest[0] = 1.0;
+    rest[15] = 2.0;
+    rest[30] = 3.0;
+    const glm::dvec3 dir(0.0, -1.0, 0.0);
+    const glm::dvec3 got = evalSH(1, glm::dvec3(0.0), rest.data(), dir, 15);
+    EXPECT_NEAR(got.r, 0.5 + 0.4886025119029199 * 1.0, 1e-12);
+    EXPECT_NEAR(got.g, 0.5 + 0.4886025119029199 * 2.0, 1e-12);
+    EXPECT_NEAR(got.b, 0.5 + 0.4886025119029199 * 3.0, 1e-12);
 }
 
 // ---------------------------------------------------------------------------

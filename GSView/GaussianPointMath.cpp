@@ -1,4 +1,4 @@
-#include "GaussianPointMath.h"
+﻿#include "GaussianPointMath.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -30,7 +30,8 @@ double shDcToColor(double sh)
 	return std::clamp(sh * kShC0 + 0.5, 0.0, 1.0);
 }
 
-glm::dvec3 evalSH(int degree, const glm::dvec3& dc, const double* rest, const glm::dvec3& dir)
+glm::dvec3 evalSH(int degree, const glm::dvec3& dc, const double* rest,
+                  const glm::dvec3& dir, int storageStride)
 {
 	// Coefficients from 3DGS sh_utils.eval_sh.
 	constexpr double C1 = 0.4886025119029199;
@@ -44,7 +45,7 @@ glm::dvec3 evalSH(int degree, const glm::dvec3& dc, const double* rest, const gl
 	degree = std::clamp(degree, 0, 3);
 
 	if (degree >= 1 && rest) {
-		const int R = shRestPerChannel(degree);
+		const int R = std::max(storageStride, shRestPerChannel(degree));
 		auto sh = [&](int k) {
 			return glm::dvec3(rest[0 * R + k], rest[1 * R + k], rest[2 * R + k]);
 		};

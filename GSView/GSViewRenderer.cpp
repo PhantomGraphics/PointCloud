@@ -1,5 +1,7 @@
 ﻿#include "GSViewRenderer.h"
 
+#include "GaussianPointMath.h"
+#include "GaussianPointOracle.h"
 #include "../PointCloud/GSPointCloud.h"
 
 #include "../../CGLib/VulkanGraphics/VulkanContext.h"
@@ -12,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 namespace {
 
@@ -144,6 +147,98 @@ void GSViewRenderer::recordGaussianPointCompute(VkCommandBuffer cmd, uint32_t fr
 {
 	if (isGpMode(mode_))
 		gaussianPoint_.recordCompute(cmd, frameIndex);
+}
+
+bool GSViewRenderer::validateGaussianPointOracle(double& psnrAll, double& psnrForeground,
+	                                              size_t& foregroundSamples)
+{
+	psnrAll = 0.0;
+	psnrForeground = 0.0;
+	foregroundSamples = 0;
+	if (mode_ != RenderMode::GaussianPoint || !gsCloud_ || gsCloud_->points.empty()) return false;
+	if (gpParams_.pointBudget > 0.0f || std::abs(gpParams_.densityScale - 1.0f) > 1.0e-6f) return false;
+
+	std::vector<glm::vec4> gpuAccum;
+	if (!gaussianPoint_.readAccumulationLinear(gpuAccum)) return false;
+	const int W = static_cast<int>(extent_.width);
+	const int H = static_cast<int>(extent_.height);
+	if (W <= 0 || H <= 0 || gpuAccum.size() != static_cast<size_t>(W) * H) return false;
+
+	const glm::vec3 eye = computeEye();
+	const glm::mat4 view = glm::lookAt(eye, camTarget_, glm::vec3(0.f, 1.f, 0.f));
+	glm::mat3 flip(1.0f);
+	flip[1][1] = -1.0f;
+	flip[2][2] = -1.0f;
+	const glm::mat3 toOracle = flip * glm::mat3(view);
+
+	std::vector<oracle::Gaussian3D> scene;
+	scene.reserve(gsCloud_->points.size());
+	const int dataStride = Phantom::PointCloud::GSPointCloud::coeffsPerChannel(gsCloud_->shDegree);
+	const int evalDegree = std::min(std::clamp(gpParams_.shDegree, 0, 3), gsCloud_->shDegree);
+	for (size_t i = 0; i < gsCloud_->points.size(); ++i) {
+		const auto& p = gsCloud_->points[i];
+		const double opacity = gpm::sigmoid(p.opacity);
+		if (opacity < gpParams_.opacityCutoff) continue;
+		oracle::Gaussian3D g;
+		const glm::vec3 world(p.x, p.y, p.z);
+		g.pos = glm::dvec3(flip * glm::vec3(view * glm::vec4(world, 1.0f)));
+		g.logScale = glm::dvec3(p.scale[0], p.scale[1], p.scale[2]);
+		const glm::quat worldRot(p.rot[0], p.rot[1], p.rot[2], p.rot[3]);
+		g.rot = glm::dquat(glm::quat_cast(toOracle * glm::mat3_cast(glm::normalize(worldRot))));
+		g.opacity = opacity;
+
+		std::array<double, 45> rest{};
+		const double* restPtr = nullptr;
+		if (evalDegree > 0 && dataStride > 0) {
+			const size_t base = i * static_cast<size_t>(3 * dataStride);
+			if (base + static_cast<size_t>(3 * dataStride) > gsCloud_->shRest.size()) return false;
+			for (int k = 0; k < 3 * dataStride; ++k)
+				rest[static_cast<size_t>(k)] = gsCloud_->shRest[base + static_cast<size_t>(k)];
+			restPtr = rest.data();
+		}
+		glm::dvec3 dir = glm::dvec3(world - eye);
+		const double len = glm::length(dir);
+		if (len > 0.0) dir /= len; else dir = glm::dvec3(0.0, 0.0, 1.0);
+		g.color = gpm::evalSH(evalDegree, glm::dvec3(p.f_dc[0], p.f_dc[1], p.f_dc[2]),
+		                      restPtr, dir, dataStride);
+		scene.push_back(g);
+	}
+
+	oracle::OracleCamera cam;
+	const float tanFovY = std::tan(glm::radians(45.f) * 0.5f);
+	cam.focalY = (static_cast<double>(H) * 0.5) / tanFovY;
+	cam.focalX = cam.focalY;
+	cam.cx = static_cast<double>(W) * 0.5;
+	cam.cy = static_cast<double>(H) * 0.5;
+	cam.lowPass = gpParams_.lowPass;
+
+	std::vector<glm::ivec2> pixels;
+	pixels.reserve(32 * 32);
+	for (int gy = 0; gy < 32; ++gy)
+		for (int gx = 0; gx < 32; ++gx)
+			pixels.emplace_back(std::min(W - 1, (2 * gx + 1) * W / 64),
+			                    std::min(H - 1, (2 * gy + 1) * H / 64));
+
+	const glm::dvec3 background(gpParams_.background);
+	const oracle::Image ref = oracle::renderAnalyticSamples(scene, cam, W, H, background, pixels);
+	oracle::Image got;
+	oracle::Image refForeground;
+	oracle::Image gotForeground;
+	got.reserve(pixels.size());
+	for (size_t i = 0; i < pixels.size(); ++i) {
+		const glm::ivec2 px = pixels[i];
+		const glm::vec4 a = gpuAccum[static_cast<size_t>(px.y) * W + px.x];
+		const glm::dvec3 c = glm::dvec3(a) / std::max(static_cast<double>(a.a), 1.0);
+		got.push_back(c);
+		if (glm::length(ref[i] - background) > 0.01) {
+			refForeground.push_back(ref[i]);
+			gotForeground.push_back(c);
+		}
+	}
+	foregroundSamples = refForeground.size();
+	psnrAll = oracle::psnr(got, ref);
+	psnrForeground = foregroundSamples ? oracle::psnr(gotForeground, refForeground) : 0.0;
+	return foregroundSamples > 0;
 }
 
 void GSViewRenderer::setSortPointSize(float s)

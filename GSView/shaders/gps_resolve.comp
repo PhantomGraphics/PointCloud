@@ -10,7 +10,7 @@
 layout(local_size_x = 8, local_size_y = 8) in;
 
 layout(std430, binding = 1) readonly buffer DepthB { uint  depthBuf[]; };
-layout(std430, binding = 2) readonly buffer ColorB { uvec2 colorBuf[]; };
+layout(std430, binding = 2) readonly buffer ColorB { uint colorBuf[]; };
 layout(std430, binding = 3)          buffer AccumB { vec4  accumBuf[]; };  // rgb sum, sample count
 layout(std430, binding = 4)          buffer StatsB { uint  stats[]; };
 
@@ -27,10 +27,12 @@ layout(std140, binding = 5) uniform Params {
     vec4  p3;
 } u;
 
-vec3 unpackColor(uvec2 c) {
-    vec2 rg = unpackHalf2x16(c.x);
-    vec2 b0 = unpackHalf2x16(c.y);
-    return vec3(rg, b0.x);
+vec3 unpackLinearColor(uint packed) {
+    uvec3 quantized = uvec3(packed & 0x7ffu,
+                            (packed >> 11u) & 0x7ffu,
+                            (packed >> 22u) & 0x3ffu);
+    vec3 encoded = vec3(quantized) / vec3(2047.0, 2047.0, 1023.0);
+    return exp2(encoded * 16.0) - vec3(1.0);
 }
 
 void main() {
@@ -44,7 +46,7 @@ void main() {
     uint covered = 0u;
     for (uint s = 0u; s < spp; ++s) {
         if (depthBuf[base + s] != 0xFFFFFFFFu) {
-            acc += unpackColor(colorBuf[base + s]);
+            acc += unpackLinearColor(colorBuf[base + s]);
             covered++;
         }
     }
@@ -52,12 +54,16 @@ void main() {
     vec3 frame = (acc + float(spp - covered) * u.bg.rgb) / float(spp);
 
     uint pix = gid.y * u.dims.x + gid.x;
+    float accumCount;
     if (u.ctrl2.x != 0u) {
         accumBuf[pix] = vec4(frame, 1.0);
+        accumCount = 1.0;
     } else {
         vec4 a = accumBuf[pix];
         accumBuf[pix] = vec4(a.rgb + frame, a.a + 1.0);
+        accumCount = a.a + 1.0;
     }
 
     if (covered > 0u) atomicAdd(stats[2], covered);
+    if (pix == 0u) stats[5] = uint(accumCount);
 }

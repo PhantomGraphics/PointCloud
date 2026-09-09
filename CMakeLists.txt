@@ -209,6 +209,8 @@ add_executable(GSView
     ${POINTCLOUD_ROOT}/GSView/GSViewCommandDispatcher.cpp
     ${POINTCLOUD_ROOT}/GSView/GSViewRenderer.cpp
     ${POINTCLOUD_ROOT}/GSView/GaussianPointRenderer.cpp
+    ${POINTCLOUD_ROOT}/GSView/GaussianPointMath.cpp
+    ${POINTCLOUD_ROOT}/GSView/GaussianPointOracle.cpp
     ${POINTCLOUD_ROOT}/GSView/ui/GSViewPanel.cpp
     ${POINTCLOUD_ROOT}/GSView/ui/GSViewMenuBar.cpp
 )

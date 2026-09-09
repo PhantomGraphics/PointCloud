@@ -1,4 +1,4 @@
-#include "GaussianPointRenderer.h"
+﻿#include "GaussianPointRenderer.h"
 
 #include "../../CGLib/VulkanGraphics/VulkanContext.h"
 #include "../../CGLib/VulkanGraphics/VulkanCommandPool.h"
@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstring>
 #include <functional>
+#include <utility>
 
 // The gps_*.comp GsPoint struct is 17 tightly-packed floats -- must match GSPoint.
 static_assert(sizeof(Phantom::PointCloud::GSPoint) == 68,
@@ -188,10 +189,11 @@ void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
     for (uint32_t f = 0; f < frames_; ++f) {
         depthBuf_[f].create(ctx, pool, subSamples * sizeof(uint32_t),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-        colorBuf_[f].create(ctx, pool, subSamples * 2 * sizeof(uint32_t),   // uvec2 (half3)
+        colorBuf_[f].create(ctx, pool, subSamples * sizeof(uint32_t),       // logarithmic HDR RGB
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         accumBuf_[f].create(ctx, pool, pixels * 4 * sizeof(float),          // vec4 (rgb sum, count)
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
         statsBuf_[f].createMapped(ctx, 8 * sizeof(uint32_t),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         if (!paramsUbo_[f].isValid())
@@ -268,21 +270,36 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     // Upload the input + SH SSBOs when the cloud changes (rare -- on load).
     const bool haveCloud = cloud_ && !cloud_->points.empty();
     if (haveCloud && cloud_->generation != cachedGeneration_) {
-        gsInput_.destroy(ctx.getDevice());
-        gsInput_.create(ctx, pool,
+        // Build replacements first. VulkanBuffer::create(initialData) submits the
+        // staging copy and waits for the graphics queue, so all older frames have
+        // stopped using the current buffers before they are destroyed below.
+        Phantom::VKG::VulkanBuffer nextInput;
+        Phantom::VKG::VulkanBuffer nextShRest;
+        if (!nextInput.create(ctx, pool,
             static_cast<VkDeviceSize>(cloud_->points.size()) * sizeof(Phantom::PointCloud::GSPoint),
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, cloud_->points.data());
-        numSplats_ = static_cast<uint32_t>(cloud_->points.size());
-        shDegreeData_ = cloud_->shDegree;
-
-        shRest_.destroy(ctx.getDevice());
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, cloud_->points.data())) {
+            return;
+        }
         if (!cloud_->shRest.empty()) {
-            shRest_.create(ctx, pool, cloud_->shRest.size() * sizeof(float),
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, cloud_->shRest.data());
+            if (!nextShRest.create(ctx, pool, cloud_->shRest.size() * sizeof(float),
+                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, cloud_->shRest.data())) {
+                nextInput.destroy(ctx.getDevice());
+                return;
+            }
         } else {
             const float dummy = 0.0f;
-            shRest_.create(ctx, pool, sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dummy);
+            if (!nextShRest.create(ctx, pool, sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dummy)) {
+                nextInput.destroy(ctx.getDevice());
+                return;
+            }
         }
+
+        gsInput_.destroy(ctx.getDevice());
+        shRest_.destroy(ctx.getDevice());
+        gsInput_ = std::move(nextInput);
+        shRest_ = std::move(nextShRest);
+        numSplats_ = static_cast<uint32_t>(cloud_->points.size());
+        shDegreeData_ = cloud_->shDegree;
 
         cachedGeneration_ = cloud_->generation;
         for (uint32_t f = 0; f < frames_; ++f) writeComputeSet(ctx.getDevice(), f);
@@ -312,6 +329,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     }
 
     // --- adaptive stochastic thinning to a point budget ---
+    const double previousBudgetThin = budgetThin_;
     if (params_.pointBudget > 0.0f) {
         const std::uint32_t lastGen = getStats().generatedCount;
         if (lastGen > 0) {
@@ -322,6 +340,11 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     } else {
         budgetThin_ = 1.0;
     }
+    const double budgetDelta = std::abs(budgetThin_ - previousBudgetThin);
+    if (budgetDelta > std::max(1.0e-4, std::abs(previousBudgetThin) * 5.0e-3))
+        resetPending_ = frames_;
+    else
+        budgetThin_ = previousBudgetThin;
 
     const int shDeg = std::min(std::clamp(params_.shDegree, 0, 3), shDegreeData_);
 
@@ -329,14 +352,34 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     // that changes the image moves.
     std::uint64_t h = 1469598103934665603ull;
     auto mix = [&](std::uint64_t v) { h = (h ^ v) * 1099511628211ull; };
+    auto mixFloat = [&](float v) {
+        std::uint32_t bits = 0;
+        std::memcpy(&bits, &v, sizeof(bits));
+        mix(bits);
+    };
     mix(static_cast<std::uint64_t>(params_.sppSide) * 131 + params_.seedMode * 17 + params_.countMode);
-    mix(std::hash<float>{}(params_.densityScale));
-    mix(std::hash<float>{}(params_.gamma));
-    mix(std::hash<float>{}(params_.basePointsPerSplat));
+    mixFloat(params_.densityScale);
+    mixFloat(params_.maxPointsPerSplat);
+    mixFloat(params_.opacityCutoff);
+    mixFloat(params_.lowPass);
+    mixFloat(params_.nearZ);
+    mixFloat(params_.footprintCullPx);
+    mixFloat(params_.gamma);
+    mixFloat(params_.basePointsPerSplat);
+    mixFloat(params_.pointBudget);
     mix(static_cast<std::uint64_t>(shDeg) * 7 + params_.tonemapMode);
     mix(static_cast<std::uint64_t>(params_.pbvr3dMethod) * 3
         + static_cast<std::uint64_t>(path_ == Path::Pbvr3d));
-    mix(std::hash<float>{}(params_.background.x + params_.background.y * 3.0f + params_.background.z * 7.0f));
+    mixFloat(params_.background.x);
+    mixFloat(params_.background.y);
+    mixFloat(params_.background.z);
+    mixFloat(camera_.focalX);
+    mixFloat(camera_.focalY);
+    mixFloat(camera_.cx);
+    mixFloat(camera_.cy);
+    mixFloat(camera_.camPos.x);
+    mixFloat(camera_.camPos.y);
+    mixFloat(camera_.camPos.z);
     if (h != lastChangeHash_ || camera_.view != lastView_) {
         resetPending_ = frames_;
         lastChangeHash_ = h;
@@ -344,8 +387,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     }
 
     const uint32_t resetAccum = (resetPending_ > 0) ? 1u : 0u;
-    if (resetPending_ > 0) { --resetPending_; framesSinceReset_ = 1; }
-    else if (framesSinceReset_ < 0xFFFFFFFFu) ++framesSinceReset_;
+    if (resetPending_ > 0) --resetPending_;
 
     ParamsUBO ubo{};
     ubo.view = camera_.view;
@@ -365,7 +407,8 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
                            static_cast<uint32_t>(params_.pbvr3dMethod));
     ubo.p3 = glm::vec4(std::max(0.01f, params_.gamma),
                        std::max(0.0f, params_.basePointsPerSplat),
-                       static_cast<float>(budgetThin_), 0.0f);
+                       static_cast<float>(budgetThin_),
+                       static_cast<float>(Phantom::PointCloud::GSPointCloud::coeffsPerChannel(shDegreeData_)));
     paramsUbo_[frameIndex].write(&ubo, sizeof(ubo));
 
     lastFrameIndex_ = frameIndex;
@@ -390,7 +433,7 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
 
     // 1. clear
     vkCmdFillBuffer(cmd, depth, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
-    vkCmdFillBuffer(cmd, color, 0, VK_WHOLE_SIZE, 0u);
+    vkCmdFillBuffer(cmd, color, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
     vkCmdFillBuffer(cmd, stats, 0, VK_WHOLE_SIZE, 0u);
 
     VkBufferMemoryBarrier toCompute[3] = {
@@ -461,6 +504,32 @@ void GaussianPointRenderer::recordComposite(VkCommandBuffer cmd, uint32_t frameI
     vkCmdDraw(cmd, 3, 1, 0, 0);
 }
 
+bool GaussianPointRenderer::readAccumulationLinear(std::vector<glm::vec4>& out)
+{
+    if (!available_ || !ctx_ || !pool_ || extent_.width == 0 || frames_ == 0) return false;
+    const VkDeviceSize bytes = static_cast<VkDeviceSize>(extent_.width) * extent_.height * sizeof(glm::vec4);
+    if (!readbackBuf_.isValid() || readbackBuf_.getSize() != bytes) {
+        readbackBuf_.destroy(ctx_->getDevice());
+        if (!readbackBuf_.createMapped(*ctx_, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT)) return false;
+    }
+
+    const uint32_t f = (lastFrameIndex_ + 1u) % frames_;
+    VkCommandBuffer cmd = pool_->beginSingleTimeCommands();
+    VkBufferMemoryBarrier toCopy =
+        bufBarrier(accumBuf_[f].getBuffer(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         0, 0, nullptr, 1, &toCopy, 0, nullptr);
+    VkBufferCopy copy{ 0, 0, bytes };
+    vkCmdCopyBuffer(cmd, accumBuf_[f].getBuffer(), readbackBuf_.getBuffer(), 1, &copy);
+    pool_->endSingleTimeCommands(cmd);
+
+    const void* mapped = readbackBuf_.getMapped();
+    if (!mapped) return false;
+    out.resize(static_cast<size_t>(extent_.width) * extent_.height);
+    std::memcpy(out.data(), mapped, static_cast<size_t>(bytes));
+    return true;
+}
+
 GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
 {
     Stats s;
@@ -474,7 +543,8 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.generatedCount = p[1];
     s.activeSamples  = p[2];
     s.drawnPoints    = p[3];
-    s.accumFrames    = framesSinceReset_;
+    s.candidateCount = p[4];
+    s.accumFrames    = p[5];
     s.shDegreeData   = shDegreeData_;
 
     const Stats& t = lastTimings_[f];
@@ -494,6 +564,7 @@ void GaussianPointRenderer::onCleanup(VkDevice device)
     if (queryPool_) { vkDestroyQueryPool(device, queryPool_, nullptr); queryPool_ = VK_NULL_HANDLE; }
     gsInput_.destroy(device);
     shRest_.destroy(device);
+    readbackBuf_.destroy(device);
     compositePipe_.destroy(device);
     splatPipe_.destroy(device);
     pbvr3dPipe_.destroy(device);

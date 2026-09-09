@@ -1,5 +1,6 @@
 {
   "name": "pbvr3d_modes",
+  "post_assert": "vc_gen < ext_gen",
   "steps": [
     { "label": "Load gs_sphere",
       "command": "LoadPLY:../samples/gs/gs_sphere.ply",

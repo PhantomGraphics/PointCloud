@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // -----------------------------------------------------------------------------
 // GaussianPointMath -- pure CPU maths for the Gaussian-Point / PBVR3D research
@@ -52,7 +52,8 @@ inline constexpr int shRestPerChannel(int degree) { return (degree + 1) * (degre
 glm::dvec3 evalSH(int degree,
                   const glm::dvec3& dc,
                   const double* rest,
-                  const glm::dvec3& dir);
+                  const glm::dvec3& dir,
+                  int storageStride = 0);
 
 // ---------------------------------------------------------------------------
 // Covariance

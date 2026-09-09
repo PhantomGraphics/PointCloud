@@ -104,6 +104,7 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGpProfile")           return cmdGetGpProfile();
     if (name == "GetGpTimings")           return cmdGetGpTimings();
     if (name == "GetGpPointBudget")       return cmdGetGpPointBudget();
+    if (name == "ValidateGpOracle")       return cmdValidateGpOracle();
     if (name == "GetGpShDegree")          return cmdGetGpShDegree();
     if (name == "GetGpTonemap")           return cmdGetGpTonemap();
     if (name == "GetGpGamma")             return cmdGetGpGamma();
@@ -217,6 +218,8 @@ std::string GSViewCommandDispatcher::cmdSetRenderMode(const std::string& mode)
     // "PBVR" is a temporary backward-compat alias for the renamed experimental mode
     // (Phase 0). Old scenario files keep working; new ones use the canonical name.
     if (mode == "PBVR3DExperimental" || mode == "PBVR") {
+        if (!renderer_->isGaussianPointAvailable())
+            return "Error:PBVR3DExperimental unavailable (renderer init failed)";
         renderer_->setRenderMode(RenderMode::PBVR3DExperimental);
         return "OK";
     }
@@ -344,6 +347,7 @@ std::string GSViewCommandDispatcher::cmdGetGpStats()
            ",Generated:" + std::to_string(s.generatedCount) +
            ",Active:" + std::to_string(s.activeSamples) +
            ",Drawn:" + std::to_string(s.drawnPoints) +
+           ",Candidates:" + std::to_string(s.candidateCount) +
            ",Accum:" + std::to_string(s.accumFrames) +
            ",ShDeg:" + std::to_string(s.shDegreeData);
 }
@@ -377,13 +381,13 @@ std::string GSViewCommandDispatcher::buildProfile() const
     std::snprintf(buf, sizeof(buf),
         "gpu=%s;path=%s;method=%s;res=%ux%u;spp=%d;seed=%s;densityScale=%s;pointBudget=%s;"
         "shDegree=%d;shDegreeData=%d;tonemap=%d;gamma=%s;expected=%u;generated=%u;activeSamples=%u;"
-        "drawnPoints=%u;accumFrames=%u;computeMs=%.3f;clearMs=%.3f;depthMs=%.3f;colorMs=%.3f;resolveMs=%.3f",
+        "drawnPoints=%u;candidatePoints=%u;accumFrames=%u;computeMs=%.3f;clearMs=%.3f;depthMs=%.3f;colorMs=%.3f;resolveMs=%.3f",
         renderer_->getGaussianPointGpuName().c_str(), path.c_str(), method.c_str(),
         ext.width, ext.height, p.sppSide * p.sppSide,
         p.seedMode == 0 ? "deterministic" : "frame",
         fmtF(p.densityScale).c_str(), fmtF(p.pointBudget).c_str(), p.shDegree, s.shDegreeData,
         p.tonemapMode, fmtF(p.gamma).c_str(),
-        s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints, s.accumFrames,
+        s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints, s.candidateCount, s.accumFrames,
         s.computeMs, s.clearMs, s.splatDepthMs, s.splatColorMs, s.resolveMs);
     return buf;
 }
@@ -409,6 +413,22 @@ std::string GSViewCommandDispatcher::cmdGetGpPointBudget()
 {
     if (!renderer_) return "Val:0";
     return "Val:" + fmtF(renderer_->getGaussianPointParams().pointBudget);
+}
+
+std::string GSViewCommandDispatcher::cmdValidateGpOracle()
+{
+    if (!renderer_) return "Error:renderer not available";
+    double all = 0.0, foreground = 0.0;
+    size_t foregroundSamples = 0;
+    if (!renderer_->validateGaussianPointOracle(all, foreground, foregroundSamples))
+        return "Error:validation requires GaussianPoint, density=1, budget=0, and a visible cloud";
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "PSNR:%.3f,ForegroundPSNR:%.3f,Samples:%zu",
+                  all, foreground, foregroundSamples);
+    // Overall PSNR is the primary plan gate. The foreground-only floor catches
+    // gross coordinate/colour errors without making 34 stochastic sets flaky.
+    if (all < 25.0 || foreground < 18.0) return std::string("Error:") + buf;
+    return std::string("OK:") + buf;
 }
 
 std::string GSViewCommandDispatcher::cmdSetGpPointBudget(const std::string& arg)
