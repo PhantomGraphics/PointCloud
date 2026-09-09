@@ -19,10 +19,11 @@ GSViewApp::GSViewApp(int width, int height, const std::string& title)
 		[this](float pointSize) {
 			renderer_.setSortPointSize(pointSize);
 		},
-		[this](float density, int maxP, float pSize) {
+		[this](float density, int maxP, float pSize, int method) {
 			renderer_.setDensityScale(density);
 			renderer_.setMaxParticlesPerSplat(maxP);
 			renderer_.setPbvrParticleSize(pSize);
+			renderer_.setPbvr3dMethod(method);
 		},
 		[this](float scale) {
 			renderer_.setSplatSizeScale(scale);

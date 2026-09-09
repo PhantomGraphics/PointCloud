@@ -7,7 +7,7 @@ namespace GSView {
 void GSViewPanel::init(
 	std::function<void(RenderMode)> onModeChanged,
 	std::function<void(float)> onSortParamsChanged,
-	std::function<void(float, int, float)> onPBVRParamsChanged,
+	std::function<void(float, int, float, int)> onPBVRParamsChanged,
 	std::function<void(float)> onSplatSizeChanged,
 	std::function<void(const GaussianPointRenderer::Params&)> onGpParamsChanged)
 {
@@ -57,11 +57,17 @@ void GSViewPanel::onImGui()
 		if (sizeChanged && onSplatSizeChanged_) onSplatSizeChanged_(splatSizeScale_);
 	} else if (currentMode_ == RenderMode::PBVR3DExperimental) {
 		bool pbvrChanged = false;
+		if (ImGui::Combo("Method", &pbvr3dMethod_,
+				"Proportional\0" "Extinction -log(1-o)\0" "View-conditioned\0"))
+			pbvrChanged = true;
 		pbvrChanged |= ImGui::SliderFloat("Density Scale", &densityScale_, 0.1f, 10.0f);
-		pbvrChanged |= ImGui::SliderInt("Max Particles/Splat", &maxParticlesPerSplat_, 1, 32);
-		pbvrChanged |= ImGui::SliderFloat("Particle Size", &pbvrParticleSize_, 1.0f, 16.0f);
+		pbvrChanged |= ImGui::SliderInt("Max Particles/Splat", &maxParticlesPerSplat_, 1, 4096);
+		pbvrChanged |= ImGui::SliderFloat("Base Points x64", &pbvrParticleSize_, 1.0f, 64.0f);
 		if (pbvrChanged && onPBVRParamsChanged_)
-			onPBVRParamsChanged_(densityScale_, maxParticlesPerSplat_, pbvrParticleSize_);
+			onPBVRParamsChanged_(densityScale_, maxParticlesPerSplat_, pbvrParticleSize_, pbvr3dMethod_);
+		ImGui::Spacing();
+		ImGui::Text("expected/generated: %u / %u", gpStats_.expectedCount, gpStats_.generatedCount);
+		ImGui::Text("active / accum frames: %u / %u", gpStats_.activeSamples, gpStats_.accumFrames);
 	} else { // GaussianPoint
 		bool gpChanged = false;
 		int sppIdx = gp_.sppSide - 1;

@@ -1,14 +1,13 @@
 #pragma once
 
 // -----------------------------------------------------------------------------
-// CPU reference implementation of the "3D Gaussian -> world-space particles"
-// (PBVR3DExperimental) generation. This is NOT on the GSView render path — the
-// production path is the GPU compute shader in GSComputePBVR / gs_pbvr_gen.comp.
+// CPU reference implementation of an opacity-proportional "3D Gaussian ->
+// world-space particles" generation. This is NOT on the GSView render path --
+// the production path is the GPU compute shader gps_pbvr3d.comp (Phase 4).
 //
 // It is kept as a deterministic, dependency-light reference so PointCloudTest can
-// pin the particle-count formula and the covariance / Cholesky sampling maths, and
-// so Phase 1 of docs/todo/PLAN_gsview_gaussian_point_pbvr.md has a starting point
-// for the CPU oracle. Self-contained: depends only on glm and GSPointCloud.
+// pin the particle-count formula and the covariance / Cholesky sampling maths.
+// Self-contained: depends only on glm and GSPointCloud.
 // -----------------------------------------------------------------------------
 
 #include "../../PointCloud/GSPointCloud.h"
@@ -43,8 +42,7 @@ public:
 	// with the same inputs produce byte-identical output.
 	CpuParticleSet generate(const Phantom::PointCloud::GSPointCloud& gs) const;
 
-	// Per-splat particle count, matching GSComputePBVR::particleCountForSplat() and
-	// gs_pbvr_gen.comp: clamp(round(densityScale * sigmoid(opacity) * maxPPS), 0, maxPPS).
+	// Per-splat particle count: clamp(round(densityScale * sigmoid(opacity) * maxPPS), 0, maxPPS).
 	int particleCountForSplat(const Phantom::PointCloud::GSPoint& p) const;
 
 private:

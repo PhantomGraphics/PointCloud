@@ -72,6 +72,8 @@ private:
     std::string cmdSetDensityScale(const std::string& arg);
     std::string cmdSetMaxParticlesPerSplat(const std::string& arg);
     std::string cmdSetPbvrParticleSize(const std::string& arg);
+    std::string cmdSetPbvr3dMethod(const std::string& arg);
+    std::string cmdGetPbvr3dMethod();
 
     // File / IO commands
     std::string cmdLoadPLY(const std::string& path);
@@ -81,8 +83,8 @@ private:
     // Defaults match GSViewPanel defaults.
     float lastSortPointSize_    = 2.0f;
     float lastDensityScale_     = 1.0f;
-    int   lastMaxParticles_     = 8;
-    float lastPbvrParticleSize_ = 4.0f;
+    int   lastMaxParticles_     = 2048;
+    float lastPbvrParticleSize_ = 8.0f;
 
     GSViewApp*      app_      = nullptr;
     GSViewRenderer* renderer_ = nullptr;

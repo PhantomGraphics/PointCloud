@@ -6,8 +6,13 @@
 #include "../PointCloud/GSPointCloud.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <functional>
+
+// The gps_*.comp GsPoint struct is 17 tightly-packed floats -- must match GSPoint.
+static_assert(sizeof(Phantom::PointCloud::GSPoint) == 68,
+              "GSPoint layout changed -- update gps_splat.comp / gps_pbvr3d.comp");
 
 namespace GSView {
 
@@ -90,10 +95,12 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
 
     // --- pipelines ---
     auto splatSpv = ::VKG::loadSPVRepo("shaders/gps_splat.comp.spv");
+    auto pbvrSpv = ::VKG::loadSPVRepo("shaders/gps_pbvr3d.comp.spv");
     auto resolveSpv = ::VKG::loadSPVRepo("shaders/gps_resolve.comp.spv");
     auto compVertSpv = ::VKG::loadSPVRepo("shaders/gps_composite.vert.spv");
     auto compFragSpv = ::VKG::loadSPVRepo("shaders/gps_composite.frag.spv");
-    if (splatSpv.empty() || resolveSpv.empty() || compVertSpv.empty() || compFragSpv.empty()) {
+    if (splatSpv.empty() || pbvrSpv.empty() || resolveSpv.empty() ||
+        compVertSpv.empty() || compFragSpv.empty()) {
         std::fprintf(stderr, "[GaussianPoint] shader SPV missing -- mode disabled\n");
         available_ = false;
         return;
@@ -104,6 +111,12 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     splatCfg.descriptorSetLayout = computeDsl_.get();
     splatCfg.pushConstantRange = { VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants) };
     if (!splatPipe_.create(ctx, splatCfg)) { available_ = false; return; }
+
+    Phantom::VKG::ComputePipelineConfig pbvrCfg{};
+    pbvrCfg.compSpv = pbvrSpv;
+    pbvrCfg.descriptorSetLayout = computeDsl_.get();
+    pbvrCfg.pushConstantRange = { VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants) };
+    if (!pbvr3dPipe_.create(ctx, pbvrCfg)) { available_ = false; return; }
 
     Phantom::VKG::ComputePipelineConfig resolveCfg{};
     resolveCfg.compSpv = resolveSpv;
@@ -129,6 +142,7 @@ void GaussianPointRenderer::setParams(const Params& p)
     params_.sppSide = std::clamp(params_.sppSide, 1, 4);
     params_.shDegree = std::clamp(params_.shDegree, 0, 3);
     params_.tonemapMode = std::clamp(params_.tonemapMode, 0, 2);
+    params_.pbvr3dMethod = std::clamp(params_.pbvr3dMethod, 0, 2);
     spp_ = static_cast<uint32_t>(params_.sppSide * params_.sppSide);
 }
 
@@ -278,7 +292,10 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     mix(static_cast<std::uint64_t>(params_.sppSide) * 131 + params_.seedMode * 17 + params_.countMode);
     mix(std::hash<float>{}(params_.densityScale));
     mix(std::hash<float>{}(params_.gamma));
+    mix(std::hash<float>{}(params_.basePointsPerSplat));
     mix(static_cast<std::uint64_t>(shDeg) * 7 + params_.tonemapMode);
+    mix(static_cast<std::uint64_t>(params_.pbvr3dMethod) * 3
+        + static_cast<std::uint64_t>(path_ == Path::Pbvr3d));
     mix(std::hash<float>{}(params_.background.x + params_.background.y * 3.0f + params_.background.z * 7.0f));
     if (h != lastChangeHash_ || camera_.view != lastView_) {
         resetPending_ = frames_;
@@ -304,8 +321,10 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     ubo.bg = glm::vec4(params_.background, 0.0f);
     ubo.camPos = glm::vec4(camera_.camPos, 0.0f);
     ubo.ctrl2 = glm::uvec4(resetAccum, static_cast<uint32_t>(shDeg),
-                           static_cast<uint32_t>(params_.tonemapMode), 0u);
-    ubo.p3 = glm::vec4(std::max(0.01f, params_.gamma), 0.0f, 0.0f, 0.0f);
+                           static_cast<uint32_t>(params_.tonemapMode),
+                           static_cast<uint32_t>(params_.pbvr3dMethod));
+    ubo.p3 = glm::vec4(std::max(0.01f, params_.gamma),
+                       std::max(0.0f, params_.basePointsPerSplat), 0.0f, 0.0f);
     paramsUbo_[frameIndex].write(&ubo, sizeof(ubo));
 
     lastFrameIndex_ = frameIndex;
@@ -337,12 +356,13 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     const uint32_t groups = (numSplats_ + 63u) / 64u;
 
     if (numSplats_ > 0) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splatPipe_.getPipeline());
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splatPipe_.getLayout(),
+        const auto& splat = (path_ == Path::Pbvr3d) ? pbvr3dPipe_ : splatPipe_;
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
                                 0, 1, &computeSets_[frameIndex], 0, nullptr);
 
         PushConstants pcDepth{ 0 };
-        vkCmdPushConstants(cmd, splatPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcDepth), &pcDepth);
+        vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcDepth), &pcDepth);
         vkCmdDispatch(cmd, groups, 1, 1);
 
         VkBufferMemoryBarrier depthRW = bufBarrier(depth, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
@@ -350,7 +370,7 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
                              0, 0, nullptr, 1, &depthRW, 0, nullptr);
 
         PushConstants pcColor{ 1 };
-        vkCmdPushConstants(cmd, splatPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcColor), &pcColor);
+        vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcColor), &pcColor);
         vkCmdDispatch(cmd, groups, 1, 1);
 
         VkBufferMemoryBarrier toResolve[2] = {
@@ -411,6 +431,7 @@ void GaussianPointRenderer::onCleanup(VkDevice device)
     shRest_.destroy(device);
     compositePipe_.destroy(device);
     splatPipe_.destroy(device);
+    pbvr3dPipe_.destroy(device);
     resolvePipe_.destroy(device);
     descPool_.destroy(device);
     computeDsl_.destroy(device);

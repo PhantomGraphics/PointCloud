@@ -8,8 +8,10 @@ if "%VULKAN_SDK%"=="" (
 
 cd /d "%~dp0"
 
-"%VULKAN_SDK%\Bin\glslc.exe" gs_pbvr.vert -o gs_pbvr.vert.spv
-"%VULKAN_SDK%\Bin\glslc.exe" gs_pbvr.frag -o gs_pbvr.frag.spv
-"%VULKAN_SDK%\Bin\glslc.exe" gs_pbvr_gen.comp -o gs_pbvr_gen.comp.spv
+"%VULKAN_SDK%\Bin\glslc.exe" gps_splat.comp     -o gps_splat.comp.spv
+"%VULKAN_SDK%\Bin\glslc.exe" gps_pbvr3d.comp    -o gps_pbvr3d.comp.spv
+"%VULKAN_SDK%\Bin\glslc.exe" gps_resolve.comp   -o gps_resolve.comp.spv
+"%VULKAN_SDK%\Bin\glslc.exe" gps_composite.vert -o gps_composite.vert.spv
+"%VULKAN_SDK%\Bin\glslc.exe" gps_composite.frag -o gps_composite.frag.spv
 
 echo Done.

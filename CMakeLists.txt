@@ -3,13 +3,11 @@
 # PointCloudView/PointRenderer/GSView (Vulkan apps).
 #
 # CMake is the only build system for this module (Windows and Linux).
-# MathCore/SpaceCore/NumericsCore/VolumeRenderer/VkAppBaseCore/etc. are now
+# MathCore/SpaceCore/NumericsCore/VkAppBaseCore/etc. are now
 # defined once in ../cmake/PhantomCoreLibs.cmake and
 # ../cmake/PhantomVulkanApp.cmake -- this file just calls
 # them (PointCloudCore itself links against MathCore/SpaceCore/NumericsCore
-# instead of bundling their raw sources, same behavior, cleaner; GSView's
-# volume-rendering path now reuses the shared VolumeRenderer/VolumeCore
-# instead of duplicating them as GSViewVolumeCore/GSViewVolumeRenderer) and
+# instead of bundling their raw sources, same behavior, cleaner) and
 # adds PointCloudTest/PointRenderer/PointCloudView/GSView on top, so it also
 # works standalone (`cmake -S PointCloud -B ...`) exactly as before, and
 # identically when add_subdirectory()'d from the root CMakeLists.txt.
@@ -21,15 +19,9 @@
 #   cmake --build PointCloud/build_linux -j
 #   ctest --test-dir PointCloud/build_linux --output-on-failure
 #
-# GSView.vcxproj additionally references CGLib/Volume/VolumeRenderer/
-# VolumeRenderer.vcxproj (for Phantom::Volume::PBVRPipeline/ParticleSet, used
-# by the PBVR render-mode toggle in GSViewRenderer/GSComputePBVR). NOTE:
-# GSView.vcxproj's AdditionalIncludeDirectories points at a stale
-# "..\..\CGLib\Volume\PBVRLib" path that doesn't exist on disk (renamed to
-# VolumeRenderer/ at some point, per its own vcxproj's leftover
-# RootNamespace=PBVRLib) -- resolves in practice via the ProjectReference's
-# public include dirs on Windows; this file just points directly at the real
-# path via phantom_add_volumerenderer_core()'s PUBLIC include dirs.
+# (GSView's old Phantom::Volume::PBVRPipeline dependency was removed in Phase 4
+#  of docs/todo/PLAN_gsview_gaussian_point_pbvr.md -- the PBVR3DExperimental path
+#  now runs on GSView's own GaussianPoint compute render graph.)
 
 cmake_minimum_required(VERSION 3.20)
 
@@ -137,7 +129,6 @@ if(PHANTOM_VULKAN_LIBRARY AND PHANTOM_GLFW_LIBRARY)
 
 phantom_add_vkappbase_core()
 phantom_add_vkrenderer_core()
-phantom_add_volumerenderer_core()
 
 # --- PointRenderer (Phantom::VKR point/GS-splat pipelines, shared with GSView) ---
 
@@ -203,9 +194,10 @@ phantom_add_runtime_shaders(PointCloudView
 
 # ---------------------------------------------------------------------------
 # GSView (GSView::GSViewApp) -- standalone Gaussian Splatting ImGui + Vulkan
-# viewer. Reuses PointCloudCore/PointRendererCore/VkAppBaseCore/VkRendererCore
-# above, plus the shared VolumeRenderer (phantom_add_volumerenderer_core(),
-# called above) for its PBVR render-mode toggle.
+# viewer. Reuses PointCloudCore/PointRendererCore/VkAppBaseCore/VkRendererCore.
+# The SortBased path uses PointRenderer's gs_splat pipeline; the GaussianPoint
+# and PBVR3DExperimental paths are GSView's own compute render graph
+# (GaussianPointRenderer + gps_*.comp, docs/todo/PLAN_gsview_gaussian_point_pbvr.md).
 # ---------------------------------------------------------------------------
 
 add_executable(GSView
@@ -213,21 +205,18 @@ add_executable(GSView
     ${POINTCLOUD_ROOT}/GSView/GSViewApp.cpp
     ${POINTCLOUD_ROOT}/GSView/GSViewCommandDispatcher.cpp
     ${POINTCLOUD_ROOT}/GSView/GSViewRenderer.cpp
-    ${POINTCLOUD_ROOT}/GSView/GSComputePBVR.cpp
     ${POINTCLOUD_ROOT}/GSView/GaussianPointRenderer.cpp
     ${POINTCLOUD_ROOT}/GSView/ui/GSViewPanel.cpp
     ${POINTCLOUD_ROOT}/GSView/ui/GSViewMenuBar.cpp
 )
 target_include_directories(GSView PRIVATE
     ${CGLIB_ROOT}/UIWidgets
-    ${CGLIB_ROOT}/Volume/VolumeRenderer
     ${POINTCLOUD_ROOT}/PointRenderer/include
     ${POINTCLOUD_ROOT}/PointCloud
 )
 target_link_libraries(GSView PRIVATE
     PointCloudCore
     PointRendererCore
-    VolumeRenderer
     VkAppBaseCore
     VkRendererCore
     ${PHANTOM_VULKAN_LIBRARY}
@@ -239,7 +228,7 @@ endif()
 target_compile_options(GSView PRIVATE ${PHANTOM_WARN_FLAGS})
 
 # GSView compiles+copies BOTH PointRenderer/shaders (point/gs_splat/gs_sort
-# pipelines, shared with PointCloudView) and GSView's own shaders/ (gs_pbvr*)
+# pipelines, shared with PointCloudView) and GSView's own shaders/ (gps_*)
 # into the output shaders/ dir -- glslc-compiled from GLSL, same as above.
 phantom_add_runtime_shaders(GSView
     ${POINTCLOUD_ROOT}/PointRenderer/shaders

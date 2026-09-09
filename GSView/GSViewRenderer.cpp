@@ -117,8 +117,19 @@ void GSViewRenderer::setGSCloud(const Phantom::PointCloud::GSPointCloud* cloud)
 {
 	gsCloud_ = cloud;
 	sceneDirty_ = true;
-	pbvrDirty_ = true;
 	gaussianPoint_.setGSCloud(cloud);
+}
+
+static bool isGpMode(RenderMode m)
+{
+	return m == RenderMode::GaussianPoint || m == RenderMode::PBVR3DExperimental;
+}
+
+void GSViewRenderer::setRenderMode(RenderMode mode)
+{
+	if (isGpMode(mode) && mode_ != mode)
+		gaussianPoint_.resetAccumulation();
+	mode_ = mode;
 }
 
 void GSViewRenderer::setGaussianPointParams(const GaussianPointRenderer::Params& p)
@@ -131,7 +142,7 @@ void GSViewRenderer::setGaussianPointParams(const GaussianPointRenderer::Params&
 
 void GSViewRenderer::recordGaussianPointCompute(VkCommandBuffer cmd, uint32_t frameIndex)
 {
-	if (mode_ == RenderMode::GaussianPoint)
+	if (isGpMode(mode_))
 		gaussianPoint_.recordCompute(cmd, frameIndex);
 }
 
@@ -140,23 +151,31 @@ void GSViewRenderer::setSortPointSize(float s)
 	sortRenderer_.setPointSize(std::max(1.0f, s));
 }
 
+// PBVR3DExperimental knobs mapped onto the shared GaussianPoint params.
 void GSViewRenderer::setDensityScale(float s)
 {
-	densityScale_ = std::max(0.1f, s);
-	computePBVR_.setParams(densityScale_, maxParticlesPerSplat_);
-	pbvrDirty_ = true;
+	gpParams_.densityScale = std::max(0.1f, s);
+	gaussianPoint_.setParams(gpParams_);
 }
 
 void GSViewRenderer::setMaxParticlesPerSplat(int n)
 {
-	maxParticlesPerSplat_ = std::max(1, n);
-	computePBVR_.setParams(densityScale_, maxParticlesPerSplat_);
-	pbvrDirty_ = true;
+	gpParams_.maxPointsPerSplat = static_cast<float>(std::max(1, n));
+	gaussianPoint_.setParams(gpParams_);
 }
 
 void GSViewRenderer::setPbvrParticleSize(float s)
 {
-	pbvrParticleSize_ = glm::clamp(s, 1.0f, 16.0f);
+	// Repurposed: base particles per splat (the "point size" knob is gone -- the
+	// on-screen density is what matters, see the Phase 4 plan).
+	gpParams_.basePointsPerSplat = std::max(1.0f, s * 64.0f);
+	gaussianPoint_.setParams(gpParams_);
+}
+
+void GSViewRenderer::setPbvr3dMethod(int method)
+{
+	gpParams_.pbvr3dMethod = std::clamp(method, 0, 2);
+	gaussianPoint_.setParams(gpParams_);
 }
 
 uint32_t GSViewRenderer::getSplatCount() const
@@ -203,13 +222,6 @@ void GSViewRenderer::onInit(Phantom::VKG::VulkanContext& ctx, const Phantom::VKG
 	sortRenderer_.onInit(ctx, pool, renderPass, framesInFlight, std::move(sortShaders_));
 	sceneDirty_ = false;
 
-	pbvrPipeline_.create(ctx, renderPass, framesInFlight,
-		::VKG::loadSPVRepo("shaders/gs_pbvr.vert.spv"),
-		::VKG::loadSPVRepo("shaders/gs_pbvr.frag.spv"));
-	computePBVR_.create(ctx);
-	computePBVR_.setParams(densityScale_, maxParticlesPerSplat_);
-	pbvrDirty_ = true;
-
 	gaussianPoint_.onInit(ctx, pool, renderPass, framesInFlight);
 	gaussianPoint_.setParams(gpParams_);
 	gaussianPoint_.setGSCloud(gsCloud_);
@@ -229,16 +241,10 @@ void GSViewRenderer::onUpdate(uint32_t frameIndex)
 	const glm::vec3 eye = computeEye();
 	sortRenderer_.onUpdate(frameIndex, mvp, eye);
 
-	if (pbvrDirty_) {
-		regeneratePBVR();
-		pbvrDirty_ = false;
-	}
-	Phantom::Volume::PBVRPipeline::UBO ubo{};
-	ubo.mvp = mvp;
-	ubo.particleSize = pbvrParticleSize_;
-	pbvrPipeline_.updateUBO(frameIndex, ubo);
-
-	// GaussianPoint: (re)create extent-dependent buffers, then push camera + params.
+	// GaussianPoint / PBVR3D pipeline: (re)create extent-dependent buffers, then push camera + params.
+	gaussianPoint_.setPath(mode_ == RenderMode::PBVR3DExperimental
+	                           ? GaussianPointRenderer::Path::Pbvr3d
+	                           : GaussianPointRenderer::Path::GaussianPoint);
 	if (gpExtentDirty_ && extent_.width > 0 && extent_.height > 0) {
 		gaussianPoint_.onResize(*ctx_, *pool_, extent_);
 		gpExtentDirty_ = false;
@@ -263,33 +269,13 @@ void GSViewRenderer::onRender(VkCommandBuffer cmd, uint32_t frameIndex)
 		sortRenderer_.onRender(cmd, frameIndex);
 		return;
 	}
-
-	if (mode_ == RenderMode::GaussianPoint) {
-		gaussianPoint_.recordComposite(cmd, frameIndex);
-		return;
-	}
-
-	const uint32_t drawCount = computePBVR_.getDrawCount();
-	if (drawCount == 0 || !computePBVR_.isValid()) return;
-
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pbvrPipeline_.getPipeline());
-
-	VkBuffer vbuf = computePBVR_.getVertexBuffer();
-	constexpr VkDeviceSize offset = 0;
-	vkCmdBindVertexBuffers(cmd, 0, 1, &vbuf, &offset);
-
-	const VkDescriptorSet set = pbvrPipeline_.getDescriptorSet(frameIndex);
-	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-		pbvrPipeline_.getLayout(), 0, 1, &set, 0, nullptr);
-
-	vkCmdDraw(cmd, drawCount, 1, 0, 0);
+	// GaussianPoint and PBVR3DExperimental share the compute pipeline + composite.
+	gaussianPoint_.recordComposite(cmd, frameIndex);
 }
 
 void GSViewRenderer::onCleanup(VkDevice device)
 {
 	sortRenderer_.onCleanup(device);
-	computePBVR_.destroy(device);
-	pbvrPipeline_.destroy(device);
 	gaussianPoint_.onCleanup(device);
 	ctx_ = nullptr;
 	pool_ = nullptr;
@@ -306,12 +292,6 @@ void GSViewRenderer::syncSortScene()
 	vkScene_.setGSSplats(id, buildSplats(*gsCloud_, debugSplat_, splatSizeScale_));
 	vkScene_.setVisible(id, true);
 	sortRenderer_.setActiveScene(id);
-}
-
-void GSViewRenderer::regeneratePBVR()
-{
-	if (!ctx_ || !pool_ || !gsCloud_ || gsCloud_->points.empty()) return;
-	computePBVR_.dispatch(*ctx_, *pool_, *gsCloud_);
 }
 
 glm::mat4 GSViewRenderer::computeMVP() const

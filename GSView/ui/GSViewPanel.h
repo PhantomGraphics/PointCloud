@@ -13,7 +13,7 @@ public:
 	void init(
 		std::function<void(RenderMode)> onModeChanged,
 		std::function<void(float)> onSortParamsChanged,
-		std::function<void(float, int, float)> onPBVRParamsChanged,
+		std::function<void(float, int, float, int)> onPBVRParamsChanged,
 		std::function<void(float)> onSplatSizeChanged,
 		std::function<void(const GaussianPointRenderer::Params&)> onGpParamsChanged);
 
@@ -41,8 +41,9 @@ private:
 	RenderMode currentMode_ = RenderMode::SortBased;
 	float sortPointSize_ = 2.0f;
 	float densityScale_ = 1.0f;
-	int maxParticlesPerSplat_ = 8;
-	float pbvrParticleSize_ = 4.0f;
+	int maxParticlesPerSplat_ = 2048;   // per-splat particle cap (PBVR3D)
+	float pbvrParticleSize_ = 8.0f;     // "Base Points x64" -> 512 base points/splat
+	int pbvr3dMethod_ = 0;   // 0 proportional, 1 extinction, 2 view-conditioned
 	size_t splatCount_ = 0;
 	size_t particleCount_ = 0;
 	size_t particleCapacity_ = 0;
@@ -50,7 +51,7 @@ private:
 
 	std::function<void(RenderMode)> onModeChanged_;
 	std::function<void(float)> onSortParamsChanged_;
-	std::function<void(float, int, float)> onPBVRParamsChanged_;
+	std::function<void(float, int, float, int)> onPBVRParamsChanged_;
 	std::function<void(float)> onSplatSizeChanged_;
 	std::function<void(const GaussianPointRenderer::Params&)> onGpParamsChanged_;
 

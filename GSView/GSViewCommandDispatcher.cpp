@@ -103,6 +103,7 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGpShDegree")          return cmdGetGpShDegree();
     if (name == "GetGpTonemap")           return cmdGetGpTonemap();
     if (name == "GetGpGamma")             return cmdGetGpGamma();
+    if (name == "GetPbvr3dMethod")        return cmdGetPbvr3dMethod();
 
     if (rest.empty()) return "Error:missing argument for " + name;
 
@@ -119,6 +120,7 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "SetGpShDegree")          return cmdSetGpShDegree(rest);
     if (name == "SetGpTonemap")           return cmdSetGpTonemap(rest);
     if (name == "SetGpGamma")             return cmdSetGpGamma(rest);
+    if (name == "SetPbvr3dMethod")        return cmdSetPbvr3dMethod(rest);
     if (name == "LoadPLY")                return cmdLoadPLY(rest);
     if (name == "Screenshot")             return cmdScreenshot(rest);
 
@@ -269,6 +271,31 @@ std::string GSViewCommandDispatcher::cmdSetPbvrParticleSize(const std::string& a
     renderer_->setPbvrParticleSize(v);
     lastPbvrParticleSize_ = v;
     return "OK";
+}
+
+// ---- PBVR3DExperimental (Phase 4) ---------------------------------------------
+
+std::string GSViewCommandDispatcher::cmdSetPbvr3dMethod(const std::string& arg)
+{
+    if (!renderer_) return "Error:renderer not available";
+    int m;
+    if      (arg == "proportional")     m = 0;
+    else if (arg == "extinction")       m = 1;
+    else if (arg == "view_conditioned") m = 2;
+    else if (!tryInt(arg, m) || m < 0 || m > 2)
+        return "Error:method must be proportional|extinction|view_conditioned";
+    renderer_->setPbvr3dMethod(m);
+    return "OK";
+}
+
+std::string GSViewCommandDispatcher::cmdGetPbvr3dMethod()
+{
+    if (!renderer_) return "Val:proportional";
+    switch (renderer_->getPbvr3dMethod()) {
+        case 1:  return "Val:extinction";
+        case 2:  return "Val:view_conditioned";
+        default: return "Val:proportional";
+    }
 }
 
 // ---- GaussianPoint (Phase 2) ----------------------------------------------

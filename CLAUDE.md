@@ -61,8 +61,8 @@ cmake --build --preset windows-debug
 .\PointCloud\GSView\run_gs_scenarios.ps1 -Configuration Debug
 ```
 
-シナリオ JSON は `PointCloud\GSView\scenarios\`（`default_state.json`・`load_ply.json`・`load_splat.json`・`load_error.json`・`large_file.json`・`params_sortbased.json`・`params_pbvr.json`・`render_mode.json`・`reload_same_count.json`・`gaussian_point.json` の 10 本）で、いずれも合成データのみで完結する
-（外部ダウンロード不要。`large_file.json` は合成生成の `gs_large_scene.ply`、`reload_same_count.json` は `gs_sphere.ply`＋同数の `gs_sphere_b.ply`、`gaussian_point.json` は `gs_sphere.ply` を使い `screenshots/gsview_gaussian_point.png` を出力する）。
+シナリオ JSON は `PointCloud\GSView\scenarios\`（`default_state`・`load_ply`・`load_splat`・`load_error`・`large_file`・`params_sortbased`・`params_pbvr`・`render_mode`・`reload_same_count`・`gaussian_point`・`pbvr3d_modes` の 11 本）で、いずれも合成データのみで完結する
+（外部ダウンロード不要。`large_file` は `gs_large_scene.ply`、`reload_same_count` は `gs_sphere.ply`＋同数の `gs_sphere_b.ply`、`gaussian_point`/`pbvr3d_modes` は `gs_sphere.ply` を使い `screenshots/gsview_*.png` を出力する）。
 `run_gs_scenarios.ps1` は実行前に `download_gs_samples.ps1`（不足ファイルのみ生成）を自動で呼ぶため、空の `samples/gs` からでも通る。
 
 ## Architecture
@@ -147,18 +147,18 @@ cmake --build --preset windows-debug
 
 ### GSView（`GSView/`）— Gaussian Splatting スタンドアロン ImGui + Vulkan アプリ
 
-`GSViewApp : VkAppBase` 直下。**`GSView` 名前空間**。ソートベース GS 描画・`PBVR3DExperimental`（3D Gaussian → 世界空間パーティクル、旧称 "PBVR"）・`GaussianPoint`（GPS 準拠の画面空間確率的不透明点、Phase 2）の 3 モードに対応。
+`GSViewApp : VkAppBase` 直下。**`GSView` 名前空間**。3 モード: `SortBased`（ソート point-sprite、`PointRenderer` の gs_splat）・`PBVR3DExperimental`（3D Gaussian → 世界空間パーティクル、Phase 4 で 3 方式）・`GaussianPoint`（GPS 準拠の画面空間確率的不透明点、Phase 2）。`PBVR3DExperimental` と `GaussianPoint` は `GaussianPointRenderer` の compute render graph を共有する。
 `docs/todo/PLAN_gsview_gaussian_point_pbvr.md` に沿って参照経路（ReferenceSplat）を今後追加予定。
 
 - `RenderMode`（`GSViewRenderer.h`）— `SortBased` / `PBVR3DExperimental` / `GaussianPoint`。シナリオコマンド `SetRenderMode` は旧名 `PBVR` を `PBVR3DExperimental` の後方互換エイリアスとして受け付ける。`GaussianPoint` は renderer 初期化失敗時に理由付きで拒否。
-- `GSComputePBVR` — Vulkan Compute（`gs_pbvr_gen.comp`）による GPU 上での `PBVR3DExperimental` 用パーティクル生成。シングルパス + alpha=0 カリング方式。入力 SSBO キャッシュは `GSPointCloud::generation`（ロード毎に増える世代番号）で判定するので、同数の別 PLY を連続ロードしても更新される。`capacity`（バッファ容量）/ `generatedCount`（実生成数、全透明なら 0）/ `drawCount` を区別して公開。
-- `GSView/reference/GSParticleGenerator`（`GSView::reference`）— `PBVR3DExperimental` の CPU 参照実装。**描画経路では未使用**。`PointCloudTest`（`GSParticleGeneratorTest`）が粒子数式と決定性を固定する。
+- `GSView/reference/GSParticleGenerator`（`GSView::reference`）— opacity 比例の 3D 粒子化の CPU 参照実装。**描画経路では未使用**。`PointCloudTest`（`GSParticleGeneratorTest`）が粒子数式と決定性を固定する。
 - `GSView/GaussianPointMath.{h,cpp}`（`GSView::gpm`）— Gaussian-Point / PBVR 研究経路の純粋 CPU 数学（sigmoid・covariance 3D/2D EWA・dilog `Li₂` と逆関数・`E[N]=2π√detΣ2d·Li₂(o)`・Poisson・補正 2D 分布サンプリング・per-pixel coverage oracle・seed mode・depth packing）。Vulkan 非依存、**描画経路では未使用**（GPU シェーダの参照実装）。`PointCloudTest`（`GaussianPointMathTest`）が固定、共通テストベクトルは `GSView/GaussianPointTestVectors.h`。
-- `GSView/GaussianPointRenderer.{h,cpp}`（`GSView::GaussianPointRenderer`）— `RenderMode::GaussianPoint` の GPU compute レンダラ（Phase 2 MVP + Phase 3 部分）。毎フレーム GPU 上で clear → `gps_splat.comp`(depth pass / color pass、SH を linear で評価) → `gps_resolve.comp`（linear 平均 + progressive accumulation） → `gps_composite`（tone map + gamma、swapchain）。**32-bit two-pass**（`shaderBufferInt64Atomics` 非依存）。compute は `GSViewApp::onPreRender`、composite は `GSViewRenderer::onRender`。`GSViewRenderer` が所有。
-  - **Phase 3**: `f_rest_*` SH（degree 0..3、`GSPointCloud::shDegree`/`shRest`）+ `evalSH`、linear-HDR パイプライン（`colorBuf` は half3/`uvec2`、`accumBuf` は `vec4`）、progressive accumulation（per-frame-in-flight、camera/param 変更で自動 reset）、tone map（none/Reinhard/ACES）+ display gamma。moving camera は毎フレーム reset で responsive。
-  - 未実装: projected covariance の学習時完全互換、PSNR 検証ハーネス（Phase 6）、occlusion culling・scan/compaction（Phase 5）。
+- `GSView/GaussianPointRenderer.{h,cpp}`（`GSView::GaussianPointRenderer`）— `GaussianPoint` と `PBVR3DExperimental` **両モードの** GPU compute レンダラ。毎フレーム GPU 上で clear → splat pass（`gps_splat.comp` = GaussianPoint / `gps_pbvr3d.comp` = PBVR3D、`Path` で切替。depth pass / color pass、SH を linear で評価）→ `gps_resolve.comp`（linear 平均 + progressive accumulation）→ `gps_composite`（tone map + gamma、swapchain）。**32-bit two-pass**（`shaderBufferInt64Atomics` 非依存）。compute は `GSViewApp::onPreRender`、composite は `GSViewRenderer::onRender`。`GSViewRenderer` が所有。旧 `GSComputePBVR`/`PBVRPipeline`/`gs_pbvr*` は Phase 4 で削除。
+  - **Phase 3**: `f_rest_*` SH（degree 0..3、`GSPointCloud::shDegree`/`shRest`）+ `evalSH`、linear-HDR（`colorBuf` half3/`uvec2`、`accumBuf` `vec4`）、progressive accumulation（per-frame-in-flight、camera/param 変更で自動 reset）、tone map（none/Reinhard/ACES）+ gamma。
+  - **Phase 4**: `Path::Pbvr3d` + `Pbvr3dMethod`（Proportional / Extinction / ViewConditioned）。ViewConditioned は候補集合を GPS 目標 `spp·2π√detΣ2d·Li₂(o)` で thinning して on-screen 密度を GaussianPoint に一致させる。`Set/GetPbvr3dMethod` コマンド、`pbvr3d_modes.json` で 3 方式の統計比較。
+  - 未実装: projected covariance の学習時完全互換・PSNR 検証ハーネス（Phase 6）、occlusion culling・scan/compaction（Phase 5）。
 - `CGLib/VulkanGraphics/VulkanContext::supportsInt64BufferAtomics()` — optional capability（`shaderInt64` + `shaderBufferInt64Atomics` を照会し対応時のみ有効化。device 選択の必須条件ではない）。
-- `GSViewRenderer` — `PointRenderer` の `VkGSPointRenderer` を用いた GS スプラット描画。
+- `GSViewRenderer`（`IVkSubRenderer`）— 3 モードを束ねる。`SortBased` は `PointRenderer` の `VkGSPointRenderer`、他 2 モードは `GaussianPointRenderer` へ委譲。カメラ制御・履歴 reset もここ。
 - `GSViewCommandDispatcher : IScenarioDispatcher` — シナリオ用コマンド文字列ディスパッチャ。
 
 ## Key Conventions

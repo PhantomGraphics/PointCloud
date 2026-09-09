@@ -1,0 +1,255 @@
+#version 450
+
+// PBVR3DExperimental -- object-space "3D Gaussian -> world-space particles".
+// Same two-pass depth/colour scatter and the same depth/colour/accum buffers as
+// gps_splat.comp, so the two paths are directly comparable
+// (docs/todo/PLAN_gsview_gaussian_point_pbvr.md Phase 4).
+//
+// Particle count per Gaussian (ctrl2.w = method):
+//   0 Proportional    N ~ densityScale * sigmoid(o) * baseK           (view-independent)
+//   1 Extinction      N ~ densityScale * -log(1-sigmoid(o)) * baseK   (view-independent)
+//   2 ViewConditioned generate an extinction-count candidate set, then keep each
+//                     particle with probability  gpsTarget / Ncand, where
+//                     gpsTarget = spp * 2*pi*sqrt(det Sigma2d) * Li2(o) * densityScale.
+// Positions are drawn once in world space (Cholesky of R S^2 R^T); the same 3D
+// sample set is re-used every frame (only the frame seed changes for averaging).
+
+layout(local_size_x = 64) in;
+
+struct GsPoint {
+    float x, y, z;
+    float nx, ny, nz;
+    float f0, f1, f2;
+    float opacity;
+    float s0, s1, s2;
+    float r0, r1, r2, r3;
+};
+layout(std430, binding = 0) readonly buffer InBuf   { GsPoint splats[]; };
+layout(std430, binding = 1)          buffer DepthB  { uint  depthBuf[]; };
+layout(std430, binding = 2)          buffer ColorB  { uvec2 colorBuf[]; };
+layout(std430, binding = 4)          buffer StatsB  { uint  stats[]; };
+layout(std430, binding = 6) readonly buffer ShRestB { float shRest[]; };
+
+layout(std140, binding = 5) uniform Params {
+    mat4  view;
+    vec4  p0;      // focalX, focalY, cx, cy
+    vec4  p1;      // nearZ, lowPass, shC0, opacityCutoff
+    uvec4 dims;    // width, height, spp, sppSide
+    uvec4 ctrl;    // numSplats, frameIndex, seedMode, countMode
+    vec4  p2;      // maxPointsPerGaussian, footprintCullPx, densityScale, unused
+    vec4  bg;
+    vec4  camPos;
+    uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, pbvr3dMethod
+    vec4  p3;      // gamma, basePointsPerSplat, unused, unused
+} u;
+
+layout(push_constant) uniform PC { uint pass; } pc;
+
+const float PI2_6  = 1.6449340668482264;
+const float TWO_PI = 6.283185307179586;
+const float SH_C1  = 0.4886025119029199;
+
+uint pcg(uint v) {
+    uint s = v * 747796405u + 2891336453u;
+    uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+struct RS { uint s; };
+float rnd(inout RS r) { r.s = pcg(r.s); return float(r.s) * (1.0 / 4294967296.0); }
+vec2 boxMuller(inout RS r) {
+    float u1 = max(rnd(r), 1e-7), u2 = rnd(r);
+    float rad = sqrt(-2.0 * log(u1));
+    return vec2(rad * cos(TWO_PI * u2), rad * sin(TWO_PI * u2));
+}
+
+float dilogSeries(float x) {
+    float t = x, s = x;
+    for (int k = 2; k < 28; ++k) { t *= x; float a = t / (float(k)*float(k)); s += a; if (a < 1e-8*abs(s)) break; }
+    return s;
+}
+float dilog(float x) {
+    x = clamp(x, 0.0, 0.999999);
+    if (x <= 0.5) return dilogSeries(x);
+    return PI2_6 - log(x) * log(1.0 - x) - dilogSeries(1.0 - x);
+}
+
+mat3 quatToR(float w, float x, float y, float z) {
+    float il = inversesqrt(max(w*w + x*x + y*y + z*z, 1e-20));
+    w *= il; x *= il; y *= il; z *= il;
+    return mat3(
+        1.0-2.0*(y*y+z*z), 2.0*(x*y+z*w),     2.0*(x*z-y*w),
+        2.0*(x*y-z*w),     1.0-2.0*(x*x+z*z), 2.0*(y*z+x*w),
+        2.0*(x*z+y*w),     2.0*(y*z-x*w),     1.0-2.0*(x*x+y*y));
+}
+
+// Lower-triangular L with L L^T = A (3x3 SPD, column-major A[col][row]).
+mat3 chol3(mat3 A) {
+    const float eps = 1e-9;
+    float l00 = sqrt(max(A[0][0], eps));
+    float l10 = A[0][1] / l00;
+    float l20 = A[0][2] / l00;
+    float l11 = sqrt(max(A[1][1] - l10*l10, eps));
+    float l21 = (A[1][2] - l20*l10) / l11;
+    float l22 = sqrt(max(A[2][2] - l20*l20 - l21*l21, eps));
+    mat3 L = mat3(0.0);
+    L[0][0] = l00; L[0][1] = l10; L[0][2] = l20;
+    L[1][1] = l11; L[1][2] = l21;
+    L[2][2] = l22;
+    return L;
+}
+
+uint orderedDepthKey(float d) {
+    uint b = floatBitsToUint(d);
+    uint mask = ((b & 0x80000000u) != 0u) ? 0xFFFFFFFFu : 0x80000000u;
+    return b ^ mask;
+}
+
+vec3 evalSH(uint id, vec3 dc, vec3 dir) {
+    int deg = int(u.ctrl2.y);
+    vec3 result = u.p1.z * dc;
+    if (deg >= 1) {
+        int R = (deg + 1) * (deg + 1) - 1;
+        uint base = id * uint(3 * R);
+        float x = dir.x, y = dir.y, z = dir.z;
+        #define SH(k) vec3(shRest[base + uint(k)], shRest[base + uint(R) + uint(k)], shRest[base + uint(2*R) + uint(k)])
+        result += -SH_C1*y*SH(0) + SH_C1*z*SH(1) - SH_C1*x*SH(2);
+        if (deg >= 2) {
+            float xx=x*x, yy=y*y, zz=z*z, xy=x*y, yz=y*z, xz=x*z;
+            result += 1.0925484305920792*xy*SH(3) - 1.0925484305920792*yz*SH(4)
+                    + 0.31539156525252005*(2.0*zz-xx-yy)*SH(5)
+                    - 1.0925484305920792*xz*SH(6) + 0.5462742152960396*(xx-yy)*SH(7);
+            if (deg >= 3) {
+                result += -0.5900435899266435*y*(3.0*xx-yy)*SH(8) + 2.890611442640554*xy*z*SH(9)
+                        - 0.4570457994644658*y*(4.0*zz-xx-yy)*SH(10)
+                        + 0.3731763325901154*z*(2.0*zz-3.0*xx-3.0*yy)*SH(11)
+                        - 0.4570457994644658*x*(4.0*zz-xx-yy)*SH(12)
+                        + 1.445305721320277*z*(xx-yy)*SH(13)
+                        - 0.5900435899266435*x*(xx-3.0*yy)*SH(14);
+            }
+        }
+        #undef SH
+    }
+    return max(result + 0.5, vec3(0.0));
+}
+
+// Screen-space 2D covariance determinant (for the ViewConditioned target).
+float footprintDet2d(vec3 camMean, mat3 cov3) {
+    float tz = -camMean.z;
+    float fx = u.p0.x, fy = u.p0.y;
+    float limx = 1.3 * (0.5 * float(u.dims.x) / fx);
+    float limy = 1.3 * (0.5 * float(u.dims.y) / fy);
+    float tx = clamp(camMean.x / tz, -limx, limx) * tz;
+    float ty = clamp(camMean.y / tz, -limy, limy) * tz;
+    mat3 J = mat3(0.0);
+    J[0][0] = fx / tz;  J[2][0] = -fx * tx / (tz * tz);
+    J[1][1] = fy / tz;  J[2][1] = -fy * ty / (tz * tz);
+    mat3 T = J * mat3(u.view);
+    mat3 c = T * cov3 * transpose(T);
+    float a = c[0][0] + u.p1.y;
+    float b = c[0][1];
+    float d = c[1][1] + u.p1.y;
+    return max(a * d - b * b, 0.0);
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= u.ctrl.x) return;
+    GsPoint sp = splats[id];
+
+    vec3 world = vec3(sp.x, sp.y, sp.z);
+    vec3 cam   = (u.view * vec4(world, 1.0)).xyz;
+    float tzc  = -cam.z;
+    if (tzc <= u.p1.x) return;
+
+    float op = 1.0 / (1.0 + exp(-sp.opacity));
+    if (op < u.p1.w) return;
+
+    vec3 sc  = vec3(exp(sp.s0), exp(sp.s1), exp(sp.s2));
+    mat3 R   = quatToR(sp.r0, sp.r1, sp.r2, sp.r3);
+    mat3 S2  = mat3(sc.x*sc.x, 0, 0,  0, sc.y*sc.y, 0,  0, 0, sc.z*sc.z);
+    mat3 cov3 = R * S2 * transpose(R);
+    cov3[0][0] = max(cov3[0][0], 1e-9);
+    cov3[1][1] = max(cov3[1][1], 1e-9);
+    cov3[2][2] = max(cov3[2][2], 1e-9);
+    mat3 L3 = chol3(cov3);
+
+    uint method = u.ctrl2.w;
+    float dS   = u.p2.z;
+    float baseK = u.p3.y;
+
+    float lambda;      // candidate count
+    if (method == 0u)       lambda = dS * op * baseK;
+    else                    lambda = dS * (-log(max(1.0 - op, 1e-6))) * baseK;
+    lambda = min(lambda, u.p2.x);
+
+    // ViewConditioned keep-probability so the on-screen count matches GPS.
+    float keepProb = 1.0;
+    if (method == 2u) {
+        float det2d = footprintDet2d(cam, cov3);
+        float spp   = float(u.dims.z);
+        float gpsTarget = spp * TWO_PI * sqrt(det2d) * dilog(op) * dS;
+        keepProb = (lambda > 0.5) ? clamp(gpsTarget / lambda, 0.0, 1.0) : 0.0;
+    }
+
+    uint seed = pcg(id * 747796405u + 1u);
+    if (u.ctrl.z == 1u) seed = pcg(seed ^ (u.ctrl.y * 2654435761u + 1u));
+    RS rs; rs.s = (seed == 0u) ? 1u : seed;
+
+    int Ni;
+    if (u.ctrl.w == 1u) {
+        float fl = floor(lambda);
+        Ni = int(fl) + ((rnd(rs) < (lambda - fl)) ? 1 : 0);
+    } else if (lambda < 30.0) {
+        float Lp = exp(-lambda); float p = 1.0; int k = 0;
+        do { k++; p *= rnd(rs); } while (p > Lp && k < 256);
+        Ni = k - 1;
+    } else {
+        vec2 g = boxMuller(rs);
+        Ni = max(int(round(lambda + sqrt(lambda) * g.x)), 0);
+    }
+    if (Ni <= 0) {
+        if (pc.pass == 0u) atomicAdd(stats[0], uint(lambda * keepProb * 256.0));
+        return;
+    }
+
+    vec3 vdir = normalize(world - u.camPos.xyz);
+    vec3 lin  = evalSH(id, vec3(sp.f0, sp.f1, sp.f2), vdir);
+    uvec2 packed = uvec2(packHalf2x16(lin.xy), packHalf2x16(vec2(lin.z, 0.0)));
+
+    uint W_ = u.dims.x, H_ = u.dims.y, side = u.dims.w, sppI = u.dims.z;
+    float fx = u.p0.x, fy = u.p0.y, cx = u.p0.z, cy = u.p0.w;
+    uint drawn = 0u;
+    for (int i = 0; i < Ni; ++i) {
+        vec2 ab = boxMuller(rs);
+        vec2 cdn = boxMuller(rs);
+        vec3 z = vec3(ab.x, ab.y, cdn.x);
+        if (method == 2u && rnd(rs) >= keepProb) continue;
+
+        vec3 pw  = world + L3 * z;
+        vec3 pc3 = (u.view * vec4(pw, 1.0)).xyz;
+        float pz = -pc3.z;
+        if (pz <= u.p1.x) continue;
+
+        float fxp =  fx * (pc3.x / pz) + cx;
+        float fyp = -fy * (pc3.y / pz) + cy;
+        if (fxp < 0.0 || fxp >= float(W_) || fyp < 0.0 || fyp >= float(H_)) continue;
+
+        uint px = uint(fxp), py = uint(fyp);
+        uint sx = min(uint(fract(fxp) * float(side)), side - 1u);
+        uint sy = min(uint(fract(fyp) * float(side)), side - 1u);
+        uint sidx = ((py * W_ + px) * sppI) + (sy * side + sx);
+        uint dkey = orderedDepthKey(pz);
+        if (pc.pass == 0u) {
+            atomicMin(depthBuf[sidx], dkey);
+        } else if (depthBuf[sidx] == dkey) {
+            colorBuf[sidx] = packed;
+        }
+        drawn++;
+    }
+
+    if (pc.pass == 0u) {
+        atomicAdd(stats[0], uint(lambda * keepProb * 256.0));
+        atomicAdd(stats[1], uint(drawn));
+        atomicAdd(stats[3], drawn);
+    }
+}

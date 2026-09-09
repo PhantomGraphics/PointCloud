@@ -1,11 +1,9 @@
 ﻿#pragma once
 
-#include "GSComputePBVR.h"
 #include "GaussianPointRenderer.h"
 
 #include "../PointRenderer/include/VkPointRenderer.h"
 #include "../PointRenderer/include/VkPointScene.h"
-#include "../../CGLib/Volume/VolumeRenderer/PBVRPipeline.h"
 #include "../../CGLib/VkAppBase/IVkSubRenderer.h"
 
 #define GLM_FORCE_RADIANS
@@ -24,7 +22,8 @@ namespace GSView {
 
 // Render paths (docs/todo/PLAN_gsview_gaussian_point_pbvr.md):
 //   SortBased          - legacy sorted point-sprite splatting.
-//   PBVR3DExperimental - object-space "3D Gaussian -> world-space particles" (Phase 0 rename).
+//   PBVR3DExperimental - object-space "3D Gaussian -> world-space particles" (Phase 4:
+//                        3 particle-isation methods, runs on the GaussianPoint pipeline).
 //   GaussianPoint      - GPS-style screen-space stochastic-opaque-point renderer (Phase 2).
 enum class RenderMode { SortBased, PBVR3DExperimental, GaussianPoint };
 
@@ -43,21 +42,22 @@ public:
 
 	void setSortShaders(SortShaders s) { sortShaders_ = std::move(s); }
 	void setGSCloud(const Phantom::PointCloud::GSPointCloud* cloud);
-	void setRenderMode(RenderMode mode) {
-		if (mode == RenderMode::GaussianPoint && mode_ != mode)
-			gaussianPoint_.resetAccumulation();
-		mode_ = mode;
-	}
+	void setRenderMode(RenderMode mode);
 	RenderMode getRenderMode() const { return mode_; }
 
 	void setSortPointSize(float s);
 	void setSplatSizeScale(float s) { splatSizeScale_ = std::max(10.f, s); sceneDirty_ = true; }
 	float getSplatSizeScale() const { return splatSizeScale_; }
+	// PBVR3DExperimental knobs (now backed by the GaussianPoint pipeline).
 	void setDensityScale(float s);
 	void setMaxParticlesPerSplat(int n);
-	void setPbvrParticleSize(float s);
-	size_t getParticleCount() const { return computePBVR_.getGeneratedCount(); }
-	size_t getParticleCapacity() const { return computePBVR_.getCapacity(); }
+	void setPbvrParticleSize(float s);       // -> basePointsPerSplat
+	void setPbvr3dMethod(int method);
+	int  getPbvr3dMethod() const { return gpParams_.pbvr3dMethod; }
+	size_t getParticleCount() const { return gaussianPoint_.getStats().generatedCount; }
+	size_t getParticleCapacity() const {
+		return static_cast<size_t>(getSplatCount()) * static_cast<size_t>(gpParams_.maxPointsPerSplat);
+	}
 
 	// GaussianPoint (Phase 2)
 	bool isGaussianPointAvailable() const { return gaussianPoint_.isAvailable(); }
@@ -91,13 +91,6 @@ private:
 	VKR::VkPointRenderer sortRenderer_;
 	bool sceneDirty_ = true;
 
-	GSComputePBVR computePBVR_;
-	Phantom::Volume::PBVRPipeline pbvrPipeline_;
-	float densityScale_         = 1.0f;
-	int   maxParticlesPerSplat_ = 8;
-	float pbvrParticleSize_     = 4.0f;
-	bool  pbvrDirty_            = true;
-
 	GaussianPointRenderer gaussianPoint_;
 	GaussianPointRenderer::Params gpParams_;
 
@@ -119,7 +112,6 @@ private:
 	const Phantom::VKG::VulkanCommandPool* pool_ = nullptr;
 
 	void syncSortScene();
-	void regeneratePBVR();
 	glm::mat4 computeMVP() const;
 	glm::vec3 computeEye() const;
 };

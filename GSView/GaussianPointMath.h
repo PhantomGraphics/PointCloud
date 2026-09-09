@@ -115,7 +115,7 @@ double expectedPointCount(double detCov2d, double opacity);
 // Sampling
 // ---------------------------------------------------------------------------
 
-// pcg hash, bit-identical to gs_pbvr_gen.comp's pcg() so CPU and GPU can share
+// pcg hash, bit-identical to the gps_*.comp pcg() so CPU and GPU can share
 // seed streams.
 std::uint32_t pcgHash(std::uint32_t v);
 

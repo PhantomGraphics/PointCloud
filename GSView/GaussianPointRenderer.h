@@ -38,6 +38,21 @@ class GaussianPointRenderer {
 public:
     static constexpr uint32_t kMaxFrames = 2;
 
+    // Which splat pass runs. Both feed the same depth/colour/accum buffers and
+    // the same resolve + composite, so the two paths are directly comparable
+    // (docs/todo/PLAN_gsview_gaussian_point_pbvr.md Phase 4).
+    //   GaussianPoint - GPS screen-space stochastic-opaque-point scatter.
+    //   Pbvr3d        - object-space "3D Gaussian -> world particles" scatter.
+    enum class Path { GaussianPoint, Pbvr3d };
+
+    // Pbvr3d particle-count rule (research comparison, Phase 4).
+    //   Proportional    - N ~ densityScale * sigmoid(opacity) * basePointsPerSplat  (view-independent)
+    //   Extinction      - N ~ densityScale * -log(1-sigmoid(opacity)) * basePointsPerSplat (view-independent)
+    //   ViewConditioned - generate an extinction-count candidate set, then thin per
+    //                     particle so the on-screen count matches the GPS target
+    //                     spp * 2*pi*sqrt(det Sigma2d) * Li2(o).
+    enum class Pbvr3dMethod { Proportional = 0, Extinction = 1, ViewConditioned = 2 };
+
     struct Params {
         int   sppSide          = 2;      // subpixel grid side (spp = sppSide^2), 1..4
         int   seedMode         = 1;      // 0 = deterministic, 1 = frame-varying
@@ -52,6 +67,8 @@ public:
         int   tonemapMode      = 0;      // 0 none/clamp, 1 Reinhard, 2 ACES
         float gamma            = 1.0f;   // display gamma applied at composite
         float footprintCullPx  = 0.4f;   // cull Gaussians whose projected sigma is below this
+        int   pbvr3dMethod     = 0;      // Pbvr3dMethod
+        float basePointsPerSplat = 512.f; // Pbvr3d base count knob
     };
 
     struct Camera {
@@ -85,6 +102,8 @@ public:
     void setGSCloud(const Phantom::PointCloud::GSPointCloud* cloud) { cloud_ = cloud; }
     void setParams(const Params& p);
     void setCamera(const Camera& c) { camera_ = c; }
+    void setPath(Path p) { if (p != path_) { path_ = p; resetAccumulation(); } }
+    Path getPath() const { return path_; }
 
     bool isAvailable() const { return available_; }
     const char* backendName() const { return "32-bit two-pass"; }
@@ -111,12 +130,13 @@ private:
         glm::vec4  p2;    // maxPointsPerSplat, footprintCullPx, densityScale, 0
         glm::vec4  bg;    // background rgb, 0
         glm::vec4  camPos; // world-space camera position, 0
-        glm::uvec4 ctrl2; // resetAccum, shDegree, tonemapMode, 0
-        glm::vec4  p3;    // gamma, 0, 0, 0
+        glm::uvec4 ctrl2; // resetAccum, shDegree, tonemapMode, pbvr3dMethod
+        glm::vec4  p3;    // gamma, basePointsPerSplat, 0, 0
     };
     struct PushConstants { uint32_t pass; };
 
     bool available_ = false;
+    Path path_ = Path::GaussianPoint;
     Params params_;
     Camera camera_;
     const Phantom::PointCloud::GSPointCloud* cloud_ = nullptr;
@@ -154,7 +174,8 @@ private:
 
     // compute
     Phantom::VKG::VulkanDescriptorSetLayout computeDsl_;
-    Phantom::VKG::VulkanComputePipeline     splatPipe_;
+    Phantom::VKG::VulkanComputePipeline     splatPipe_;    // gps_splat.comp   (GaussianPoint)
+    Phantom::VKG::VulkanComputePipeline     pbvr3dPipe_;   // gps_pbvr3d.comp  (Pbvr3d)
     Phantom::VKG::VulkanComputePipeline     resolvePipe_;
 
     // composite (graphics)
