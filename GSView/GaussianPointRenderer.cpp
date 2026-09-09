@@ -45,6 +45,7 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     ctx_ = &ctx;
     pool_ = &pool;
     renderPass_ = renderPass;
+    deviceName_ = ctx.getDeviceName();
     frames_ = std::min<uint32_t>(framesInFlight, kMaxFrames);
     VkDevice dev = ctx.getDevice();
 

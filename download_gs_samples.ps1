@@ -187,6 +187,49 @@ function New-ShellPoints([int]$n = 15000, [double]$turns = 4.5, [double]$baseRad
     ,$pts
 }
 
+# Renderer stress scene (Phase 6): large footprints, extreme aspect ratios,
+# same-depth competition, partly off-screen cluster, sub-pixel splats.
+function New-StressPoints {
+    $rng = [Random]::new(2024)
+    $pts = [Collections.Generic.List[object]]::new()
+    $mk = {
+        param($x,$y,$z,$r,$g,$b,$sx,$sy,$sz)
+        [ordered]@{
+            x=$x; y=$y; z=$z; nx=[double]0; ny=[double]0; nz=[double]1
+            f_dc_0=$r; f_dc_1=$g; f_dc_2=$b; opacity=[double]1.5
+            scale_0=[Math]::Log($sx); scale_1=[Math]::Log($sy); scale_2=[Math]::Log($sz)
+            rot_0=[double]1; rot_1=[double]0; rot_2=[double]0; rot_3=[double]0
+        }
+    }
+    # 3 huge overlapping footprints near the centre
+    foreach ($o in @(-0.3, 0.0, 0.3)) { $pts.Add((& $mk $o 0 0 0.5 0.2 0.2 0.6 0.6 0.05)) }
+    # 24 extreme-aspect needles, random orientation
+    for ($i=0; $i -lt 24; $i++) {
+        $p = & $mk ($rng.NextDouble()*2-1) ($rng.NextDouble()*2-1) ($rng.NextDouble()*0.4-0.2) `
+                   0.2 0.6 0.9 0.9 0.003 0.003
+        $a=$rng.NextDouble(); $b=$rng.NextDouble(); $c=$rng.NextDouble()
+        $n=[Math]::Sqrt($a*$a+$b*$b+$c*$c+1e-9)
+        $p.rot_0=1/[Math]::Sqrt(2); $p.rot_1=$a/$n/[Math]::Sqrt(2); $p.rot_2=$b/$n/[Math]::Sqrt(2); $p.rot_3=$c/$n/[Math]::Sqrt(2)
+        $pts.Add($p)
+    }
+    # 60 splats at exactly the same depth (z = 0)
+    for ($i=0; $i -lt 60; $i++) {
+        $pts.Add((& $mk ($rng.NextDouble()*1.6-0.8) ($rng.NextDouble()*1.6-0.8) 0.0 `
+                        0.9 0.9 0.2 0.02 0.02 0.02))
+    }
+    # 40 splats far off to +x (mostly off-screen)
+    for ($i=0; $i -lt 40; $i++) {
+        $pts.Add((& $mk (2.5 + $rng.NextDouble()) ($rng.NextDouble()*2-1) ($rng.NextDouble()*2-1) `
+                        0.3 0.3 0.8 0.05 0.05 0.05))
+    }
+    # 120 sub-pixel splats
+    for ($i=0; $i -lt 120; $i++) {
+        $pts.Add((& $mk ($rng.NextDouble()*2-1) ($rng.NextDouble()*2-1) ($rng.NextDouble()*1.5-0.75) `
+                        0.7 0.5 0.3 0.0015 0.0015 0.0015))
+    }
+    ,$pts
+}
+
 # ---- メイン ----
 Write-Host ('=' * 55)
 Write-Host '  Gaussian Splatting Sample Generator'
@@ -213,6 +256,7 @@ foreach ($entry in @($config.synthetic)) {
         'galaxy' { New-GalaxyPoints $p.n $p.arms }
         'torus'  { New-TorusPoints  $p.n $p.majorRadius $p.tubeRadius }
         'shell'  { New-ShellPoints  $p.n $p.turns $p.baseRadius $p.growth $p.pitch $p.tubeRadius }
+        'stress' { New-StressPoints }
     }
     if ($needPly)   { Write-GSPly   $dest      $pts }
     if ($needSplat) { Write-GSSplat $splatDest $pts }

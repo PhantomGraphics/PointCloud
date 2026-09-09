@@ -62,6 +62,8 @@ public:
 	// GaussianPoint (Phase 2)
 	bool isGaussianPointAvailable() const { return gaussianPoint_.isAvailable(); }
 	GaussianPointRenderer::Stats getGaussianPointStats() const { return gaussianPoint_.getStats(); }
+	const std::string& getGaussianPointGpuName() const { return gaussianPoint_.deviceName(); }
+	VkExtent2D getExtent() const { return extent_; }
 	void setGaussianPointParams(const GaussianPointRenderer::Params& p);
 	const GaussianPointRenderer::Params& getGaussianPointParams() const { return gpParams_; }
 	// Records the GaussianPoint compute passes; call from the app's onPreRender.

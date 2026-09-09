@@ -55,6 +55,7 @@ private:
     std::string cmdGetGpGeneratedCount();
     std::string cmdGetGpStats();
     std::string cmdGetGpAccumFrames();
+    std::string cmdGetGpProfile();
     std::string cmdGetGpShDegree();
     std::string cmdGetGpTonemap();
     std::string cmdGetGpGamma();
@@ -78,6 +79,9 @@ private:
     // File / IO commands
     std::string cmdLoadPLY(const std::string& path);
     std::string cmdScreenshot(const std::string& path);
+
+    // Profile / sidecar metadata (Phase 6). key=value;... for the current GP frame.
+    std::string buildProfile() const;
 
     // Cached parameter values (renderer exposes no getters for these).
     // Defaults match GSViewPanel defaults.

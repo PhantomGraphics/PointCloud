@@ -28,6 +28,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 namespace Phantom::VKG { class VulkanContext; class VulkanCommandPool; }
 namespace Phantom::PointCloud { struct GSPointCloud; }
@@ -107,6 +108,7 @@ public:
 
     bool isAvailable() const { return available_; }
     const char* backendName() const { return "32-bit two-pass"; }
+    const std::string& deviceName() const { return deviceName_; }
     Stats getStats() const;
 
     // Called from GSViewRenderer::onUpdate: uploads the input SSBO if the cloud
@@ -136,6 +138,7 @@ private:
     struct PushConstants { uint32_t pass; };
 
     bool available_ = false;
+    std::string deviceName_;
     Path path_ = Path::GaussianPoint;
     Params params_;
     Camera camera_;

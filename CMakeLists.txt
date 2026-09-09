@@ -89,6 +89,9 @@ if(PHANTOM_GTEST_FOUND)
         # (docs/todo/PLAN_gsview_gaussian_point_pbvr.md Phase 1). Pinned by
         # GaussianPointMathTest.cpp; will also back the GPU shaders later.
         ${POINTCLOUD_ROOT}/GSView/GaussianPointMath.cpp
+        # CPU renderers + image metrics for GPU-vs-oracle verification (Phase 6).
+        # Pinned by GaussianPointOracleTest.cpp.
+        ${POINTCLOUD_ROOT}/GSView/GaussianPointOracle.cpp
     )
 
     target_include_directories(PointCloudTest PRIVATE

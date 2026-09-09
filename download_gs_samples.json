@@ -35,6 +35,12 @@
       "label": "large scene (shell, ~15 000 splats, for large-file load-path coverage)",
       "generator": "shell",
       "params": { "n": 15000, "turns": 4.5, "baseRadius": 0.08, "growth": 0.18, "pitch": 0.05, "tubeRadius": 0.05 }
+    },
+    {
+      "file": "gs_stress.ply",
+      "label": "renderer stress (large footprints, extreme aspect, same-depth, off-screen, sub-pixel)",
+      "generator": "stress",
+      "params": {}
     }
   ]
 }

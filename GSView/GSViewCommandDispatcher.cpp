@@ -6,6 +6,7 @@
 #include <charconv>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 namespace GSView {
@@ -100,6 +101,7 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGpGeneratedCount")    return cmdGetGpGeneratedCount();
     if (name == "GetGpStats")             return cmdGetGpStats();
     if (name == "GetGpAccumFrames")       return cmdGetGpAccumFrames();
+    if (name == "GetGpProfile")           return cmdGetGpProfile();
     if (name == "GetGpShDegree")          return cmdGetGpShDegree();
     if (name == "GetGpTonemap")           return cmdGetGpTonemap();
     if (name == "GetGpGamma")             return cmdGetGpGamma();
@@ -349,6 +351,44 @@ std::string GSViewCommandDispatcher::cmdGetGpAccumFrames()
     return "Val:" + std::to_string(renderer_->getGaussianPointStats().accumFrames);
 }
 
+std::string GSViewCommandDispatcher::buildProfile() const
+{
+    if (!renderer_) return "";
+    const auto& p = renderer_->getGaussianPointParams();
+    const auto  s = renderer_->getGaussianPointStats();
+    const VkExtent2D ext = renderer_->getExtent();
+
+    std::string path = "GaussianPoint";
+    std::string method = "-";
+    switch (renderer_->getRenderMode()) {
+        case RenderMode::PBVR3DExperimental:
+            path = "PBVR3D";
+            method = renderer_->getPbvr3dMethod() == 1 ? "extinction"
+                   : renderer_->getPbvr3dMethod() == 2 ? "view_conditioned" : "proportional";
+            break;
+        case RenderMode::SortBased: path = "SortBased"; break;
+        default: break;
+    }
+
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+        "gpu=%s;path=%s;method=%s;res=%ux%u;spp=%d;seed=%s;densityScale=%s;shDegree=%d;shDegreeData=%d;"
+        "tonemap=%d;gamma=%s;expected=%u;generated=%u;activeSamples=%u;drawnPoints=%u;accumFrames=%u",
+        renderer_->getGaussianPointGpuName().c_str(), path.c_str(), method.c_str(),
+        ext.width, ext.height, p.sppSide * p.sppSide,
+        p.seedMode == 0 ? "deterministic" : "frame",
+        fmtF(p.densityScale).c_str(), p.shDegree, s.shDegreeData,
+        p.tonemapMode, fmtF(p.gamma).c_str(),
+        s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints, s.accumFrames);
+    return buf;
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpProfile()
+{
+    const std::string prof = buildProfile();
+    return prof.empty() ? "Error:renderer not available" : ("Profile:" + prof);
+}
+
 std::string GSViewCommandDispatcher::cmdGetGpShDegree()
 {
     if (!renderer_) return "Val:0";
@@ -464,6 +504,30 @@ std::string GSViewCommandDispatcher::cmdScreenshot(const std::string& path)
     const std::string abs = std::filesystem::absolute(path).string();
     std::filesystem::create_directories(std::filesystem::path(abs).parent_path());
     app_->requestScreenshot(abs);
+
+    // Sidecar metadata (Phase 6): <image>.json with the render profile.
+    const std::string prof = buildProfile();
+    if (!prof.empty()) {
+        std::ofstream sc(abs + ".json");
+        if (sc) {
+            sc << "{\n";
+            bool first = true;
+            size_t i = 0;
+            while (i < prof.size()) {
+                const size_t sep = prof.find(';', i);
+                const std::string kv = prof.substr(i, sep == std::string::npos ? std::string::npos : sep - i);
+                const size_t eq = kv.find('=');
+                if (eq != std::string::npos) {
+                    if (!first) sc << ",\n";
+                    sc << "  \"" << kv.substr(0, eq) << "\": \"" << kv.substr(eq + 1) << "\"";
+                    first = false;
+                }
+                if (sep == std::string::npos) break;
+                i = sep + 1;
+            }
+            sc << "\n}\n";
+        }
+    }
     return "OK:" + abs;
 }
 
