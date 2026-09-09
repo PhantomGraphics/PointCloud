@@ -152,7 +152,8 @@ cmake --build --preset windows-debug
 
 - `RenderMode`（`GSViewRenderer.h`）— `SortBased` / `PBVR3DExperimental`。シナリオコマンド `SetRenderMode` は旧名 `PBVR` を後方互換エイリアスとして受け付ける（正準名は `PBVR3DExperimental`）。
 - `GSComputePBVR` — Vulkan Compute（`gs_pbvr_gen.comp`）による GPU 上での `PBVR3DExperimental` 用パーティクル生成。シングルパス + alpha=0 カリング方式。入力 SSBO キャッシュは `GSPointCloud::generation`（ロード毎に増える世代番号）で判定するので、同数の別 PLY を連続ロードしても更新される。`capacity`（バッファ容量）/ `generatedCount`（実生成数、全透明なら 0）/ `drawCount` を区別して公開。
-- `GSView/reference/GSParticleGenerator`（`GSView::reference`）— `PBVR3DExperimental` の CPU 参照実装。**描画経路では未使用**。`PointCloudTest`（`GSParticleGeneratorTest`）が粒子数式と決定性を固定する。Phase 1 の CPU oracle の土台。
+- `GSView/reference/GSParticleGenerator`（`GSView::reference`）— `PBVR3DExperimental` の CPU 参照実装。**描画経路では未使用**。`PointCloudTest`（`GSParticleGeneratorTest`）が粒子数式と決定性を固定する。
+- `GSView/GaussianPointMath.{h,cpp}`（`GSView::gpm`）— Gaussian-Point / PBVR 研究経路の純粋 CPU 数学（sigmoid・covariance 3D/2D EWA・dilog `Li₂` と逆関数・`E[N]=2π√detΣ2d·Li₂(o)`・Poisson・補正 2D 分布サンプリング・per-pixel coverage oracle・seed mode・depth packing）。Vulkan 非依存、**描画経路では未使用**（GPU シェーダの参照実装）。`PointCloudTest`（`GaussianPointMathTest`）が固定、共通テストベクトルは `GSView/GaussianPointTestVectors.h`。
 - `GSViewRenderer` — `PointRenderer` の `VkGSPointRenderer` を用いた GS スプラット描画。
 - `GSViewCommandDispatcher : IScenarioDispatcher` — シナリオ用コマンド文字列ディスパッチャ。
 

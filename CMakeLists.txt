@@ -93,11 +93,16 @@ if(PHANTOM_GTEST_FOUND)
         # CPU reference for the PBVR3DExperimental particle generation (not on any
         # render path -- see the file header). Pinned by GSParticleGeneratorTest.cpp.
         ${POINTCLOUD_ROOT}/GSView/reference/GSParticleGenerator.cpp
+        # Pure CPU maths + coverage oracle for the Gaussian-Point research paths
+        # (docs/todo/PLAN_gsview_gaussian_point_pbvr.md Phase 1). Pinned by
+        # GaussianPointMathTest.cpp; will also back the GPU shaders later.
+        ${POINTCLOUD_ROOT}/GSView/GaussianPointMath.cpp
     )
 
     target_include_directories(PointCloudTest PRIVATE
         ${REPO_ROOT}
         ${POINTCLOUD_ROOT}/PointCloudTest
+        ${POINTCLOUD_ROOT}/GSView
         ${POINTCLOUD_ROOT}/GSView/reference
         ${CGLIB_ROOT}/ThirdParty/glm-0.9.9.8
     )
