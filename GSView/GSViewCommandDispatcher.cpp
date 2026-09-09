@@ -102,6 +102,8 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGpStats")             return cmdGetGpStats();
     if (name == "GetGpAccumFrames")       return cmdGetGpAccumFrames();
     if (name == "GetGpProfile")           return cmdGetGpProfile();
+    if (name == "GetGpTimings")           return cmdGetGpTimings();
+    if (name == "GetGpPointBudget")       return cmdGetGpPointBudget();
     if (name == "GetGpShDegree")          return cmdGetGpShDegree();
     if (name == "GetGpTonemap")           return cmdGetGpTonemap();
     if (name == "GetGpGamma")             return cmdGetGpGamma();
@@ -123,6 +125,7 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "SetGpTonemap")           return cmdSetGpTonemap(rest);
     if (name == "SetGpGamma")             return cmdSetGpGamma(rest);
     if (name == "SetPbvr3dMethod")        return cmdSetPbvr3dMethod(rest);
+    if (name == "SetGpPointBudget")       return cmdSetGpPointBudget(rest);
     if (name == "LoadPLY")                return cmdLoadPLY(rest);
     if (name == "Screenshot")             return cmdScreenshot(rest);
 
@@ -370,16 +373,18 @@ std::string GSViewCommandDispatcher::buildProfile() const
         default: break;
     }
 
-    char buf[512];
+    char buf[768];
     std::snprintf(buf, sizeof(buf),
-        "gpu=%s;path=%s;method=%s;res=%ux%u;spp=%d;seed=%s;densityScale=%s;shDegree=%d;shDegreeData=%d;"
-        "tonemap=%d;gamma=%s;expected=%u;generated=%u;activeSamples=%u;drawnPoints=%u;accumFrames=%u",
+        "gpu=%s;path=%s;method=%s;res=%ux%u;spp=%d;seed=%s;densityScale=%s;pointBudget=%s;"
+        "shDegree=%d;shDegreeData=%d;tonemap=%d;gamma=%s;expected=%u;generated=%u;activeSamples=%u;"
+        "drawnPoints=%u;accumFrames=%u;computeMs=%.3f;clearMs=%.3f;depthMs=%.3f;colorMs=%.3f;resolveMs=%.3f",
         renderer_->getGaussianPointGpuName().c_str(), path.c_str(), method.c_str(),
         ext.width, ext.height, p.sppSide * p.sppSide,
         p.seedMode == 0 ? "deterministic" : "frame",
-        fmtF(p.densityScale).c_str(), p.shDegree, s.shDegreeData,
+        fmtF(p.densityScale).c_str(), fmtF(p.pointBudget).c_str(), p.shDegree, s.shDegreeData,
         p.tonemapMode, fmtF(p.gamma).c_str(),
-        s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints, s.accumFrames);
+        s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints, s.accumFrames,
+        s.computeMs, s.clearMs, s.splatDepthMs, s.splatColorMs, s.resolveMs);
     return buf;
 }
 
@@ -387,6 +392,35 @@ std::string GSViewCommandDispatcher::cmdGetGpProfile()
 {
     const std::string prof = buildProfile();
     return prof.empty() ? "Error:renderer not available" : ("Profile:" + prof);
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpTimings()
+{
+    if (!renderer_) return "Error:renderer not available";
+    const auto s = renderer_->getGaussianPointStats();
+    char buf[192];
+    std::snprintf(buf, sizeof(buf),
+        "Compute:%.3f,Clear:%.3f,Depth:%.3f,Color:%.3f,Resolve:%.3f",
+        s.computeMs, s.clearMs, s.splatDepthMs, s.splatColorMs, s.resolveMs);
+    return buf;
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpPointBudget()
+{
+    if (!renderer_) return "Val:0";
+    return "Val:" + fmtF(renderer_->getGaussianPointParams().pointBudget);
+}
+
+std::string GSViewCommandDispatcher::cmdSetGpPointBudget(const std::string& arg)
+{
+    if (!renderer_) return "Error:renderer not available";
+    float v;
+    if (!tryFloat(arg, v)) return "Error:invalid float";
+    if (v < 0.0f) return "Error:budget must be >= 0";
+    auto p = renderer_->getGaussianPointParams();
+    p.pointBudget = v;
+    renderer_->setGaussianPointParams(p);
+    return "OK";
 }
 
 std::string GSViewCommandDispatcher::cmdGetGpShDegree()

@@ -68,6 +68,7 @@ void GSViewPanel::onImGui()
 		ImGui::Spacing();
 		ImGui::Text("expected/generated: %u / %u", gpStats_.expectedCount, gpStats_.generatedCount);
 		ImGui::Text("active / accum frames: %u / %u", gpStats_.activeSamples, gpStats_.accumFrames);
+		ImGui::Text("GPU: %.2f ms", gpStats_.computeMs);
 	} else { // GaussianPoint
 		bool gpChanged = false;
 		int sppIdx = gp_.sppSide - 1;
@@ -90,12 +91,21 @@ void GSViewPanel::onImGui()
 		if (ImGui::Combo("Tone Map", &gp_.tonemapMode, "None\0" "Reinhard\0" "ACES\0"))
 			gpChanged = true;
 		gpChanged |= ImGui::SliderFloat("Gamma##gp", &gp_.gamma, 0.5f, 2.4f);
+		{
+			float budgetM = gp_.pointBudget / 1.0e6f;
+			if (ImGui::SliderFloat("Point Budget (M, 0=off)", &budgetM, 0.0f, 4.0f)) {
+				gp_.pointBudget = budgetM * 1.0e6f;
+				gpChanged = true;
+			}
+		}
 		if (gpChanged && onGpParamsChanged_)
 			onGpParamsChanged_(gp_);
 		ImGui::Spacing();
 		ImGui::Text("expected/generated: %u / %u", gpStats_.expectedCount, gpStats_.generatedCount);
 		ImGui::Text("active / drawn: %u / %u", gpStats_.activeSamples, gpStats_.drawnPoints);
 		ImGui::Text("accumulated frames: %u", gpStats_.accumFrames);
+		ImGui::Text("GPU: %.2f ms  (splat %.2f  resolve %.2f)",
+			gpStats_.computeMs, gpStats_.splatDepthMs + gpStats_.splatColorMs, gpStats_.resolveMs);
 	}
 
 	ImGui::Separator();

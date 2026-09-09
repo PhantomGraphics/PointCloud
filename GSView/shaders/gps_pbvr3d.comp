@@ -132,8 +132,8 @@ vec3 evalSH(uint id, vec3 dc, vec3 dir) {
     return max(result + 0.5, vec3(0.0));
 }
 
-// Screen-space 2D covariance determinant (for the ViewConditioned target).
-float footprintDet2d(vec3 camMean, mat3 cov3) {
+// Screen-space 2D covariance (a, b, d) for the projected Gaussian footprint.
+vec3 footprintCov2d(vec3 camMean, mat3 cov3) {
     float tz = -camMean.z;
     float fx = u.p0.x, fy = u.p0.y;
     float limx = 1.3 * (0.5 * float(u.dims.x) / fx);
@@ -145,15 +145,10 @@ float footprintDet2d(vec3 camMean, mat3 cov3) {
     J[1][1] = fy / tz;  J[2][1] = -fy * ty / (tz * tz);
     mat3 T = J * mat3(u.view);
     mat3 c = T * cov3 * transpose(T);
-    float a = c[0][0] + u.p1.y;
-    float b = c[0][1];
-    float d = c[1][1] + u.p1.y;
-    return max(a * d - b * b, 0.0);
+    return vec3(c[0][0] + u.p1.y, c[0][1], c[1][1] + u.p1.y);
 }
 
-void main() {
-    uint id = gl_GlobalInvocationID.x;
-    if (id >= u.ctrl.x) return;
+void splatOne(uint id) {
     GsPoint sp = splats[id];
 
     vec3 world = vec3(sp.x, sp.y, sp.z);
@@ -164,6 +159,10 @@ void main() {
     float op = 1.0 / (1.0 + exp(-sp.opacity));
     if (op < u.p1.w) return;
 
+    // Frustum cull on the projected 3-sigma footprint.
+    float mu =  u.p0.x * (cam.x / tzc) + u.p0.z;
+    float mv = -u.p0.y * (cam.y / tzc) + u.p0.w;
+
     vec3 sc  = vec3(exp(sp.s0), exp(sp.s1), exp(sp.s2));
     mat3 R   = quatToR(sp.r0, sp.r1, sp.r2, sp.r3);
     mat3 S2  = mat3(sc.x*sc.x, 0, 0,  0, sc.y*sc.y, 0,  0, 0, sc.z*sc.z);
@@ -173,21 +172,27 @@ void main() {
     cov3[2][2] = max(cov3[2][2], 1e-9);
     mat3 L3 = chol3(cov3);
 
+    vec3 fc2 = footprintCov2d(cam, cov3);
+    float det2d = max(fc2.x * fc2.z - fc2.y * fc2.y, 0.0);
+    float ext = 3.0 * sqrt(max(fc2.x, fc2.z));
+    if (mu + ext < 0.0 || mu - ext >= float(u.dims.x) ||
+        mv + ext < 0.0 || mv - ext >= float(u.dims.y)) return;
+
     uint method = u.ctrl2.w;
     float dS   = u.p2.z;
     float baseK = u.p3.y;
+    float bthin = (u.p3.z > 0.0) ? u.p3.z : 1.0;
 
     float lambda;      // candidate count
     if (method == 0u)       lambda = dS * op * baseK;
     else                    lambda = dS * (-log(max(1.0 - op, 1e-6))) * baseK;
-    lambda = min(lambda, u.p2.x);
+    lambda = min(lambda * bthin, u.p2.x);
 
     // ViewConditioned keep-probability so the on-screen count matches GPS.
     float keepProb = 1.0;
     if (method == 2u) {
-        float det2d = footprintDet2d(cam, cov3);
         float spp   = float(u.dims.z);
-        float gpsTarget = spp * TWO_PI * sqrt(det2d) * dilog(op) * dS;
+        float gpsTarget = spp * TWO_PI * sqrt(det2d) * dilog(op) * dS * bthin;
         keepProb = (lambda > 0.5) ? clamp(gpsTarget / lambda, 0.0, 1.0) : 0.0;
     }
 
@@ -252,4 +257,10 @@ void main() {
         atomicAdd(stats[1], uint(drawn));
         atomicAdd(stats[3], drawn);
     }
+}
+
+void main() {
+    uint stride = gl_NumWorkGroups.x * 64u;
+    for (uint id = gl_GlobalInvocationID.x; id < u.ctrl.x; id += stride)
+        splatOne(id);
 }

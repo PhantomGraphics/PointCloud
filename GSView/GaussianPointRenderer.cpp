@@ -134,6 +134,16 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     compCfg.depthWrite = false;
     if (!compositePipe_.create(ctx, renderPass, compCfg)) { available_ = false; return; }
 
+    // GPU timestamp query pool (optional -- a null period just leaves timings 0).
+    tsPeriodNs_ = ctx.getTimestampPeriodNs();
+    if (tsPeriodNs_ > 0.0f) {
+        VkQueryPoolCreateInfo qi{ VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
+        qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        qi.queryCount = kMarks * frames_;
+        if (vkCreateQueryPool(dev, &qi, nullptr, &queryPool_) != VK_SUCCESS)
+            queryPool_ = VK_NULL_HANDLE;
+    }
+
     available_ = true;
 }
 
@@ -284,6 +294,35 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
 
     if (extent_.width == 0) return;
 
+    // --- read this frame slot's GPU timestamps (2 frames old, fence already waited) ---
+    if (queryPool_ && tsPeriodNs_ > 0.0f && tsWritten_[frameIndex]) {
+        std::uint64_t marks[kMarks] = {};
+        const VkResult r = vkGetQueryPoolResults(
+            ctx.getDevice(), queryPool_, frameIndex * kMarks, kMarks,
+            sizeof(marks), marks, sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT);
+        if (r == VK_SUCCESS) {
+            Stats& t = lastTimings_[frameIndex];
+            const double toMs = static_cast<double>(tsPeriodNs_) * 1e-6;
+            t.clearMs      = static_cast<float>((marks[1] - marks[0]) * toMs);
+            t.splatDepthMs = static_cast<float>((marks[2] - marks[1]) * toMs);
+            t.splatColorMs = static_cast<float>((marks[3] - marks[2]) * toMs);
+            t.resolveMs    = static_cast<float>((marks[4] - marks[3]) * toMs);
+            t.computeMs    = static_cast<float>((marks[4] - marks[0]) * toMs);
+        }
+    }
+
+    // --- adaptive stochastic thinning to a point budget ---
+    if (params_.pointBudget > 0.0f) {
+        const std::uint32_t lastGen = getStats().generatedCount;
+        if (lastGen > 0) {
+            const double target = std::clamp(
+                budgetThin_ * static_cast<double>(params_.pointBudget) / lastGen, 0.02, 1.0);
+            budgetThin_ = 0.6 * budgetThin_ + 0.4 * target;   // damped
+        }
+    } else {
+        budgetThin_ = 1.0;
+    }
+
     const int shDeg = std::min(std::clamp(params_.shDegree, 0, 3), shDegreeData_);
 
     // Restart the progressive accumulation when the camera or a render parameter
@@ -325,7 +364,8 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
                            static_cast<uint32_t>(params_.tonemapMode),
                            static_cast<uint32_t>(params_.pbvr3dMethod));
     ubo.p3 = glm::vec4(std::max(0.01f, params_.gamma),
-                       std::max(0.0f, params_.basePointsPerSplat), 0.0f, 0.0f);
+                       std::max(0.0f, params_.basePointsPerSplat),
+                       static_cast<float>(budgetThin_), 0.0f);
     paramsUbo_[frameIndex].write(&ubo, sizeof(ubo));
 
     lastFrameIndex_ = frameIndex;
@@ -341,6 +381,13 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     const VkBuffer stats = statsBuf_[frameIndex].getBuffer();
     const VkBuffer accum = accumBuf_[frameIndex].getBuffer();
 
+    const uint32_t tsBase = frameIndex * kMarks;
+    auto ts = [&](uint32_t mark, VkPipelineStageFlagBits stage) {
+        if (queryPool_) vkCmdWriteTimestamp(cmd, stage, queryPool_, tsBase + mark);
+    };
+    if (queryPool_) { vkCmdResetQueryPool(cmd, queryPool_, tsBase, kMarks); tsWritten_[frameIndex] = true; }
+    ts(0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+
     // 1. clear
     vkCmdFillBuffer(cmd, depth, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
     vkCmdFillBuffer(cmd, color, 0, VK_WHOLE_SIZE, 0u);
@@ -353,8 +400,10 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     };
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                          0, 0, nullptr, 3, toCompute, 0, nullptr);
+    ts(1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
-    const uint32_t groups = (numSplats_ + 63u) / 64u;
+    // Grid-stride splat: cap the dispatch so any splat count is valid.
+    const uint32_t groups = std::min<uint32_t>((numSplats_ + 63u) / 64u, 65535u);
 
     if (numSplats_ > 0) {
         const auto& splat = (path_ == Path::Pbvr3d) ? pbvr3dPipe_ : splatPipe_;
@@ -370,6 +419,8 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                              0, 0, nullptr, 1, &depthRW, 0, nullptr);
 
+        ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
         PushConstants pcColor{ 1 };
         vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcColor), &pcColor);
         vkCmdDispatch(cmd, groups, 1, 1);
@@ -380,6 +431,10 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
         };
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                              0, 0, nullptr, 2, toResolve, 0, nullptr);
+        ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    } else {
+        ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+        ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     }
 
     // 4. resolve
@@ -387,6 +442,7 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resolvePipe_.getLayout(),
                             0, 1, &computeSets_[frameIndex], 0, nullptr);
     vkCmdDispatch(cmd, (extent_.width + 7u) / 8u, (extent_.height + 7u) / 8u, 1);
+    ts(4, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
     (void)stats;
     VkBufferMemoryBarrier toFrag =
@@ -420,6 +476,13 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.drawnPoints    = p[3];
     s.accumFrames    = framesSinceReset_;
     s.shDegreeData   = shDegreeData_;
+
+    const Stats& t = lastTimings_[f];
+    s.clearMs = t.clearMs;
+    s.splatDepthMs = t.splatDepthMs;
+    s.splatColorMs = t.splatColorMs;
+    s.resolveMs = t.resolveMs;
+    s.computeMs = t.computeMs;
     return s;
 }
 
@@ -428,6 +491,7 @@ void GaussianPointRenderer::onCleanup(VkDevice device)
     destroyFrameBuffers(device);
     for (uint32_t f = 0; f < kMaxFrames; ++f)
         paramsUbo_[f].destroy(device);
+    if (queryPool_) { vkDestroyQueryPool(device, queryPool_, nullptr); queryPool_ = VK_NULL_HANDLE; }
     gsInput_.destroy(device);
     shRest_.destroy(device);
     compositePipe_.destroy(device);

@@ -70,6 +70,7 @@ public:
         float footprintCullPx  = 0.4f;   // cull Gaussians whose projected sigma is below this
         int   pbvr3dMethod     = 0;      // Pbvr3dMethod
         float basePointsPerSplat = 512.f; // Pbvr3d base count knob
+        float pointBudget      = 0.f;    // 0 = unlimited; else adaptive stochastic thinning
     };
 
     struct Camera {
@@ -86,6 +87,8 @@ public:
         uint32_t drawnPoints    = 0;   // points that landed on screen
         uint32_t accumFrames    = 0;   // frames since the last accumulation reset
         int      shDegreeData   = 0;   // SH degree present in the loaded data
+        // GPU pass times in ms (0 when timestamps are unsupported), lagged one frame.
+        float    clearMs = 0.f, splatDepthMs = 0.f, splatColorMs = 0.f, resolveMs = 0.f, computeMs = 0.f;
     };
 
     // Force the progressive accumulation to restart on the next frames.
@@ -188,6 +191,14 @@ private:
     Phantom::VKG::VulkanDescriptorPool           descPool_;
     std::array<VkDescriptorSet, kMaxFrames>      computeSets_{};
     std::array<VkDescriptorSet, kMaxFrames>      compositeSets_{};
+
+    // GPU timestamps: kMarks per frame (start, +clear, +depth, +color, +resolve).
+    static constexpr uint32_t kMarks = 5;
+    VkQueryPool queryPool_ = VK_NULL_HANDLE;
+    float       tsPeriodNs_ = 0.0f;
+    std::array<bool, kMaxFrames>  tsWritten_{};     // frame slot has been recorded at least once
+    std::array<Stats, kMaxFrames> lastTimings_{};   // per-frame readback of the pass times
+    double      budgetThin_ = 1.0;                  // adaptive stochastic-thinning scale
 
     void destroyFrameBuffers(VkDevice device);
     void writeComputeSet(VkDevice device, uint32_t f);

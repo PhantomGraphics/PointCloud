@@ -157,7 +157,8 @@ cmake --build --preset windows-debug
 - `GSView/GaussianPointRenderer.{h,cpp}`（`GSView::GaussianPointRenderer`）— `GaussianPoint` と `PBVR3DExperimental` **両モードの** GPU compute レンダラ。毎フレーム GPU 上で clear → splat pass（`gps_splat.comp` = GaussianPoint / `gps_pbvr3d.comp` = PBVR3D、`Path` で切替。depth pass / color pass、SH を linear で評価）→ `gps_resolve.comp`（linear 平均 + progressive accumulation）→ `gps_composite`（tone map + gamma、swapchain）。**32-bit two-pass**（`shaderBufferInt64Atomics` 非依存）。compute は `GSViewApp::onPreRender`、composite は `GSViewRenderer::onRender`。`GSViewRenderer` が所有。旧 `GSComputePBVR`/`PBVRPipeline`/`gs_pbvr*` は Phase 4 で削除。
   - **Phase 3**: `f_rest_*` SH（degree 0..3、`GSPointCloud::shDegree`/`shRest`）+ `evalSH`、linear-HDR（`colorBuf` half3/`uvec2`、`accumBuf` `vec4`）、progressive accumulation（per-frame-in-flight、camera/param 変更で自動 reset）、tone map（none/Reinhard/ACES）+ gamma。
   - **Phase 4**: `Path::Pbvr3d` + `Pbvr3dMethod`（Proportional / Extinction / ViewConditioned）。ViewConditioned は候補集合を GPS 目標 `spp·2π√detΣ2d·Li₂(o)` で thinning して on-screen 密度を GaussianPoint に一致させる。`Set/GetPbvr3dMethod` コマンド、`pbvr3d_modes.json` で 3 方式の統計比較。
-  - 未実装: projected covariance の学習時完全互換・PSNR 検証ハーネス（Phase 6）、occlusion culling・scan/compaction（Phase 5）。
+  - **Phase 5**: per-pass GPU timestamp（`VkQueryPool`、`Stats.computeMs`/`clearMs`/`splatDepthMs`/... + `GetGpTimings`）、frustum + 微小 footprint culling、grid-stride splat、adaptive point budget（`Params.pointBudget` + `Set/GetGpPointBudget`）。
+  - 未実装: scan/compaction・occlusion culling・LOD（Phase 5 深掘り）、covariance 学習時完全互換（Phase 6）。
 - `CGLib/VulkanGraphics/VulkanContext::supportsInt64BufferAtomics()` — optional capability（`shaderInt64` + `shaderBufferInt64Atomics` を照会し対応時のみ有効化。device 選択の必須条件ではない）。
 - `GSViewRenderer`（`IVkSubRenderer`）— 3 モードを束ねる。`SortBased` は `PointRenderer` の `VkGSPointRenderer`、他 2 モードは `GaussianPointRenderer` へ委譲。カメラ制御・履歴 reset もここ。
 - `GSViewCommandDispatcher : IScenarioDispatcher` — シナリオ用コマンド文字列ディスパッチャ。

@@ -136,18 +136,16 @@ vec3 evalSH(uint id, vec3 dc, vec3 dir) {
     return max(result + 0.5, vec3(0.0));
 }
 
-void main() {
-    uint id = gl_GlobalInvocationID.x;
-    if (id >= u.ctrl.x) return;
+void splatOne(uint id) {
     GsPoint sp = splats[id];
 
     vec3 world = vec3(sp.x, sp.y, sp.z);
     vec3 cam   = (u.view * vec4(world, 1.0)).xyz;
     float tz   = -cam.z;
-    if (tz <= u.p1.x) return;
+    if (tz <= u.p1.x) return;                 // near-plane cull
 
     float op = 1.0 / (1.0 + exp(-sp.opacity));
-    if (op < u.p1.w) return;
+    if (op < u.p1.w) return;                  // opacity cull
 
     float fx = u.p0.x, fy = u.p0.y;
 
@@ -178,8 +176,14 @@ void main() {
     float mu =  fx * (cam.x / tz) + u.p0.z;
     float mv = -fy * (cam.y / tz) + u.p0.w;
 
+    // Frustum cull: skip Gaussians whose 3-sigma screen footprint is entirely off-screen.
+    float ext = 3.0 * sqrt(max(ca, cd));
+    if (mu + ext < 0.0 || mu - ext >= float(u.dims.x) ||
+        mv + ext < 0.0 || mv - ext >= float(u.dims.y)) return;
+
+    float bthin = (u.p3.z > 0.0) ? u.p3.z : 1.0;   // point-budget stochastic thinning
     float spp = float(u.dims.z);
-    float EN  = spp * TWO_PI * sqrt(det) * dilog(op) * u.p2.z;
+    float EN  = spp * TWO_PI * sqrt(det) * dilog(op) * u.p2.z * bthin;
     EN = min(EN, u.p2.x);
 
     uint seed = pcg(id * 747796405u + 1u);
@@ -244,4 +248,10 @@ void main() {
         atomicAdd(stats[1], uint(Ni));
         atomicAdd(stats[3], drawn);
     }
+}
+
+void main() {
+    uint stride = gl_NumWorkGroups.x * 64u;
+    for (uint id = gl_GlobalInvocationID.x; id < u.ctrl.x; id += stride)
+        splatOne(id);
 }

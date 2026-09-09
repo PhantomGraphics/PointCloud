@@ -56,6 +56,9 @@ private:
     std::string cmdGetGpStats();
     std::string cmdGetGpAccumFrames();
     std::string cmdGetGpProfile();
+    std::string cmdGetGpTimings();
+    std::string cmdGetGpPointBudget();
+    std::string cmdSetGpPointBudget(const std::string& arg);
     std::string cmdGetGpShDegree();
     std::string cmdGetGpTonemap();
     std::string cmdGetGpGamma();
