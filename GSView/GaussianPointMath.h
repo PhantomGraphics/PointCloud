@@ -38,6 +38,23 @@ double sigmoid(double x);
 double shDcToColor(double sh);
 
 // ---------------------------------------------------------------------------
+// Spherical harmonics colour (matches 3DGS eval_sh)
+// ---------------------------------------------------------------------------
+
+// (degree+1)^2 - 1 rest coefficients per colour channel.
+inline constexpr int shRestPerChannel(int degree) { return (degree + 1) * (degree + 1) - 1; }
+
+// Linear RGB radiance for a view direction `dir` (world space, from camera to
+// splat, normalised). `dc` is the band-0 coefficient triple; `rest` points at
+// 3*shRestPerChannel(degree) values in channel-major order (all of R, then G,
+// then B), or may be null when degree == 0. Result is 3DGS-style:
+// (SH_basis . coeffs) + 0.5, clamped to >= 0 (may exceed 1).
+glm::dvec3 evalSH(int degree,
+                  const glm::dvec3& dc,
+                  const double* rest,
+                  const glm::dvec3& dir);
+
+// ---------------------------------------------------------------------------
 // Covariance
 // ---------------------------------------------------------------------------
 

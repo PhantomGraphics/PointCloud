@@ -246,6 +246,7 @@ void GSViewRenderer::onUpdate(uint32_t frameIndex)
 	{
 		GaussianPointRenderer::Camera cam;
 		cam.view = glm::lookAt(eye, camTarget_, glm::vec3(0.f, 1.f, 0.f));
+		cam.camPos = eye;
 		const float tanFovY = std::tan(glm::radians(45.f) * 0.5f);
 		cam.focalY = (static_cast<float>(extent_.height) * 0.5f) / tanFovY;
 		cam.focalX = cam.focalY;

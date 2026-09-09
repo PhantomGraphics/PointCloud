@@ -1,12 +1,12 @@
 #version 450
 
-// GaussianPoint MVP -- fused project + count + splat, run twice via a push
-// constant: pass 0 writes nearest depth (atomicMin on a uint32 key), pass 1
-// writes the winning colour (plain store guarded by an exact depth-key match).
-// This 32-bit two-pass design is correctness-equivalent to a packed uint64
-// atomicMin but does not need shaderBufferInt64Atomics (absent on this repo's
-// CI/iGPU hardware). See docs/todo/PLAN_gsview_gaussian_point_pbvr.md Phase 2.
-// The maths mirrors GSView/GaussianPointMath.cpp.
+// GaussianPoint -- fused project + count + splat, run twice via a push constant:
+// pass 0 writes nearest depth (atomicMin on a uint32 key), pass 1 writes the
+// winning colour (half3 stored in a uvec2, guarded by an exact depth-key match).
+// 32-bit two-pass; correctness-equivalent to a packed uint64 atomicMin without
+// needing shaderBufferInt64Atomics. See docs/todo/PLAN_gsview_gaussian_point_pbvr.md.
+// Colour is evaluated in LINEAR space (SH, 3DGS eval_sh) -- tone mapping / gamma
+// happen once at composite. The maths mirrors GSView/GaussianPointMath.cpp.
 
 layout(local_size_x = 64) in;
 
@@ -19,24 +19,29 @@ struct GsPoint {
     float r0, r1, r2, r3;
 };
 layout(std430, binding = 0) readonly buffer InBuf   { GsPoint splats[]; };
-layout(std430, binding = 1)          buffer DepthB  { uint depthBuf[]; };
-layout(std430, binding = 2)          buffer ColorB  { uint colorBuf[]; };
-layout(std430, binding = 4)          buffer StatsB  { uint stats[]; }; // 0:expected*256 1:generated 2:activeSamples 3:drawnPoints
+layout(std430, binding = 1)          buffer DepthB  { uint  depthBuf[]; };
+layout(std430, binding = 2)          buffer ColorB  { uvec2 colorBuf[]; };  // packHalf2x16(rg), packHalf2x16(b,0)
+layout(std430, binding = 4)          buffer StatsB  { uint  stats[]; };     // 0:expected*256 1:generated 2:activeSamples 3:drawnPoints
+layout(std430, binding = 6) readonly buffer ShRestB { float shRest[]; };
 
 layout(std140, binding = 5) uniform Params {
     mat4  view;    // world -> camera (GLM convention: camera looks -Z)
     vec4  p0;      // focalX, focalY, cx, cy        (pixels)
     vec4  p1;      // nearZ, lowPass, shC0, opacityCutoff
     uvec4 dims;    // width, height, spp, sppSide
-    uvec4 ctrl;    // numSplats, frameIndex, seedMode(0 det/1 frame), countMode(0 poisson/1 stochastic)
-    vec4  p2;      // maxPointsPerGaussian, pointBudgetScale, densityScale, unused
+    uvec4 ctrl;    // numSplats, frameIndex, seedMode, countMode
+    vec4  p2;      // maxPointsPerGaussian, footprintCullPx, densityScale, unused
     vec4  bg;      // background rgb, unused
+    vec4  camPos;  // world-space camera position, unused
+    uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, unused
+    vec4  p3;      // gamma, unused, unused, unused
 } u;
 
 layout(push_constant) uniform PC { uint pass; } pc; // 0 = depth, 1 = colour
 
 const float PI2_6  = 1.6449340668482264;
 const float TWO_PI = 6.283185307179586;
+const float SH_C1  = 0.4886025119029199;
 
 uint pcg(uint v) {
     uint s = v * 747796405u + 2891336453u;
@@ -99,6 +104,38 @@ uint orderedDepthKey(float d) {
     return b ^ mask;
 }
 
+// Linear RGB via SH (3DGS eval_sh). deg 0..3; deg 0 = SH_C0*dc + 0.5.
+vec3 evalSH(uint id, vec3 dc, vec3 dir) {
+    int deg = int(u.ctrl2.y);
+    vec3 result = u.p1.z * dc;
+    if (deg >= 1) {
+        int R = (deg + 1) * (deg + 1) - 1;
+        uint base = id * uint(3 * R);
+        float x = dir.x, y = dir.y, z = dir.z;
+        #define SH(k) vec3(shRest[base + uint(k)], shRest[base + uint(R) + uint(k)], shRest[base + uint(2*R) + uint(k)])
+        result += -SH_C1*y*SH(0) + SH_C1*z*SH(1) - SH_C1*x*SH(2);
+        if (deg >= 2) {
+            float xx=x*x, yy=y*y, zz=z*z, xy=x*y, yz=y*z, xz=x*z;
+            result += 1.0925484305920792*xy*SH(3)
+                    - 1.0925484305920792*yz*SH(4)
+                    + 0.31539156525252005*(2.0*zz-xx-yy)*SH(5)
+                    - 1.0925484305920792*xz*SH(6)
+                    + 0.5462742152960396*(xx-yy)*SH(7);
+            if (deg >= 3) {
+                result += -0.5900435899266435*y*(3.0*xx-yy)*SH(8)
+                        + 2.890611442640554*xy*z*SH(9)
+                        - 0.4570457994644658*y*(4.0*zz-xx-yy)*SH(10)
+                        + 0.3731763325901154*z*(2.0*zz-3.0*xx-3.0*yy)*SH(11)
+                        - 0.4570457994644658*x*(4.0*zz-xx-yy)*SH(12)
+                        + 1.445305721320277*z*(xx-yy)*SH(13)
+                        - 0.5900435899266435*x*(xx-3.0*yy)*SH(14);
+            }
+        }
+        #undef SH
+    }
+    return max(result + 0.5, vec3(0.0));
+}
+
 void main() {
     uint id = gl_GlobalInvocationID.x;
     if (id >= u.ctrl.x) return;
@@ -106,15 +143,14 @@ void main() {
 
     vec3 world = vec3(sp.x, sp.y, sp.z);
     vec3 cam   = (u.view * vec4(world, 1.0)).xyz;
-    float tz   = -cam.z;                     // positive in front of the camera
-    if (tz <= u.p1.x) return;                // near-plane cull
+    float tz   = -cam.z;
+    if (tz <= u.p1.x) return;
 
     float op = 1.0 / (1.0 + exp(-sp.opacity));
     if (op < u.p1.w) return;
 
     float fx = u.p0.x, fy = u.p0.y;
 
-    // 3D covariance, then EWA projection to 2D (see GaussianPointMath::covariance2D).
     vec3 sc  = vec3(exp(sp.s0), exp(sp.s1), exp(sp.s2));
     mat3 R   = quatToR(sp.r0, sp.r1, sp.r2, sp.r3);
     mat3 S2  = mat3(sc.x*sc.x, 0, 0,  0, sc.y*sc.y, 0,  0, 0, sc.z*sc.z);
@@ -135,8 +171,10 @@ void main() {
     float cd = cc3[1][1] + u.p1.y;
     float det = ca * cd - cb * cb;
     if (det <= 1e-9) return;
+    // Sub-pixel footprint cull (both projected stddevs below the threshold).
+    float cullPx = u.p2.y;
+    if (cullPx > 0.0 && ca < cullPx * cullPx && cd < cullPx * cullPx) return;
 
-    // Screen-space mean (pixels); world +Y is up, screen +Y is down.
     float mu =  fx * (cam.x / tz) + u.p0.z;
     float mv = -fy * (cam.y / tz) + u.p0.w;
 
@@ -150,23 +188,18 @@ void main() {
 
     int Ni;
     if (u.ctrl.w == 1u) {
-        // stochastic rounding
         float fl = floor(EN);
         Ni = int(fl) + ((rnd(rs) < (EN - fl)) ? 1 : 0);
     } else if (EN < 30.0) {
-        // Poisson via Knuth (exp(-EN) is well-conditioned here)
         float L = exp(-EN);
         float p = 1.0;
         int k = 0;
         do { k++; p *= rnd(rs); } while (p > L && k < 256);
         Ni = k - 1;
     } else {
-        // Poisson via the normal approximation (Knuth's exp(-EN) underflows in fp32
-        // for EN > ~88, and its cost is O(EN)); N(EN, EN) is accurate for large EN.
         float u1 = max(rnd(rs), 1e-7);
         float g  = sqrt(-2.0 * log(u1)) * cos(TWO_PI * rnd(rs));
-        Ni = int(round(EN + sqrt(EN) * g));
-        Ni = max(Ni, 0);
+        Ni = max(int(round(EN + sqrt(EN) * g)), 0);
     }
 
     if (Ni <= 0) {
@@ -179,8 +212,9 @@ void main() {
     float l11 = sqrt(max(cd - l10 * l10, 1e-12));
 
     uint dkey = orderedDepthKey(tz);
-    vec3 col  = clamp(vec3(sp.f0, sp.f1, sp.f2) * u.p1.z + 0.5, 0.0, 1.0);
-    uint rgba = packUnorm4x8(vec4(col, 1.0));
+    vec3 vdir = normalize(world - u.camPos.xyz);
+    vec3 lin  = evalSH(id, vec3(sp.f0, sp.f1, sp.f2), vdir);
+    uvec2 packed = uvec2(packHalf2x16(lin.xy), packHalf2x16(vec2(lin.z, 0.0)));
 
     uint W_ = u.dims.x, H_ = u.dims.y, side = u.dims.w, sppI = u.dims.z;
     uint drawn = 0u;
@@ -200,7 +234,7 @@ void main() {
         if (pc.pass == 0u) {
             atomicMin(depthBuf[sidx], dkey);
         } else if (depthBuf[sidx] == dkey) {
-            colorBuf[sidx] = rgba;
+            colorBuf[sidx] = packed;
         }
         drawn++;
     }

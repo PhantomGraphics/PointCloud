@@ -99,6 +99,10 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGpDensityScale")      return cmdGetGpDensityScale();
     if (name == "GetGpGeneratedCount")    return cmdGetGpGeneratedCount();
     if (name == "GetGpStats")             return cmdGetGpStats();
+    if (name == "GetGpAccumFrames")       return cmdGetGpAccumFrames();
+    if (name == "GetGpShDegree")          return cmdGetGpShDegree();
+    if (name == "GetGpTonemap")           return cmdGetGpTonemap();
+    if (name == "GetGpGamma")             return cmdGetGpGamma();
 
     if (rest.empty()) return "Error:missing argument for " + name;
 
@@ -112,6 +116,9 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "SetGpSpp")               return cmdSetGpSpp(rest);
     if (name == "SetGpSeedMode")          return cmdSetGpSeedMode(rest);
     if (name == "SetGpDensityScale")      return cmdSetGpDensityScale(rest);
+    if (name == "SetGpShDegree")          return cmdSetGpShDegree(rest);
+    if (name == "SetGpTonemap")           return cmdSetGpTonemap(rest);
+    if (name == "SetGpGamma")             return cmdSetGpGamma(rest);
     if (name == "LoadPLY")                return cmdLoadPLY(rest);
     if (name == "Screenshot")             return cmdScreenshot(rest);
 
@@ -304,7 +311,73 @@ std::string GSViewCommandDispatcher::cmdGetGpStats()
     return "Expected:" + std::to_string(s.expectedCount) +
            ",Generated:" + std::to_string(s.generatedCount) +
            ",Active:" + std::to_string(s.activeSamples) +
-           ",Drawn:" + std::to_string(s.drawnPoints);
+           ",Drawn:" + std::to_string(s.drawnPoints) +
+           ",Accum:" + std::to_string(s.accumFrames) +
+           ",ShDeg:" + std::to_string(s.shDegreeData);
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpAccumFrames()
+{
+    if (!renderer_) return "Val:0";
+    return "Val:" + std::to_string(renderer_->getGaussianPointStats().accumFrames);
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpShDegree()
+{
+    if (!renderer_) return "Val:0";
+    return "Val:" + std::to_string(renderer_->getGaussianPointParams().shDegree);
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpTonemap()
+{
+    if (!renderer_) return "Val:none";
+    switch (renderer_->getGaussianPointParams().tonemapMode) {
+        case 1:  return "Val:reinhard";
+        case 2:  return "Val:aces";
+        default: return "Val:none";
+    }
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpGamma()
+{
+    if (!renderer_) return "Val:1";
+    return "Val:" + fmtF(renderer_->getGaussianPointParams().gamma);
+}
+
+std::string GSViewCommandDispatcher::cmdSetGpShDegree(const std::string& arg)
+{
+    if (!renderer_) return "Error:renderer not available";
+    int d;
+    if (!tryInt(arg, d)) return "Error:invalid int";
+    if (d < 0 || d > 3) return "Error:SH degree must be 0..3";
+    auto p = renderer_->getGaussianPointParams();
+    p.shDegree = d;
+    renderer_->setGaussianPointParams(p);
+    return "OK";
+}
+
+std::string GSViewCommandDispatcher::cmdSetGpTonemap(const std::string& arg)
+{
+    if (!renderer_) return "Error:renderer not available";
+    auto p = renderer_->getGaussianPointParams();
+    if      (arg == "none")     p.tonemapMode = 0;
+    else if (arg == "reinhard") p.tonemapMode = 1;
+    else if (arg == "aces")     p.tonemapMode = 2;
+    else return "Error:unknown tonemap " + arg;
+    renderer_->setGaussianPointParams(p);
+    return "OK";
+}
+
+std::string GSViewCommandDispatcher::cmdSetGpGamma(const std::string& arg)
+{
+    if (!renderer_) return "Error:renderer not available";
+    float v;
+    if (!tryFloat(arg, v)) return "Error:invalid float";
+    if (v < 0.1f || v > 4.0f) return "Error:gamma must be 0.1..4.0";
+    auto p = renderer_->getGaussianPointParams();
+    p.gamma = v;
+    renderer_->setGaussianPointParams(p);
+    return "OK";
 }
 
 std::string GSViewCommandDispatcher::cmdSetGpSpp(const std::string& arg)

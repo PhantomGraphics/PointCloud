@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
 
 namespace GSView {
 
@@ -15,7 +16,7 @@ constexpr double kShC0 = 0.28209479177387814;
 
 // Binding indices shared by the compute shaders (see gps_splat.comp / gps_resolve.comp).
 enum : uint32_t {
-    B_INPUT = 0, B_DEPTH = 1, B_COLOR = 2, B_RESOLVED = 3, B_STATS = 4, B_PARAMS = 5
+    B_INPUT = 0, B_DEPTH = 1, B_COLOR = 2, B_ACCUM = 3, B_STATS = 4, B_PARAMS = 5, B_SHREST = 6
 };
 
 VkBufferMemoryBarrier bufBarrier(VkBuffer buf, VkAccessFlags src, VkAccessFlags dst)
@@ -58,12 +59,13 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     paramsBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     computeDsl_.create(dev, {
-        ssbo(B_INPUT,    VK_SHADER_STAGE_COMPUTE_BIT),
-        ssbo(B_DEPTH,    VK_SHADER_STAGE_COMPUTE_BIT),
-        ssbo(B_COLOR,    VK_SHADER_STAGE_COMPUTE_BIT),
-        ssbo(B_RESOLVED, VK_SHADER_STAGE_COMPUTE_BIT),
-        ssbo(B_STATS,    VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_INPUT,  VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_DEPTH,  VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_COLOR,  VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_ACCUM,  VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_STATS,  VK_SHADER_STAGE_COMPUTE_BIT),
         paramsBinding,
+        ssbo(B_SHREST, VK_SHADER_STAGE_COMPUTE_BIT),
     });
 
     // --- composite descriptor set layout (resolvedBuf + params, fragment) ---
@@ -77,7 +79,7 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
 
     // --- descriptor pool ---
     std::vector<VkDescriptorPoolSize> sizes = {
-        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6 * frames_ },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 7 * frames_ },
         { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 * frames_ },
     };
     descPool_.create(dev, sizes, 2 * frames_);
@@ -125,7 +127,14 @@ void GaussianPointRenderer::setParams(const Params& p)
 {
     params_ = p;
     params_.sppSide = std::clamp(params_.sppSide, 1, 4);
+    params_.shDegree = std::clamp(params_.shDegree, 0, 3);
+    params_.tonemapMode = std::clamp(params_.tonemapMode, 0, 2);
     spp_ = static_cast<uint32_t>(params_.sppSide * params_.sppSide);
+}
+
+void GaussianPointRenderer::resetAccumulation()
+{
+    resetPending_ = frames_;
 }
 
 void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
@@ -146,12 +155,17 @@ void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
     const VkDeviceSize pixels = static_cast<VkDeviceSize>(extent.width) * extent.height;
     const VkDeviceSize subSamples = pixels * spp_;
 
+    if (!shRest_.isValid()) {
+        const float dummy = 0.0f;
+        shRest_.create(ctx, pool, sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dummy);
+    }
+
     for (uint32_t f = 0; f < frames_; ++f) {
         depthBuf_[f].create(ctx, pool, subSamples * sizeof(uint32_t),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-        colorBuf_[f].create(ctx, pool, subSamples * sizeof(uint32_t),
+        colorBuf_[f].create(ctx, pool, subSamples * 2 * sizeof(uint32_t),   // uvec2 (half3)
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-        resolvedBuf_[f].create(ctx, pool, pixels * sizeof(uint32_t),
+        accumBuf_[f].create(ctx, pool, pixels * 4 * sizeof(float),          // vec4 (rgb sum, count)
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         statsBuf_[f].createMapped(ctx, 8 * sizeof(uint32_t),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -160,6 +174,7 @@ void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
         writeComputeSet(dev, f);
         writeCompositeSet(dev, f);
     }
+    resetPending_ = frames_;   // fresh buffers -> restart accumulation
 }
 
 void GaussianPointRenderer::destroyFrameBuffers(VkDevice device)
@@ -167,21 +182,22 @@ void GaussianPointRenderer::destroyFrameBuffers(VkDevice device)
     for (uint32_t f = 0; f < kMaxFrames; ++f) {
         depthBuf_[f].destroy(device);
         colorBuf_[f].destroy(device);
-        resolvedBuf_[f].destroy(device);
+        accumBuf_[f].destroy(device);
         statsBuf_[f].destroy(device);
     }
 }
 
 void GaussianPointRenderer::writeComputeSet(VkDevice device, uint32_t f)
 {
-    VkDescriptorBufferInfo in{ gsInput_.isValid() ? gsInput_.getBuffer() : resolvedBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
-    VkDescriptorBufferInfo dp{ depthBuf_[f].getBuffer(),    0, VK_WHOLE_SIZE };
-    VkDescriptorBufferInfo cl{ colorBuf_[f].getBuffer(),    0, VK_WHOLE_SIZE };
-    VkDescriptorBufferInfo rs{ resolvedBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
-    VkDescriptorBufferInfo st{ statsBuf_[f].getBuffer(),    0, VK_WHOLE_SIZE };
-    VkDescriptorBufferInfo pa{ paramsUbo_[f].getBuffer(),   0, sizeof(ParamsUBO) };
+    VkDescriptorBufferInfo in{ gsInput_.isValid() ? gsInput_.getBuffer() : accumBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo dp{ depthBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo cl{ colorBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo ac{ accumBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo st{ statsBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo pa{ paramsUbo_[f].getBuffer(), 0, sizeof(ParamsUBO) };
+    VkDescriptorBufferInfo sh{ shRest_.getBuffer(), 0, VK_WHOLE_SIZE };
 
-    VkWriteDescriptorSet w[6]{};
+    VkWriteDescriptorSet w[7]{};
     auto set = [&](int i, uint32_t bind, VkDescriptorType type, const VkDescriptorBufferInfo* bi) {
         w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         w[i].dstSet = computeSets_[f];
@@ -190,18 +206,19 @@ void GaussianPointRenderer::writeComputeSet(VkDevice device, uint32_t f)
         w[i].descriptorType = type;
         w[i].pBufferInfo = bi;
     };
-    set(0, B_INPUT,    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &in);
-    set(1, B_DEPTH,    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &dp);
-    set(2, B_COLOR,    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &cl);
-    set(3, B_RESOLVED, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &rs);
-    set(4, B_STATS,    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &st);
-    set(5, B_PARAMS,   VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &pa);
-    vkUpdateDescriptorSets(device, 6, w, 0, nullptr);
+    set(0, B_INPUT,  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &in);
+    set(1, B_DEPTH,  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &dp);
+    set(2, B_COLOR,  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &cl);
+    set(3, B_ACCUM,  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &ac);
+    set(4, B_STATS,  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &st);
+    set(5, B_PARAMS, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &pa);
+    set(6, B_SHREST, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &sh);
+    vkUpdateDescriptorSets(device, 7, w, 0, nullptr);
 }
 
 void GaussianPointRenderer::writeCompositeSet(VkDevice device, uint32_t f)
 {
-    VkDescriptorBufferInfo rs{ resolvedBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo rs{ accumBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
     VkDescriptorBufferInfo pa{ paramsUbo_[f].getBuffer(),   0, sizeof(ParamsUBO) };
     VkWriteDescriptorSet w[2]{};
     w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -223,7 +240,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
 {
     if (!available_) return;
 
-    // Upload the input SSBO when the cloud changes (rare -- on load).
+    // Upload the input + SH SSBOs when the cloud changes (rare -- on load).
     const bool haveCloud = cloud_ && !cloud_->points.empty();
     if (haveCloud && cloud_->generation != cachedGeneration_) {
         gsInput_.destroy(ctx.getDevice());
@@ -231,13 +248,47 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
             static_cast<VkDeviceSize>(cloud_->points.size()) * sizeof(Phantom::PointCloud::GSPoint),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, cloud_->points.data());
         numSplats_ = static_cast<uint32_t>(cloud_->points.size());
+        shDegreeData_ = cloud_->shDegree;
+
+        shRest_.destroy(ctx.getDevice());
+        if (!cloud_->shRest.empty()) {
+            shRest_.create(ctx, pool, cloud_->shRest.size() * sizeof(float),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, cloud_->shRest.data());
+        } else {
+            const float dummy = 0.0f;
+            shRest_.create(ctx, pool, sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dummy);
+        }
+
         cachedGeneration_ = cloud_->generation;
         for (uint32_t f = 0; f < frames_; ++f) writeComputeSet(ctx.getDevice(), f);
+        resetPending_ = frames_;
     } else if (!haveCloud) {
         numSplats_ = 0;
+        shDegreeData_ = 0;
     }
 
     if (extent_.width == 0) return;
+
+    const int shDeg = std::min(std::clamp(params_.shDegree, 0, 3), shDegreeData_);
+
+    // Restart the progressive accumulation when the camera or a render parameter
+    // that changes the image moves.
+    std::uint64_t h = 1469598103934665603ull;
+    auto mix = [&](std::uint64_t v) { h = (h ^ v) * 1099511628211ull; };
+    mix(static_cast<std::uint64_t>(params_.sppSide) * 131 + params_.seedMode * 17 + params_.countMode);
+    mix(std::hash<float>{}(params_.densityScale));
+    mix(std::hash<float>{}(params_.gamma));
+    mix(static_cast<std::uint64_t>(shDeg) * 7 + params_.tonemapMode);
+    mix(std::hash<float>{}(params_.background.x + params_.background.y * 3.0f + params_.background.z * 7.0f));
+    if (h != lastChangeHash_ || camera_.view != lastView_) {
+        resetPending_ = frames_;
+        lastChangeHash_ = h;
+        lastView_ = camera_.view;
+    }
+
+    const uint32_t resetAccum = (resetPending_ > 0) ? 1u : 0u;
+    if (resetPending_ > 0) { --resetPending_; framesSinceReset_ = 1; }
+    else if (framesSinceReset_ < 0xFFFFFFFFu) ++framesSinceReset_;
 
     ParamsUBO ubo{};
     ubo.view = camera_.view;
@@ -248,8 +299,13 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     ubo.ctrl = glm::uvec4(numSplats_, frameCounter_,
                           static_cast<uint32_t>(params_.seedMode != 0),
                           static_cast<uint32_t>(params_.countMode != 0));
-    ubo.p2 = glm::vec4(params_.maxPointsPerSplat, 1.0f, params_.densityScale, 0.0f);
+    ubo.p2 = glm::vec4(params_.maxPointsPerSplat, std::max(0.0f, params_.footprintCullPx),
+                       params_.densityScale, 0.0f);
     ubo.bg = glm::vec4(params_.background, 0.0f);
+    ubo.camPos = glm::vec4(camera_.camPos, 0.0f);
+    ubo.ctrl2 = glm::uvec4(resetAccum, static_cast<uint32_t>(shDeg),
+                           static_cast<uint32_t>(params_.tonemapMode), 0u);
+    ubo.p3 = glm::vec4(std::max(0.01f, params_.gamma), 0.0f, 0.0f, 0.0f);
     paramsUbo_[frameIndex].write(&ubo, sizeof(ubo));
 
     lastFrameIndex_ = frameIndex;
@@ -263,7 +319,7 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     const VkBuffer depth = depthBuf_[frameIndex].getBuffer();
     const VkBuffer color = colorBuf_[frameIndex].getBuffer();
     const VkBuffer stats = statsBuf_[frameIndex].getBuffer();
-    const VkBuffer resolved = resolvedBuf_[frameIndex].getBuffer();
+    const VkBuffer accum = accumBuf_[frameIndex].getBuffer();
 
     // 1. clear
     vkCmdFillBuffer(cmd, depth, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
@@ -313,7 +369,7 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
 
     (void)stats;
     VkBufferMemoryBarrier toFrag =
-        bufBarrier(resolved, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+        bufBarrier(accum, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                          0, 0, nullptr, 1, &toFrag, 0, nullptr);
@@ -341,6 +397,8 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.generatedCount = p[1];
     s.activeSamples  = p[2];
     s.drawnPoints    = p[3];
+    s.accumFrames    = framesSinceReset_;
+    s.shDegreeData   = shDegreeData_;
     return s;
 }
 
@@ -350,6 +408,7 @@ void GaussianPointRenderer::onCleanup(VkDevice device)
     for (uint32_t f = 0; f < kMaxFrames; ++f)
         paramsUbo_[f].destroy(device);
     gsInput_.destroy(device);
+    shRest_.destroy(device);
     compositePipe_.destroy(device);
     splatPipe_.destroy(device);
     resolvePipe_.destroy(device);

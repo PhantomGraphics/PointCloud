@@ -13,6 +13,22 @@ namespace Phantom
         public:
             std::vector<GSPoint> points;  ///< The list of Gaussian Splatting points.
 
+            /// @brief Highest spherical-harmonics band present in the loaded data
+            /// (0 = DC only, up to 3). Standard PLY only; compressed PLY and .splat
+            /// are always DC-only.
+            int shDegree = 0;
+
+            /// @brief SH "rest" coefficients (bands 1..shDegree), or empty for DC-only.
+            /// Layout per point: channel-major, matching the 3DGS f_rest_* ordering --
+            /// shRest[p*(3*R) + c*R + k], where R = coeffsPerChannel(shDegree)
+            /// ( = (shDegree+1)^2 - 1 ), c in {0,1,2} (R,G,B), k in [0,R).
+            std::vector<float> shRest;
+
+            /// @brief Number of SH rest coefficients per colour channel for a degree.
+            static constexpr int coeffsPerChannel(int degree) {
+                return (degree + 1) * (degree + 1) - 1;
+            }
+
             /// @brief Monotonically increasing data-generation id, assigned by readFromFile()
             /// on every successful load (drawn from a process-global counter, so two consecutive
             /// loads always differ even when they contain the same number of splats). GPU consumers

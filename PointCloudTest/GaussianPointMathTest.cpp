@@ -375,6 +375,55 @@ TEST(GaussianPointMath, MonteCarloSingleGaussianCoverageMatchesOracle)
 }
 
 // ---------------------------------------------------------------------------
+// Spherical harmonics
+// ---------------------------------------------------------------------------
+
+TEST(GaussianPointMath, EvalSHDegreeZeroIsDcTimesC0PlusHalf)
+{
+	const glm::dvec3 dc(0.4, -0.2, 1.3);
+	const glm::dvec3 got = evalSH(0, dc, nullptr, glm::dvec3(0, 0, 1));
+	EXPECT_NEAR(got.r, kShC0 * 0.4 + 0.5, 1e-12);
+	EXPECT_NEAR(got.g, std::max(kShC0 * -0.2 + 0.5, 0.0), 1e-12);
+	EXPECT_NEAR(got.b, kShC0 * 1.3 + 0.5, 1e-12);
+}
+
+TEST(GaussianPointMath, EvalSHClampsNegativeRadianceToZero)
+{
+	const glm::dvec3 dc(-10.0, -10.0, -10.0); // C0*dc + 0.5 << 0
+	const glm::dvec3 got = evalSH(0, dc, nullptr, glm::dvec3(1, 0, 0));
+	EXPECT_DOUBLE_EQ(got.r, 0.0);
+	EXPECT_DOUBLE_EQ(got.g, 0.0);
+	EXPECT_DOUBLE_EQ(got.b, 0.0);
+}
+
+TEST(GaussianPointMath, EvalSHBand1IsViewDependent)
+{
+	// Degree 1: 3 rest coeffs per channel, channel-major.
+	// Put a signal only on the first band-1 coefficient of the red channel.
+	std::vector<double> rest(9, 0.0);
+	rest[0] = 1.0; // R, coeff 0  -> basis -C1 * y
+	const glm::dvec3 dc(0.0);
+
+	constexpr double C1 = 0.4886025119029199;
+	const glm::dvec3 up = evalSH(1, dc, rest.data(), glm::dvec3(0, 1, 0));
+	const glm::dvec3 dn = evalSH(1, dc, rest.data(), glm::dvec3(0, -1, 0));
+
+	// up:  -C1 * (+1) * 1  + 0.5 ; dn: -C1 * (-1) * 1 + 0.5
+	EXPECT_NEAR(up.r, std::max(-C1 + 0.5, 0.0), 1e-12);
+	EXPECT_NEAR(dn.r, C1 + 0.5, 1e-12);
+	EXPECT_NEAR(up.g, 0.5, 1e-12);
+}
+
+TEST(GaussianPointMath, EvalSHHigherDegreesStayFinite)
+{
+	std::vector<double> rest(45, 0.3);
+	const glm::dvec3 got = evalSH(3, glm::dvec3(0.1), rest.data(),
+	                              glm::normalize(glm::dvec3(0.3, -0.7, 0.5)));
+	EXPECT_TRUE(std::isfinite(got.r) && std::isfinite(got.g) && std::isfinite(got.b));
+	EXPECT_GE(got.r, 0.0);
+}
+
+// ---------------------------------------------------------------------------
 // Depth / colour packing
 // ---------------------------------------------------------------------------
 

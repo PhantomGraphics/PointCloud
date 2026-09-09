@@ -9,7 +9,7 @@ void GSViewPanel::init(
 	std::function<void(float)> onSortParamsChanged,
 	std::function<void(float, int, float)> onPBVRParamsChanged,
 	std::function<void(float)> onSplatSizeChanged,
-	std::function<void(int, int, float)> onGpParamsChanged)
+	std::function<void(const GaussianPointRenderer::Params&)> onGpParamsChanged)
 {
 	onModeChanged_ = std::move(onModeChanged);
 	onSortParamsChanged_ = std::move(onSortParamsChanged);
@@ -64,19 +64,32 @@ void GSViewPanel::onImGui()
 			onPBVRParamsChanged_(densityScale_, maxParticlesPerSplat_, pbvrParticleSize_);
 	} else { // GaussianPoint
 		bool gpChanged = false;
-		int sppIdx = gpSppSide_ - 1;
+		int sppIdx = gp_.sppSide - 1;
 		if (ImGui::Combo("SPP", &sppIdx, "1\0" "4\0" "9\0" "16\0")) {
-			gpSppSide_ = sppIdx + 1;
+			gp_.sppSide = sppIdx + 1;
 			gpChanged = true;
 		}
-		if (ImGui::Combo("Seed Mode", &gpSeedMode_, "Deterministic\0" "Frame-varying\0"))
+		if (ImGui::Combo("Seed Mode", &gp_.seedMode, "Deterministic\0" "Frame-varying\0"))
 			gpChanged = true;
-		gpChanged |= ImGui::SliderFloat("Density Scale##gp", &gpDensityScale_, 0.1f, 4.0f);
+		gpChanged |= ImGui::SliderFloat("Density Scale##gp", &gp_.densityScale, 0.1f, 4.0f);
+		int shMax = gpStats_.shDegreeData;
+		if (shMax > 0) {
+			gpChanged |= ImGui::SliderInt("SH Degree", &gp_.shDegree, 0, shMax);
+		} else {
+			ImGui::BeginDisabled();
+			int z = 0; ImGui::SliderInt("SH Degree", &z, 0, 0);
+			ImGui::EndDisabled();
+			ImGui::SameLine(); ImGui::TextDisabled("(DC-only data)");
+		}
+		if (ImGui::Combo("Tone Map", &gp_.tonemapMode, "None\0" "Reinhard\0" "ACES\0"))
+			gpChanged = true;
+		gpChanged |= ImGui::SliderFloat("Gamma##gp", &gp_.gamma, 0.5f, 2.4f);
 		if (gpChanged && onGpParamsChanged_)
-			onGpParamsChanged_(gpSppSide_, gpSeedMode_, gpDensityScale_);
+			onGpParamsChanged_(gp_);
 		ImGui::Spacing();
-		ImGui::Text("expected/generated: %u / %u", gpExpected_, gpGenerated_);
-		ImGui::Text("active samples / drawn: %u / %u", gpActive_, gpDrawn_);
+		ImGui::Text("expected/generated: %u / %u", gpStats_.expectedCount, gpStats_.generatedCount);
+		ImGui::Text("active / drawn: %u / %u", gpStats_.activeSamples, gpStats_.drawnPoints);
+		ImGui::Text("accumulated frames: %u", gpStats_.accumFrames);
 	}
 
 	ImGui::Separator();

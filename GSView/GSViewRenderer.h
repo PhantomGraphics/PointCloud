@@ -43,7 +43,11 @@ public:
 
 	void setSortShaders(SortShaders s) { sortShaders_ = std::move(s); }
 	void setGSCloud(const Phantom::PointCloud::GSPointCloud* cloud);
-	void setRenderMode(RenderMode mode) { mode_ = mode; }
+	void setRenderMode(RenderMode mode) {
+		if (mode == RenderMode::GaussianPoint && mode_ != mode)
+			gaussianPoint_.resetAccumulation();
+		mode_ = mode;
+	}
 	RenderMode getRenderMode() const { return mode_; }
 
 	void setSortPointSize(float s);

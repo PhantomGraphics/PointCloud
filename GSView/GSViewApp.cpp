@@ -27,11 +27,7 @@ GSViewApp::GSViewApp(int width, int height, const std::string& title)
 		[this](float scale) {
 			renderer_.setSplatSizeScale(scale);
 		},
-		[this](int sppSide, int seedMode, float density) {
-			auto p = renderer_.getGaussianPointParams();
-			p.sppSide = sppSide;
-			p.seedMode = seedMode;
-			p.densityScale = density;
+		[this](const GaussianPointRenderer::Params& p) {
 			renderer_.setGaussianPointParams(p);
 		});
 
@@ -73,6 +69,7 @@ void GSViewApp::onInit()
 	::VKG::VkAppBase::onInit();
 
 	renderer_.setExtent(getExtent());
+	panel_.setGaussianPointParams(renderer_.getGaussianPointParams());
 	setupCallbacks();
 
 	if (!initialPLYPath_.empty()) {
@@ -111,10 +108,7 @@ void GSViewApp::onUpdate(uint32_t frameIndex)
 	panel_.setGSAvailable(renderer_.isGSAvailable());
 	panel_.setSplatSizeScale(renderer_.getSplatSizeScale());
 	panel_.setGaussianPointAvailable(renderer_.isGaussianPointAvailable());
-	{
-		const auto s = renderer_.getGaussianPointStats();
-		panel_.setGaussianPointStats(s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints);
-	}
+	panel_.setGaussianPointStats(renderer_.getGaussianPointStats());
 }
 
 void GSViewApp::onPreRender(VkCommandBuffer cmd, uint32_t frameIndex)

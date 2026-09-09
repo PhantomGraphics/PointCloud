@@ -182,9 +182,20 @@ static bool readCompressed(std::istream& file,
     return true;
 }
 
+// Highest fully-populated SH band given a count of f_rest_* properties (3 per
+// coefficient). 9 -> deg 1, 24 -> deg 2, 45 -> deg 3; anything else -> 0.
+static int shDegreeFromRestCount(size_t restProps)
+{
+    for (int d = 3; d >= 1; --d)
+        if (restProps == static_cast<size_t>(3 * ((d + 1) * (d + 1) - 1))) return d;
+    return 0;
+}
+
 static bool readStandard(std::istream& file,
                          const std::vector<ElementDef>& elements,
-                         std::vector<GSPoint>& out)
+                         std::vector<GSPoint>& out,
+                         int& outShDegree,
+                         std::vector<float>& outShRest)
 {
     const ElementDef* vertexElem = nullptr;
     for (const auto& e : elements) {
@@ -197,6 +208,17 @@ static bool readStandard(std::istream& file,
     std::unordered_map<std::string, size_t> propIndex;
     for (size_t i = 0; i < vertexElem->properties.size(); ++i)
         propIndex[vertexElem->properties[i].name] = i;
+
+    // Collect f_rest_* properties in numeric order.
+    std::vector<size_t> restIdx;
+    for (int i = 0; ; ++i) {
+        const auto it = propIndex.find("f_rest_" + std::to_string(i));
+        if (it == propIndex.end()) break;
+        restIdx.push_back(it->second);
+    }
+    outShDegree = shDegreeFromRestCount(restIdx.size());
+    if (outShDegree == 0) restIdx.clear();
+    const size_t restPerPoint = restIdx.size();
 
     static const char* const kRequired[] = {
         "x", "y", "z",
@@ -211,6 +233,7 @@ static bool readStandard(std::istream& file,
     const size_t stride = vertexElem->properties.size();
     std::vector<float> buffer(stride);
     out.reserve(vertexCount);
+    if (restPerPoint) outShRest.reserve(vertexCount * restPerPoint);
 
     auto get = [&](const char* name) -> float {
         const auto it = propIndex.find(name);
@@ -220,6 +243,9 @@ static bool readStandard(std::istream& file,
     for (size_t i = 0; i < vertexCount; ++i) {
         file.read(reinterpret_cast<char*>(buffer.data()),
                   static_cast<std::streamsize>(stride * sizeof(float)));
+
+        for (size_t k = 0; k < restPerPoint; ++k)
+            outShRest.push_back(buffer[restIdx[k]]);
 
         GSPoint g{};
         g.x = get("x");
@@ -314,6 +340,8 @@ bool GSPointCloud::readFromFile(const std::string& filename)
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
     std::vector<GSPoint> result;
+    int shDeg = 0;
+    std::vector<float> shRestData;
     if (ext == ".splat") {
         if (!readSplatFile(file, result)) return false;
     } else {
@@ -324,12 +352,16 @@ bool GSPointCloud::readFromFile(const std::string& filename)
         for (const auto& e : elements)
             if (e.name == "chunk") { compressed = true; break; }
 
-        if (!(compressed ? readCompressed(file, elements, result)
-                         : readStandard(file, elements, result)))
-            return false;
+        if (compressed) {
+            if (!readCompressed(file, elements, result)) return false;
+        } else {
+            if (!readStandard(file, elements, result, shDeg, shRestData)) return false;
+        }
     }
 
     this->points = std::move(result);
+    this->shDegree = shDeg;
+    this->shRest = std::move(shRestData);
     this->generation = nextGeneration();
     return true;
 }

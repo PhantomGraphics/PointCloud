@@ -54,9 +54,16 @@ private:
     std::string cmdGetGpDensityScale();
     std::string cmdGetGpGeneratedCount();
     std::string cmdGetGpStats();
+    std::string cmdGetGpAccumFrames();
+    std::string cmdGetGpShDegree();
+    std::string cmdGetGpTonemap();
+    std::string cmdGetGpGamma();
     std::string cmdSetGpSpp(const std::string& arg);
     std::string cmdSetGpSeedMode(const std::string& arg);
     std::string cmdSetGpDensityScale(const std::string& arg);
+    std::string cmdSetGpShDegree(const std::string& arg);
+    std::string cmdSetGpTonemap(const std::string& arg);
+    std::string cmdSetGpGamma(const std::string& arg);
 
     // Mutation commands
     std::string cmdSetRenderMode(const std::string& mode);

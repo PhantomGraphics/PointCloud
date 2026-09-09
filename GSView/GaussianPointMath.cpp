@@ -30,6 +30,50 @@ double shDcToColor(double sh)
 	return std::clamp(sh * kShC0 + 0.5, 0.0, 1.0);
 }
 
+glm::dvec3 evalSH(int degree, const glm::dvec3& dc, const double* rest, const glm::dvec3& dir)
+{
+	// Coefficients from 3DGS sh_utils.eval_sh.
+	constexpr double C1 = 0.4886025119029199;
+	constexpr double C2[5] = { 1.0925484305920792, -1.0925484305920792, 0.31539156525252005,
+	                           -1.0925484305920792, 0.5462742152960396 };
+	constexpr double C3[7] = { -0.5900435899266435, 2.890611442640554, -0.4570457994644658,
+	                           0.3731763325901154, -0.4570457994644658, 1.445305721320277,
+	                           -0.5900435899266435 };
+
+	glm::dvec3 result = kShC0 * dc;
+	degree = std::clamp(degree, 0, 3);
+
+	if (degree >= 1 && rest) {
+		const int R = shRestPerChannel(degree);
+		auto sh = [&](int k) {
+			return glm::dvec3(rest[0 * R + k], rest[1 * R + k], rest[2 * R + k]);
+		};
+		const double x = dir.x, y = dir.y, z = dir.z;
+
+		result += -C1 * y * sh(0) + C1 * z * sh(1) - C1 * x * sh(2);
+
+		if (degree >= 2) {
+			const double xx = x*x, yy = y*y, zz = z*z;
+			const double xy = x*y, yz = y*z, xz = x*z;
+			result += C2[0]*xy*sh(3) + C2[1]*yz*sh(4) + C2[2]*(2.0*zz - xx - yy)*sh(5)
+			        + C2[3]*xz*sh(6) + C2[4]*(xx - yy)*sh(7);
+
+			if (degree >= 3) {
+				result += C3[0]*y*(3.0*xx - yy)*sh(8)
+				        + C3[1]*xy*z*sh(9)
+				        + C3[2]*y*(4.0*zz - xx - yy)*sh(10)
+				        + C3[3]*z*(2.0*zz - 3.0*xx - 3.0*yy)*sh(11)
+				        + C3[4]*x*(4.0*zz - xx - yy)*sh(12)
+				        + C3[5]*z*(xx - yy)*sh(13)
+				        + C3[6]*x*(xx - 3.0*yy)*sh(14);
+			}
+		}
+	}
+
+	result += 0.5;
+	return glm::max(result, glm::dvec3(0.0));
+}
+
 // ===========================================================================
 // Covariance
 // ===========================================================================

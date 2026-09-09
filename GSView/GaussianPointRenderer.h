@@ -48,10 +48,15 @@ public:
         float opacityCutoff    = 1.0e-3f;
         float lowPass          = 0.3f;
         float nearZ            = 0.05f;
+        int   shDegree         = 0;      // clamped to the loaded data's degree
+        int   tonemapMode      = 0;      // 0 none/clamp, 1 Reinhard, 2 ACES
+        float gamma            = 1.0f;   // display gamma applied at composite
+        float footprintCullPx  = 0.4f;   // cull Gaussians whose projected sigma is below this
     };
 
     struct Camera {
         glm::mat4 view{ 1.0f };   // world -> camera (GLM: camera looks -Z)
+        glm::vec3 camPos{ 0.0f }; // world-space camera position (for SH view dir)
         float focalX = 1.0f, focalY = 1.0f;   // pixels
         float cx = 0.0f, cy = 0.0f;           // principal point (pixels)
     };
@@ -61,7 +66,12 @@ public:
         uint32_t generatedCount = 0;   // sum of Poisson counts
         uint32_t activeSamples  = 0;   // covered subpixels after resolve
         uint32_t drawnPoints    = 0;   // points that landed on screen
+        uint32_t accumFrames    = 0;   // frames since the last accumulation reset
+        int      shDegreeData   = 0;   // SH degree present in the loaded data
     };
+
+    // Force the progressive accumulation to restart on the next frames.
+    void resetAccumulation();
 
     void onInit(const Phantom::VKG::VulkanContext& ctx, const Phantom::VKG::VulkanCommandPool& pool,
                 VkRenderPass renderPass, uint32_t framesInFlight);
@@ -98,8 +108,11 @@ private:
         glm::vec4  p1;    // nearZ, lowPass, shC0, opacityCutoff
         glm::uvec4 dims;  // width, height, spp, sppSide
         glm::uvec4 ctrl;  // numSplats, frameIndex, seedMode, countMode
-        glm::vec4  p2;    // maxPointsPerSplat, pointBudgetScale, densityScale, 0
+        glm::vec4  p2;    // maxPointsPerSplat, footprintCullPx, densityScale, 0
         glm::vec4  bg;    // background rgb, 0
+        glm::vec4  camPos; // world-space camera position, 0
+        glm::uvec4 ctrl2; // resetAccum, shDegree, tonemapMode, 0
+        glm::vec4  p3;    // gamma, 0, 0, 0
     };
     struct PushConstants { uint32_t pass; };
 
@@ -115,18 +128,27 @@ private:
     uint32_t frameCounter_ = 0;
     uint32_t lastFrameIndex_ = 0;
 
+    // Progressive accumulation reset bookkeeping. resetPending_ counts down over
+    // `frames_` frames so both frame-in-flight accumulators restart.
+    uint32_t resetPending_ = kMaxFrames;
+    uint32_t framesSinceReset_ = 0;
+    glm::mat4 lastView_{ 0.0f };
+    uint64_t  lastChangeHash_ = 0;
+
     VkExtent2D extent_{ 0, 0 };
     uint32_t   spp_ = 4;
 
     // input
     Phantom::VKG::VulkanBuffer gsInput_;
+    Phantom::VKG::VulkanBuffer shRest_;      // SH rest coefficients (or 1 dummy float)
     uint32_t numSplats_ = 0;
+    int      shDegreeData_ = 0;
     uint64_t cachedGeneration_ = ~0ull;
 
     // per-frame buffers
     std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> depthBuf_;
-    std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> colorBuf_;
-    std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> resolvedBuf_;
+    std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> colorBuf_;   // uvec2 per subpixel (half3)
+    std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> accumBuf_;   // vec4 per pixel (rgb sum, count)
     std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> statsBuf_;    // host-visible
     std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> paramsUbo_;   // host-visible
 
