@@ -63,9 +63,14 @@ public:
 	bool isGaussianPointAvailable() const { return gaussianPoint_.isAvailable(); }
 	GaussianPointRenderer::Stats getGaussianPointStats() const { return gaussianPoint_.getStats(); }
 	const std::string& getGaussianPointGpuName() const { return gaussianPoint_.deviceName(); }
+	uint32_t getGaussianPointDriverVersion() const { return gaussianPoint_.driverVersion(); }
+	uint64_t getGaussianPointBufferBytes() const { return gaussianPoint_.bufferBytes(); }
 	VkExtent2D getExtent() const { return extent_; }
 	void setGaussianPointParams(const GaussianPointRenderer::Params& p);
 	const GaussianPointRenderer::Params& getGaussianPointParams() const { return gpParams_; }
+	bool setEvaluationCamera(float theta, float phi, float distance);
+	bool exportLinearPfm(const std::string& path, uint32_t& sampleSets);
+	void resetGaussianPointAccumulation() { gaussianPoint_.resetAccumulation(); }
 	// Records the GaussianPoint compute passes; call from the app's onPreRender.
 	void recordGaussianPointCompute(VkCommandBuffer cmd, uint32_t frameIndex);
 	bool validateGaussianPointOracle(double& psnrAll, double& psnrForeground,

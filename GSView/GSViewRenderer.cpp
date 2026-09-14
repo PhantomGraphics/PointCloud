@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <vector>
 
 namespace {
@@ -141,6 +142,47 @@ void GSViewRenderer::setGaussianPointParams(const GaussianPointRenderer::Params&
 	gpParams_ = p;
 	gaussianPoint_.setParams(gpParams_);
 	if (sppChanged) gpExtentDirty_ = true;  // subpixel buffers are sized by spp
+}
+
+bool GSViewRenderer::setEvaluationCamera(float theta, float phi, float distance)
+{
+	if (!std::isfinite(theta) || !std::isfinite(phi) || !std::isfinite(distance)
+		|| theta <= 0.01f || theta >= 3.13f || distance < 0.1f) return false;
+	camTheta_ = theta;
+	camPhi_ = phi;
+	camDist_ = distance;
+	gaussianPoint_.resetAccumulation();
+	return true;
+}
+
+bool GSViewRenderer::exportLinearPfm(const std::string& path, uint32_t& sampleSets)
+{
+	sampleSets = 0;
+	if (!isGpMode(mode_)) return false;
+	std::vector<glm::vec4> accumulation;
+	if (!gaussianPoint_.readAccumulationLinear(accumulation) || accumulation.empty()) return false;
+	const float sets = accumulation.front().w;
+	if (!(sets >= 1.f) || !std::isfinite(sets)) return false;
+	for (const auto& value : accumulation)
+		if (value.w != sets || !std::isfinite(value.x) || !std::isfinite(value.y)
+			|| !std::isfinite(value.z)) return false;
+	std::ofstream file(path, std::ios::binary);
+	if (!file) return false;
+	const uint16_t endianTest = 1;
+	const bool littleEndian = *reinterpret_cast<const unsigned char*>(&endianTest) != 0;
+	file << "PF\n" << extent_.width << ' ' << extent_.height << "\n"
+		 << (littleEndian ? "-1.0\n" : "1.0\n");
+	// PFM stores rows from bottom to top; only RGB, without UI or display mapping.
+	for (uint32_t y = extent_.height; y-- > 0;)
+		for (uint32_t x = 0; x < extent_.width; ++x) {
+			const auto& value = accumulation[static_cast<size_t>(y) * extent_.width + x];
+			const float rgb[3] = { value.x / sets, value.y / sets, value.z / sets };
+			file.write(reinterpret_cast<const char*>(rgb), sizeof(rgb));
+		}
+	file.close();
+	if (!file) return false;
+	sampleSets = static_cast<uint32_t>(sets);
+	return true;
 }
 
 void GSViewRenderer::recordGaussianPointCompute(VkCommandBuffer cmd, uint32_t frameIndex)

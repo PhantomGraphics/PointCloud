@@ -1,0 +1,79 @@
+{
+    "name":  "gaussian_point_seed",
+    "steps":  [
+                  {
+                      "expect":  "OK",
+                      "command":  "SetRenderMode:GaussianPoint"
+                  },
+                  {
+                      "expect_prefix":  "OK:",
+                      "command":  "LoadPLY:../samples/gs/gs_sphere.ply"
+                  },
+                  {
+                      "expect":  "OK",
+                      "command":  "SetGpSeedMode:deterministic"
+                  },
+                  {
+                      "expect_prefix":  "Error:",
+                      "command":  "SetGpSeed:4294967296"
+                  },
+                  {
+                      "expect_prefix":  "Error:",
+                      "command":  "SetGpSeed:-1"
+                  },
+                  {
+                      "expect_prefix":  "Error:",
+                      "command":  "SetGpSeed:1x"
+                  },
+                  {
+                      "expect":  "OK",
+                      "command":  "SetGpSeed:0"
+                  },
+                  {
+                      "expect":  "Val:0",
+                      "command":  "GetGpSeed"
+                  },
+                  {
+                      "command":  "GetStatus",
+                      "expect":  "OK",
+                      "repeat":  8
+                  },
+                  {
+                      "expect_not":  "Count:0",
+                      "command":  "GetGpGeneratedCount",
+                      "strip_prefix":  "Count:",
+                      "expect_prefix":  "Count:",
+                      "store_as":  "baseline"
+                  },
+                  {
+                      "expect":  "OK",
+                      "command":  "SetGpSeed:4294967295"
+                  },
+                  {
+                      "expect":  "Val:4294967295",
+                      "command":  "GetGpSeed"
+                  },
+                  {
+                      "command":  "GetStatus",
+                      "expect":  "OK",
+                      "repeat":  8
+                  },
+                  {
+                      "expect":  "OK",
+                      "command":  "SetGpSeed:0"
+                  },
+                  {
+                      "expect":  "Val:0",
+                      "command":  "GetGpSeed"
+                  },
+                  {
+                      "command":  "GetStatus",
+                      "expect":  "OK",
+                      "repeat":  8
+                  },
+                  {
+                      "expect":  "Count:${baseline}",
+                      "command":  "GetGpGeneratedCount"
+                  }
+              ]
+}

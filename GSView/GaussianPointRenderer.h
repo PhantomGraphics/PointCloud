@@ -58,6 +58,7 @@ public:
     struct Params {
         int   sppSide          = 2;      // subpixel grid side (spp = sppSide^2), 1..4
         int   seedMode         = 1;      // 0 = deterministic, 1 = frame-varying
+        uint32_t seed          = 0;      // independent reproducible random stream
         int   countMode        = 0;      // 0 = Poisson, 1 = stochastic rounding
         float densityScale     = 1.0f;
         float maxPointsPerSplat = 2048.f;
@@ -114,6 +115,9 @@ public:
     bool isAvailable() const { return available_; }
     const char* backendName() const { return "32-bit two-pass"; }
     const std::string& deviceName() const { return deviceName_; }
+    uint32_t driverVersion() const { return driverVersion_; }
+    // Requested buffer bytes only; excludes allocator overhead and other renderers.
+    uint64_t bufferBytes() const;
     Stats getStats() const;
 
     // Called from GSViewRenderer::onUpdate: uploads the input SSBO if the cloud
@@ -148,6 +152,7 @@ private:
 
     bool available_ = false;
     std::string deviceName_;
+    uint32_t driverVersion_ = 0;
     Path path_ = Path::GaussianPoint;
     Params params_;
     Camera camera_;

@@ -97,6 +97,12 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGaussianPointAvailable") return cmdGetGaussianPointAvailable();
     if (name == "GetGpSpp")               return cmdGetGpSpp();
     if (name == "GetGpSeedMode")          return cmdGetGpSeedMode();
+    if (name == "GetGpSeed") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().seed) : "Error:renderer not available";
+    if (name == "ResetGpAccumulation") {
+        if (!renderer_) return "Error:renderer not available";
+        renderer_->resetGaussianPointAccumulation();
+        return "OK";
+    }
     if (name == "GetGpDensityScale")      return cmdGetGpDensityScale();
     if (name == "GetGpGeneratedCount")    return cmdGetGpGeneratedCount();
     if (name == "GetGpStats")             return cmdGetGpStats();
@@ -111,6 +117,36 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetPbvr3dMethod")        return cmdGetPbvr3dMethod();
 
     if (rest.empty()) return "Error:missing argument for " + name;
+    if (name == "SetGpCamera") {
+        if (!renderer_) return "Error:renderer not available";
+        const size_t a = rest.find(',');
+        const size_t b = a == std::string::npos ? a : rest.find(',', a + 1);
+        float theta, phi, distance;
+        if (a == std::string::npos || b == std::string::npos
+            || !tryFloat(rest.substr(0, a), theta)
+            || !tryFloat(rest.substr(a + 1, b - a - 1), phi)
+            || !tryFloat(rest.substr(b + 1), distance)
+            || !renderer_->setEvaluationCamera(theta, phi, distance))
+            return "Error:camera requires theta,phi,distance (radians, positive distance)";
+        return "OK";
+    }
+    if (name == "ExportGpLinear") {
+        if (!renderer_) return "Error:renderer not available";
+        uint32_t sets = 0;
+        if (!renderer_->exportLinearPfm(rest, sets)) return "Error:linear export failed";
+        return "OK:Sets=" + std::to_string(sets);
+    }
+    if (name == "SetGpSeed") {
+        if (!renderer_) return "Error:renderer not available";
+        uint32_t seed = 0;
+        const auto result = std::from_chars(rest.data(), rest.data() + rest.size(), seed);
+        if (result.ec != std::errc{} || result.ptr != rest.data() + rest.size())
+            return "Error:invalid unsigned seed";
+        auto p = renderer_->getGaussianPointParams();
+        p.seed = seed;
+        renderer_->setGaussianPointParams(p);
+        return "OK";
+    }
 
     // --- commands with arguments ---
     if (name == "SetRenderMode")          return cmdSetRenderMode(rest);
@@ -389,7 +425,10 @@ std::string GSViewCommandDispatcher::buildProfile() const
         p.tonemapMode, fmtF(p.gamma).c_str(),
         s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints, s.candidateCount, s.accumFrames,
         s.computeMs, s.clearMs, s.splatDepthMs, s.splatColorMs, s.resolveMs);
-    return buf;
+    return std::string(buf) + ";rendererVersion=1;driverVersionRaw=" +
+        std::to_string(renderer_->getGaussianPointDriverVersion()) +
+        ";rendererBufferBytes=" + std::to_string(renderer_->getGaussianPointBufferBytes()) +
+        ";seedValue=" + std::to_string(p.seed);
 }
 
 std::string GSViewCommandDispatcher::cmdGetGpProfile()

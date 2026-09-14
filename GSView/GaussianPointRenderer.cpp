@@ -47,6 +47,9 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     pool_ = &pool;
     renderPass_ = renderPass;
     deviceName_ = ctx.getDeviceName();
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(ctx.getPhysicalDevice(), &properties);
+    driverVersion_ = properties.driverVersion;
     frames_ = std::min<uint32_t>(framesInFlight, kMaxFrames);
     VkDevice dev = ctx.getDevice();
 
@@ -358,6 +361,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
         mix(bits);
     };
     mix(static_cast<std::uint64_t>(params_.sppSide) * 131 + params_.seedMode * 17 + params_.countMode);
+    mix(params_.seed);
     mixFloat(params_.densityScale);
     mixFloat(params_.maxPointsPerSplat);
     mixFloat(params_.opacityCutoff);
@@ -395,7 +399,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     ubo.p1 = glm::vec4(params_.nearZ, params_.lowPass, static_cast<float>(kShC0), params_.opacityCutoff);
     ubo.dims = glm::uvec4(extent_.width, extent_.height, spp_,
                           static_cast<uint32_t>(std::clamp(params_.sppSide, 1, 4)));
-    ubo.ctrl = glm::uvec4(numSplats_, frameCounter_,
+    ubo.ctrl = glm::uvec4(numSplats_, params_.seedMode == 0 ? params_.seed : frameCounter_ + params_.seed * 747796405u,
                           static_cast<uint32_t>(params_.seedMode != 0),
                           static_cast<uint32_t>(params_.countMode != 0));
     ubo.p2 = glm::vec4(params_.maxPointsPerSplat, std::max(0.0f, params_.footprintCullPx),
@@ -528,6 +532,15 @@ bool GaussianPointRenderer::readAccumulationLinear(std::vector<glm::vec4>& out)
     out.resize(static_cast<size_t>(extent_.width) * extent_.height);
     std::memcpy(out.data(), mapped, static_cast<size_t>(bytes));
     return true;
+}
+
+uint64_t GaussianPointRenderer::bufferBytes() const
+{
+    uint64_t bytes = gsInput_.getSize() + shRest_.getSize() + readbackBuf_.getSize();
+    for (uint32_t f = 0; f < frames_; ++f)
+        bytes += depthBuf_[f].getSize() + colorBuf_[f].getSize() + accumBuf_[f].getSize()
+               + statsBuf_[f].getSize() + paramsUbo_[f].getSize();
+    return bytes;
 }
 
 GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const

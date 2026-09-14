@@ -200,7 +200,7 @@ void splatOne(uint id) {
     }
 
     uint seed = pcg(id * 747796405u + 1u);
-    if (u.ctrl.z == 1u) seed = pcg(seed ^ (u.ctrl.y * 2654435761u + 1u));
+    if (u.ctrl.z == 1u || u.ctrl.y != 0u) seed = pcg(seed ^ (u.ctrl.y * 2654435761u + 1u));
     RS rs; rs.s = (seed == 0u) ? 1u : seed;
 
     int Ni;
