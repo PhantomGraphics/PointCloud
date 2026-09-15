@@ -167,8 +167,11 @@ void splatOne(uint id) {
     float ty = clamp(cam.y / tz, -limy, limy) * tz;
 
     mat3 J = mat3(0.0);
-    J[0][0] = fx / tz;  J[2][0] = -fx * tx / (tz * tz);
-    J[1][1] = fy / tz;  J[2][1] = -fy * ty / (tz * tz);
+    // Differentiate (fx*x/(-z), -fy*y/(-z)) in the right/up/back view basis.
+    // The positive depth tz=-z changes the x derivative with respect to z;
+    // image rows grow downward, so the y derivative is negative.
+    J[0][0] = fx / tz;  J[2][0] = fx * tx / (tz * tz);
+    J[1][1] = -fy / tz; J[2][1] = -fy * ty / (tz * tz);
     mat3 T = J * mat3(u.view);
     mat3 cc3 = T * cov3 * transpose(T);
     float ca = cc3[0][0] + u.p1.y;

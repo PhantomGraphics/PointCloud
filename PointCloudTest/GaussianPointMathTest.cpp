@@ -153,6 +153,42 @@ TEST(GaussianPointMath, Covariance2DShrinksWithDistance)
 	EXPECT_NEAR(far / near, 1.0 / 9.0, 1e-9);
 }
 
+TEST(GaussianPointMath, Covariance2DMatchesFiniteDifferenceOffAxisAnisotropicProjection)
+{
+	// The oracle uses right/down/forward coordinates. Numerically differentiate
+	// the complete world-to-pixel map, including a rotated camera and xz/yz
+	// covariance terms that centred isotropic tests cannot detect.
+	PinholeCamera cam;
+	cam.viewRot = glm::mat3_cast(glm::normalize(glm::dquat(0.9, 0.2, -0.3, 0.1)));
+	cam.viewPos = glm::dvec3(1.0, -2.0, 3.0);
+	cam.focalX = 310.0;
+	cam.focalY = 290.0;
+	cam.tanFovX = cam.tanFovY = 1.0;
+	const glm::dmat3 cov3d = covariance3D(glm::dvec3(-2.0, -3.0, -4.0),
+		glm::normalize(glm::dquat(0.7, -0.2, 0.4, 0.5)));
+	for (const glm::dvec3 cameraMean : { glm::dvec3(0.4, 0.3, 5.0),
+	                                  glm::dvec3(-0.7, 0.5, 3.0) }) {
+		const glm::dvec3 world = cam.viewPos + glm::transpose(cam.viewRot) * cameraMean;
+		const auto pixel = [&](const glm::dvec3& p) {
+			const glm::dvec3 c = worldToCamera(cam, p);
+			return glm::dvec2(cam.focalX * c.x / c.z, cam.focalY * c.y / c.z);
+		};
+		glm::dmat3 numericalJ(0.0);
+		const double epsilon = 1.0e-5;
+		for (int axis = 0; axis < 3; ++axis) {
+			glm::dvec3 delta(0.0);
+			delta[axis] = epsilon;
+			const glm::dvec2 derivative = (pixel(world + delta) - pixel(world - delta)) / (2.0 * epsilon);
+			numericalJ[axis] = glm::dvec3(derivative, 0.0);
+		}
+		const glm::dmat3 expected = numericalJ * cov3d * glm::transpose(numericalJ);
+		const glm::dmat2 actual = covariance2D(cov3d, world, cam, 0.0);
+		for (int col = 0; col < 2; ++col)
+			for (int row = 0; row < 2; ++row)
+				EXPECT_NEAR(actual[col][row], expected[col][row], 1.0e-7);
+	}
+}
+
 TEST(GaussianPointMath, Cholesky2DReconstructsMatrix)
 {
 	const glm::dmat2 A(4.0, 1.0, 1.0, 3.0);

@@ -425,7 +425,7 @@ std::string GSViewCommandDispatcher::buildProfile() const
         p.tonemapMode, fmtF(p.gamma).c_str(),
         s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints, s.candidateCount, s.accumFrames,
         s.computeMs, s.clearMs, s.splatDepthMs, s.splatColorMs, s.resolveMs);
-    return std::string(buf) + ";rendererVersion=1;driverVersionRaw=" +
+    return std::string(buf) + ";rendererVersion=2;driverVersionRaw=" +
         std::to_string(renderer_->getGaussianPointDriverVersion()) +
         ";rendererBufferBytes=" + std::to_string(renderer_->getGaussianPointBufferBytes()) +
         ";seedValue=" + std::to_string(p.seed);
