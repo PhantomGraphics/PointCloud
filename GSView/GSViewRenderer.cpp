@@ -376,7 +376,13 @@ void GSViewRenderer::onUpdate(uint32_t frameIndex)
 
 	const glm::mat4 mvp = computeMVP();
 	const glm::vec3 eye = computeEye();
-	sortRenderer_.onUpdate(frameIndex, mvp, eye);
+	// sortRenderer_'s onUpdate() drives the O(n)-phase odd-even transposition
+	// sort (VkGSPointRenderer::sortByView) every call, so it must stay gated
+	// to the mode that actually renders it -- otherwise GaussianPoint /
+	// PBVR3DExperimental pay for a full re-sort every frame for no reason.
+	if (mode_ == RenderMode::SortBased) {
+		sortRenderer_.onUpdate(frameIndex, mvp, eye);
+	}
 
 	// GaussianPoint / PBVR3D pipeline: (re)create extent-dependent buffers, then push camera + params.
 	gaussianPoint_.setPath(mode_ == RenderMode::PBVR3DExperimental
