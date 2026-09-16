@@ -12,6 +12,19 @@
 #include <vector>
 
 using namespace GSView::gpm;
+
+TEST(GaussianPointMath, PixelDensityZoomAndResolution)
+{
+    EXPECT_DOUBLE_EQ(pixelDensityScale(4, 400, 400, .01, .05), 1);
+    EXPECT_DOUBLE_EQ(pixelDensityScale(2, 400, 400, .01, .05), 4);
+    EXPECT_DOUBLE_EQ(pixelDensityScale(8, 400, 400, .01, .05), .25);
+    EXPECT_DOUBLE_EQ(pixelDensityScale(4, 800, 800, .01, .05), 4);
+    EXPECT_DOUBLE_EQ(pixelDensityScale(4, 200, 800, .01, .05), 1);
+    EXPECT_DOUBLE_EQ(pixelDensityScale(0, 400, 400, .01, .05), 0);
+    EXPECT_DOUBLE_EQ(pixelDensityScale(-4, 400, 400, .01, .05), 0);
+    EXPECT_DOUBLE_EQ(pixelDensityScale(4, 0, 400, .01, .05), 0);
+    EXPECT_DOUBLE_EQ(pixelDensityScale(4, 400, 400, 0, .05), 0);
+}
 namespace vec = GSView::gpm::vectors;
 
 namespace {

@@ -1,0 +1,40 @@
+#version 450
+// Hierarchical exclusive scan, with saturating sums to avoid uint overflow.
+layout(local_size_x = 256) in;
+layout(std430, binding = 8) buffer ScanB { uint data[]; };
+layout(std430, binding = 9) buffer ParticleB { uvec4 particles[]; };
+layout(std430, binding = 10) buffer WorkB { uint work[]; };
+layout(push_constant) uniform PC { uint mode, base, size, parent; } pc;
+shared uint temp[256];
+uint addSat(uint a, uint b) { return min(a + b, 0x7fffffffu); }
+void main() {
+    uint lane = gl_LocalInvocationID.x;
+    if (pc.mode >= 2u) {
+        if (gl_GlobalInvocationID.x == 0u) {
+            uint total = data[pc.base];
+            work[0] = min((total + 63u) / 64u, 65535u);
+            work[1] = 1u; work[2] = 1u; work[3] = total;
+            work[4] = (pc.mode == 4u || total > uint(particles.length())) ? 1u : 0u;
+            if (pc.mode == 3u || total == 0x7fffffffu) { work[4] = 2u; work[0] = 0u; }
+        }
+        return;
+    }
+    for (uint block = gl_WorkGroupID.x; block < (pc.size + 255u) / 256u; block += gl_NumWorkGroups.x) {
+        uint i = block * 256u + lane;
+        if (pc.mode == 1u) {
+            if (i < pc.size) data[pc.base + i] = addSat(data[pc.base + i], data[pc.parent + block]);
+        } else {
+            temp[lane] = i < pc.size ? data[pc.base + i] : 0u;
+            barrier();
+            for (uint shift = 1u; shift < 256u; shift *= 2u) {
+                uint v = lane >= shift ? temp[lane-shift] : 0u;
+                barrier();
+                temp[lane] = addSat(temp[lane], v);
+                barrier();
+            }
+            if (i < pc.size) data[pc.base + i] = lane == 0u ? 0u : temp[lane-1u];
+            if (lane == 255u) data[pc.parent + block] = temp[255];
+            barrier();
+        }
+    }
+}

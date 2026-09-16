@@ -11,6 +11,17 @@
 
 namespace GSView::gpm {
 
+double pixelDensityScale(double depth, double focalX, double focalY,
+                         double referencePixelLength, double nearZ)
+{
+    if (!std::isfinite(depth) || !std::isfinite(focalX) || !std::isfinite(focalY) ||
+        !std::isfinite(referencePixelLength) || !std::isfinite(nearZ) ||
+        depth <= std::max(nearZ, 0.0) || focalX <= 0 || focalY <= 0 || referencePixelLength <= 0)
+        return 0.0;
+    const double ratio = referencePixelLength / depth;
+    return std::min(ratio * ratio * focalX * focalY, 1.0e12);
+}
+
 namespace {
 inline constexpr double kPi    = 3.14159265358979323846;
 inline constexpr double kTwoPi = 2.0 * kPi;

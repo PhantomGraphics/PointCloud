@@ -1,4 +1,6 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+#include "gps_work.glsl"
 
 // GaussianPoint -- fused project + count + splat, run twice via a push constant:
 // pass 0 writes nearest depth (atomicMin on a uint32 key), pass 1 writes the
@@ -143,7 +145,12 @@ vec3 evalSH(uint id, vec3 dc, vec3 dir) {
     return max(result + 0.5, vec3(0.0));
 }
 
+void addExpected(uint value) {
+    uint previous = atomicAdd(stats[0], value);
+    if (previous > 0xffffffffu-value) atomicAdd(stats[6], 1u);
+}
 void splatOne(uint id) {
+    if (pc.pass == 2u) { prepared[id].count = uvec4(0); offsets[id] = 0u; }
     GsPoint sp = splats[id];
 
     vec3 world = vec3(sp.x, sp.y, sp.z);
@@ -220,7 +227,7 @@ void splatOne(uint id) {
     }
 
     if (Ni <= 0) {
-        if (pc.pass == 0u) atomicAdd(stats[0], uint(EN * 256.0));
+        if (pc.pass == 2u) addExpected(uint(EN * 256.0));
         return;
     }
 
@@ -233,9 +240,25 @@ void splatOne(uint id) {
     vec3 lin  = evalSH(id, vec3(sp.f0, sp.f1, sp.f2), vdir);
     uint packed = packLinearColor(lin);
 
+    if (pc.pass == 2u) {
+        Prepared q;
+        q.a = vec4(mu, mv, l00, l10); q.b = vec4(l11, 0, 0, 0);
+        q.c = vec4(0); q.d = vec4(0);
+        q.info = vec4(op, 1, 0, 0);
+        q.meta = uvec4(rs.s, packed, dkey, 0);
+        q.count = uvec4(uint(Ni), 0, 0, 0);
+        prepared[id] = q;
+        offsets[id] = uint(Ni);
+        addExpected(uint(EN * 256.0));
+
+        
+        return;
+    }
     uint W_ = u.dims.x, H_ = u.dims.y, side = u.dims.w, sppI = u.dims.z;
     uint drawn = 0u;
+    uint pointSeed = rs.s;
     for (int i = 0; i < Ni; ++i) {
+        rs.s = pcg(pointSeed ^ (uint(i) * 2891336453u + 1u));
         float r  = sampleRadius(op, rnd(rs));
         float th = TWO_PI * rnd(rs);
         float wx = r * cos(th), wy = r * sin(th);
@@ -259,13 +282,14 @@ void splatOne(uint id) {
     }
 
     if (pc.pass == 0u) {
-        atomicAdd(stats[0], uint(EN * 256.0));
+
         atomicAdd(stats[1], uint(Ni));
         atomicAdd(stats[3], drawn);
     }
 }
 
 void main() {
+    if (pc.pass != 2u && work[4] != 2u) return;
     uint stride = gl_NumWorkGroups.x * 64u;
     for (uint id = gl_GlobalInvocationID.x; id < u.ctrl.x; id += stride)
         splatOne(id);

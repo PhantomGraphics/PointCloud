@@ -23,8 +23,9 @@ namespace GSView::reference {
 int GSParticleGenerator::particleCountForSplat(const Phantom::PointCloud::GSPoint& p) const
 {
 	const int maxPPS = std::max(0, maxParticlesPerSplat_);
-	const float scaled = densityScale_ * sigmoid(p.opacity) * static_cast<float>(maxPPS);
-	const long ni = std::lround(scaled);
+	const float scaled = densityScale_ * pixelDensityScale_ * sigmoid(p.opacity) * static_cast<float>(maxPPS);
+	if (!std::isfinite(scaled) || scaled <= 0) return 0;
+	const long ni = std::lround(std::min(scaled, static_cast<float>(maxPPS)));
 	if (ni <= 0) return 0;
 	return std::min(static_cast<int>(ni), maxPPS);
 }

@@ -34,6 +34,7 @@ struct CpuParticleSet {
 
 class GSParticleGenerator {
 public:
+	void setPixelDensityScale(float s) { pixelDensityScale_ = s; }
 	void setDensityScale(float s) { densityScale_ = s; }
 	void setMaxParticlesPerSplat(int n) { maxParticlesPerSplat_ = n; }
 	void setSeed(std::uint32_t seed) { seed_ = seed; }
@@ -50,6 +51,7 @@ private:
 	glm::mat3 cholesky(const glm::mat3& A) const;
 
 	float densityScale_ = 1.0f;
+	float pixelDensityScale_ = 1.0f;
 	int maxParticlesPerSplat_ = 8;
 	std::uint32_t seed_ = 42u;
 	mutable std::mt19937 rng_{ 42u };

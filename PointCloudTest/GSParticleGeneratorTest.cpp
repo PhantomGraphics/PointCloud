@@ -53,6 +53,20 @@ TEST(GSParticleGenerator, OpaqueSplatCountMatchesRoundedFormula)
     EXPECT_EQ(gen.particleCountForSplat(sp), 6);
 }
 
+TEST(GSParticleGenerator, PixelDensityScaleChangesCountsAndPreservesCap)
+{
+    GSParticleGenerator gen;
+    gen.setMaxParticlesPerSplat(100);
+    const GSPoint sp = makeSplat(0.0f);
+    EXPECT_EQ(gen.particleCountForSplat(sp), 50);
+    gen.setPixelDensityScale(0.25f);
+    EXPECT_EQ(gen.particleCountForSplat(sp), 13);
+    gen.setPixelDensityScale(4.0f);
+    EXPECT_EQ(gen.particleCountForSplat(sp), 100);
+    gen.setPixelDensityScale(0.0f);
+    EXPECT_EQ(gen.particleCountForSplat(sp), 0);
+}
+
 TEST(GSParticleGenerator, CountIsClampedToMaxParticlesPerSplat)
 {
     const GSPoint sp = makeSplat(40.0f); // sigmoid ~= 1

@@ -4,6 +4,7 @@
 #include "GaussianPointRenderer.h"
 
 #include <charconv>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -115,6 +116,28 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGpTonemap")           return cmdGetGpTonemap();
     if (name == "GetGpGamma")             return cmdGetGpGamma();
     if (name == "GetPbvr3dMethod")        return cmdGetPbvr3dMethod();
+    if (name == "GetPbvrZoom") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().pbvrZoomRecalibration) : "Error:renderer not available";
+    if (name == "GetGpCompactFallback") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().compactFallback) : "Error:renderer not available";
+    if (name == "SetPbvrZoom" || name == "SetGpCompact") {
+        if (!renderer_) return "Error:renderer not available";
+        if (rest != "0" && rest != "1" && !(name == "SetGpCompact" && rest == "2"))
+            return "Error:expected 0 or 1 (compact also accepts 2 for point replay)";
+        auto p = renderer_->getGaussianPointParams();
+        if (name == "SetPbvrZoom") p.pbvrZoomRecalibration = rest == "1";
+        else p.compactPipeline = rest[0] - '0';
+        renderer_->setGaussianPointParams(p);
+        return "OK";
+    }
+    if (name == "SetPbvrReferencePixelLength") {
+        if (!renderer_) return "Error:renderer not available";
+        float length;
+        if (!tryFloat(rest, length) || !std::isfinite(length) || length <= 0)
+            return "Error:expected a finite positive pixel length";
+        auto p = renderer_->getGaussianPointParams();
+        p.pbvrReferencePixelLength = length;
+        renderer_->setGaussianPointParams(p);
+        return "OK";
+    }
 
     if (rest.empty()) return "Error:missing argument for " + name;
     if (name == "SetGpCamera") {
@@ -425,10 +448,14 @@ std::string GSViewCommandDispatcher::buildProfile() const
         p.tonemapMode, fmtF(p.gamma).c_str(),
         s.expectedCount, s.generatedCount, s.activeSamples, s.drawnPoints, s.candidateCount, s.accumFrames,
         s.computeMs, s.clearMs, s.splatDepthMs, s.splatColorMs, s.resolveMs);
-    return std::string(buf) + ";rendererVersion=2;driverVersionRaw=" +
+    return std::string(buf) + ";rendererVersion=3;driverVersionRaw=" +
         std::to_string(renderer_->getGaussianPointDriverVersion()) +
         ";rendererBufferBytes=" + std::to_string(renderer_->getGaussianPointBufferBytes()) +
-        ";seedValue=" + std::to_string(p.seed);
+        ";seedValue=" + std::to_string(p.seed) +
+        ";compact=" + std::to_string(p.compactPipeline) +
+        ";compactFallback=" + std::to_string(s.compactFallback) +
+        ";pbvrZoom=" + std::to_string(p.pbvrZoomRecalibration) +
+        ";referencePixelLength=" + fmtF(p.pbvrReferencePixelLength);
 }
 
 std::string GSViewCommandDispatcher::cmdGetGpProfile()

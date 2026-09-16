@@ -6,15 +6,17 @@
 //
 // Per frame, entirely on the GPU, no CPU wait / vkDeviceWaitIdle:
 //   1. clear the per-subpixel depth/colour/stats buffers (vkCmdFillBuffer)
-//   2. gps_splat.comp pass 0  -- project each Gaussian, Poisson-count points,
-//      scatter them, atomicMin the nearest depth key per subpixel
-//   3. gps_splat.comp pass 1  -- re-scatter, atomically select the winning colour
+//   2. gps_splat/gps_pbvr3d pass 2 -- prepare/count once per Gaussian
+//   3. gps_scan -- hierarchical exclusive scan of variable particle counts
+//   4. gps_compact -- point-parallel generation into packed candidate slots,
+//      nearest depth, then colour selection from cached samples
 //   4. gps_resolve.comp       -- average subpixels and update progressive history
 //   5. gps_composite (graphics, inside the swapchain pass) -- blit to screen
 //
 // Current scope includes SH degree 0..3, temporal accumulation, conservative
 // frustum/footprint culling, point-budget thinning, and the PBVR3D comparison.
-// Scan/compaction and hierarchical occlusion remain future work.
+// Large outputs replay point-parallel samples for colour instead of storing
+// every candidate; no particles are dropped. Hierarchical occlusion is future work.
 // -----------------------------------------------------------------------------
 
 #include "../../CGLib/VulkanGraphics/VulkanBuffer.h"
@@ -72,6 +74,9 @@ public:
         float footprintCullPx  = 0.4f;   // cull Gaussians whose projected sigma is below this
         int   pbvr3dMethod     = 0;      // Pbvr3dMethod
         float basePointsPerSplat = 512.f; // Pbvr3d base count knob
+        bool pbvrZoomRecalibration = false; // opt-in; reference pixel length is explicit
+        float pbvrReferencePixelLength = 0.01f;
+        int compactPipeline = 1; // 0 primitive replay, 1 automatic compact, 2 force point replay
         float pointBudget      = 0.f;    // 0 = unlimited; else adaptive stochastic thinning
     };
 
@@ -89,6 +94,7 @@ public:
         uint32_t drawnPoints    = 0;   // points that landed on screen
         uint32_t candidateCount = 0;   // PBVR candidate points before view-conditioned thinning
         uint32_t accumFrames    = 0;   // sample sets in the displayed frame-slot accumulator
+        uint32_t compactFallback = 0; // 0 cached compact, 1 bounded-memory replay, 2 primitive fallback
         int      shDegreeData   = 0;   // SH degree present in the loaded data
         // GPU pass times in ms (0 when timestamps are unsupported), lagged one frame.
         float    clearMs = 0.f, splatDepthMs = 0.f, splatColorMs = 0.f, resolveMs = 0.f, computeMs = 0.f;
@@ -149,12 +155,18 @@ private:
         glm::vec4  p3;    // gamma, basePointsPerSplat, budgetThin, SH storage stride/channel
     };
     struct PushConstants { uint32_t pass; };
+    struct ScanConstants { uint32_t mode, base, size, parent; };
 
     bool available_ = false;
     std::string deviceName_;
     uint32_t driverVersion_ = 0;
     Path path_ = Path::GaussianPoint;
     Params params_;
+    glm::vec3 objectCenter_{0.0f};
+    struct ScanLevel { uint32_t base, size, parent; };
+    std::vector<ScanLevel> scanLevels_;
+    uint32_t scanWords_ = 1;
+    uint32_t particleCapacity_ = 1;
     Camera camera_;
     const Phantom::PointCloud::GSPointCloud* cloud_ = nullptr;
 
@@ -180,6 +192,10 @@ private:
     uint32_t numSplats_ = 0;
     int      shDegreeData_ = 0;
     uint64_t cachedGeneration_ = ~0ull;
+
+    std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> preparedBuf_, scanBuf_, particleBuf_, workBuf_;
+    Phantom::VKG::VulkanComputePipeline scanPipe_, compactPipe_;
+    bool createWorkBuffers(const Phantom::VKG::VulkanContext&, const Phantom::VKG::VulkanCommandPool&);
 
     // per-frame buffers
     std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> depthBuf_;

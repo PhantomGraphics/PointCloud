@@ -1,4 +1,5 @@
-﻿#include "GaussianPointRenderer.h"
+#include "GaussianPointRenderer.h"
+#include "GaussianPointMath.h"
 
 #include "../../CGLib/VulkanGraphics/VulkanContext.h"
 #include "../../CGLib/VulkanGraphics/VulkanCommandPool.h"
@@ -22,7 +23,7 @@ constexpr double kShC0 = 0.28209479177387814;
 
 // Binding indices shared by the compute shaders (see gps_splat.comp / gps_resolve.comp).
 enum : uint32_t {
-    B_INPUT = 0, B_DEPTH = 1, B_COLOR = 2, B_ACCUM = 3, B_STATS = 4, B_PARAMS = 5, B_SHREST = 6
+    B_INPUT = 0, B_DEPTH = 1, B_COLOR = 2, B_ACCUM = 3, B_STATS = 4, B_PARAMS = 5, B_SHREST = 6, B_PREPARED = 7, B_SCAN = 8, B_PARTICLES = 9, B_WORK = 10
 };
 
 VkBufferMemoryBarrier bufBarrier(VkBuffer buf, VkAccessFlags src, VkAccessFlags dst)
@@ -76,6 +77,10 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
         ssbo(B_STATS,  VK_SHADER_STAGE_COMPUTE_BIT),
         paramsBinding,
         ssbo(B_SHREST, VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_PREPARED, VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_SCAN, VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_PARTICLES, VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_WORK, VK_SHADER_STAGE_COMPUTE_BIT),
     });
 
     // --- composite descriptor set layout (resolvedBuf + params, fragment) ---
@@ -89,7 +94,7 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
 
     // --- descriptor pool ---
     std::vector<VkDescriptorPoolSize> sizes = {
-        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 7 * frames_ },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 11 * frames_ },
         { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 * frames_ },
     };
     descPool_.create(dev, sizes, 2 * frames_);
@@ -122,6 +127,16 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     pbvrCfg.descriptorSetLayout = computeDsl_.get();
     pbvrCfg.pushConstantRange = { VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants) };
     if (!pbvr3dPipe_.create(ctx, pbvrCfg)) { available_ = false; return; }
+
+    auto scanCfg = splatCfg;
+    scanCfg.compSpv = ::VKG::loadSPVRepo("shaders/gps_scan.comp.spv");
+    scanCfg.pushConstantRange.size = sizeof(ScanConstants);
+    auto compactCfg = splatCfg;
+    compactCfg.compSpv = ::VKG::loadSPVRepo("shaders/gps_compact.comp.spv");
+    if (scanCfg.compSpv.empty() || compactCfg.compSpv.empty() ||
+        !scanPipe_.create(ctx, scanCfg) || !compactPipe_.create(ctx, compactCfg)) {
+        available_ = false; return;
+    }
 
     Phantom::VKG::ComputePipelineConfig resolveCfg{};
     resolveCfg.compSpv = resolveSpv;
@@ -158,6 +173,7 @@ void GaussianPointRenderer::setParams(const Params& p)
     params_.shDegree = std::clamp(params_.shDegree, 0, 3);
     params_.tonemapMode = std::clamp(params_.tonemapMode, 0, 2);
     params_.pbvr3dMethod = std::clamp(params_.pbvr3dMethod, 0, 2);
+    params_.compactPipeline = std::clamp(params_.compactPipeline, 0, 2);
     spp_ = static_cast<uint32_t>(params_.sppSide * params_.sppSide);
 }
 
@@ -189,6 +205,7 @@ void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
         shRest_.create(ctx, pool, sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, &dummy);
     }
 
+    if (!createWorkBuffers(ctx, pool)) { available_ = false; return; }
     for (uint32_t f = 0; f < frames_; ++f) {
         depthBuf_[f].create(ctx, pool, subSamples * sizeof(uint32_t),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -210,6 +227,10 @@ void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
 void GaussianPointRenderer::destroyFrameBuffers(VkDevice device)
 {
     for (uint32_t f = 0; f < kMaxFrames; ++f) {
+        preparedBuf_[f].destroy(device);
+        scanBuf_[f].destroy(device);
+        particleBuf_[f].destroy(device);
+        workBuf_[f].destroy(device);
         depthBuf_[f].destroy(device);
         colorBuf_[f].destroy(device);
         accumBuf_[f].destroy(device);
@@ -227,7 +248,11 @@ void GaussianPointRenderer::writeComputeSet(VkDevice device, uint32_t f)
     VkDescriptorBufferInfo pa{ paramsUbo_[f].getBuffer(), 0, sizeof(ParamsUBO) };
     VkDescriptorBufferInfo sh{ shRest_.getBuffer(), 0, VK_WHOLE_SIZE };
 
-    VkWriteDescriptorSet w[7]{};
+    VkDescriptorBufferInfo prep{ preparedBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo scan{ scanBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo points{ particleBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkDescriptorBufferInfo work{ workBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkWriteDescriptorSet w[11]{};
     auto set = [&](int i, uint32_t bind, VkDescriptorType type, const VkDescriptorBufferInfo* bi) {
         w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         w[i].dstSet = computeSets_[f];
@@ -243,7 +268,11 @@ void GaussianPointRenderer::writeComputeSet(VkDevice device, uint32_t f)
     set(4, B_STATS,  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &st);
     set(5, B_PARAMS, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &pa);
     set(6, B_SHREST, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &sh);
-    vkUpdateDescriptorSets(device, 7, w, 0, nullptr);
+    set(7, B_PREPARED, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &prep);
+    set(8, B_SCAN, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &scan);
+    set(9, B_PARTICLES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &points);
+    set(10, B_WORK, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &work);
+    vkUpdateDescriptorSets(device, 11, w, 0, nullptr);
 }
 
 void GaussianPointRenderer::writeCompositeSet(VkDevice device, uint32_t f)
@@ -304,6 +333,10 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
         numSplats_ = static_cast<uint32_t>(cloud_->points.size());
         shDegreeData_ = cloud_->shDegree;
 
+        glm::dvec3 center(0.0);
+        for (const auto& point : cloud_->points) center += glm::dvec3(point.x, point.y, point.z);
+        objectCenter_ = glm::vec3(center / double(cloud_->points.size()));
+        if (!createWorkBuffers(ctx, pool)) { available_ = false; return; }
         cachedGeneration_ = cloud_->generation;
         for (uint32_t f = 0; f < frames_; ++f) writeComputeSet(ctx.getDevice(), f);
         resetPending_ = frames_;
@@ -371,6 +404,9 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     mixFloat(params_.gamma);
     mixFloat(params_.basePointsPerSplat);
     mixFloat(params_.pointBudget);
+    mix(params_.pbvrZoomRecalibration);
+    mix(params_.compactPipeline);
+    mixFloat(params_.pbvrReferencePixelLength);
     mix(static_cast<std::uint64_t>(shDeg) * 7 + params_.tonemapMode);
     mix(static_cast<std::uint64_t>(params_.pbvr3dMethod) * 3
         + static_cast<std::uint64_t>(path_ == Path::Pbvr3d));
@@ -403,7 +439,11 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
                           static_cast<uint32_t>(params_.seedMode != 0),
                           static_cast<uint32_t>(params_.countMode != 0));
     ubo.p2 = glm::vec4(params_.maxPointsPerSplat, std::max(0.0f, params_.footprintCullPx),
-                       params_.densityScale, 0.0f);
+                       params_.densityScale,
+                       params_.pbvrZoomRecalibration ? static_cast<float>(gpm::pixelDensityScale(
+                           -(camera_.view * glm::vec4(objectCenter_, 1.0f)).z,
+                           camera_.focalX, camera_.focalY, params_.pbvrReferencePixelLength,
+                           params_.nearZ)) : 1.0f);
     ubo.bg = glm::vec4(params_.background, 0.0f);
     ubo.camPos = glm::vec4(camera_.camPos, 0.0f);
     ubo.ctrl2 = glm::uvec4(resetAccum, static_cast<uint32_t>(shDeg),
@@ -458,6 +498,48 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
                                 0, 1, &computeSets_[frameIndex], 0, nullptr);
 
+        auto computeBarrier = [&]() {
+            VkMemoryBarrier barrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+            barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+        };
+        PushConstants prepare{2};
+        vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(prepare), &prepare);
+        vkCmdDispatch(cmd, groups, 1, 1);
+        computeBarrier();
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, scanPipe_.getPipeline());
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, scanPipe_.getLayout(),
+            0, 1, &computeSets_[frameIndex], 0, nullptr);
+        auto scanPass = [&](uint32_t mode, const ScanLevel& level) {
+            ScanConstants pc{mode, level.base, level.size, level.parent};
+            vkCmdPushConstants(cmd, scanPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, std::min(65535u, (level.size + 255u) / 256u), 1, 1);
+            computeBarrier();
+        };
+        for (const auto& level : scanLevels_) scanPass(0, level);
+        for (size_t i = scanLevels_.size(); i > 1; --i) scanPass(1, scanLevels_[i-2]);
+        scanPass(params_.compactPipeline == 0 ? 3u : params_.compactPipeline == 2 ? 4u : 2u,
+                 {scanLevels_.back().parent, 1, 0});
+        VkBufferMemoryBarrier indirect = bufBarrier(workBuf_[frameIndex].getBuffer(),
+            VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT);
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 0, nullptr, 1, &indirect, 0, nullptr);
+        auto compactPass = [&](uint32_t pass) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, compactPipe_.getPipeline());
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, compactPipe_.getLayout(),
+                0, 1, &computeSets_[frameIndex], 0, nullptr);
+            PushConstants pc{pass};
+            vkCmdPushConstants(cmd, compactPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatchIndirect(cmd, workBuf_[frameIndex].getBuffer(), 0);
+        };
+        compactPass(0);
+        computeBarrier();
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
+            0, 1, &computeSets_[frameIndex], 0, nullptr);
         PushConstants pcDepth{ 0 };
         vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcDepth), &pcDepth);
         vkCmdDispatch(cmd, groups, 1, 1);
@@ -468,6 +550,10 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
 
         ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
+        compactPass(1);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
+            0, 1, &computeSets_[frameIndex], 0, nullptr);
         PushConstants pcColor{ 1 };
         vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcColor), &pcColor);
         vkCmdDispatch(cmd, groups, 1, 1);
@@ -539,7 +625,8 @@ uint64_t GaussianPointRenderer::bufferBytes() const
     uint64_t bytes = gsInput_.getSize() + shRest_.getSize() + readbackBuf_.getSize();
     for (uint32_t f = 0; f < frames_; ++f)
         bytes += depthBuf_[f].getSize() + colorBuf_[f].getSize() + accumBuf_[f].getSize()
-               + statsBuf_[f].getSize() + paramsUbo_[f].getSize();
+               + statsBuf_[f].getSize() + paramsUbo_[f].getSize()
+               + preparedBuf_[f].getSize() + scanBuf_[f].getSize() + particleBuf_[f].getSize() + workBuf_[f].getSize();
     return bytes;
 }
 
@@ -552,13 +639,16 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     const uint32_t f = (lastFrameIndex_ + 1u) % frames_;
     const auto* p = static_cast<const uint32_t*>(statsBuf_[f].getMapped());
     if (!p) return s;
-    s.expectedCount  = p[0] / 256u;
+    s.expectedCount = static_cast<uint32_t>(std::min<uint64_t>(
+        ((uint64_t(p[6]) << 32u) | p[0]) / 256u, UINT32_MAX));
     s.generatedCount = p[1];
     s.activeSamples  = p[2];
     s.drawnPoints    = p[3];
     s.candidateCount = p[4];
     s.accumFrames    = p[5];
     s.shDegreeData   = shDegreeData_;
+    const auto* work = static_cast<const uint32_t*>(workBuf_[f].getMapped());
+    s.compactFallback = work ? work[4] : 0u;
 
     const Stats& t = lastTimings_[f];
     s.clearMs = t.clearMs;
@@ -567,6 +657,38 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.resolveMs = t.resolveMs;
     s.computeMs = t.computeMs;
     return s;
+}
+
+bool GaussianPointRenderer::createWorkBuffers(const Phantom::VKG::VulkanContext& ctx,
+                                              const Phantom::VKG::VulkanCommandPool& pool)
+{
+    scanLevels_.clear();
+    uint32_t n = std::max(numSplats_, 1u), base = 0;
+    do {
+        const uint32_t parent = base + n;
+        scanLevels_.push_back({base, n, parent});
+        n = (n + 255u) / 256u;
+        base = parent;
+    } while (n > 1u);
+    scanWords_ = base + 1u;
+    VkPhysicalDeviceProperties props{};
+    vkGetPhysicalDeviceProperties(ctx.getPhysicalDevice(), &props);
+    const VkDeviceSize prepBytes = VkDeviceSize(std::max(numSplats_, 1u)) * 112u;
+    if (prepBytes > props.limits.maxStorageBufferRange) return false;
+    particleCapacity_ = std::min(8u * 1024u * 1024u, props.limits.maxStorageBufferRange / 16u);
+    // Cloud uploads and resize already wait for older submissions before reaching here.
+    for (uint32_t f = 0; f < frames_; ++f) {
+        preparedBuf_[f].destroy(ctx.getDevice()); scanBuf_[f].destroy(ctx.getDevice());
+        particleBuf_[f].destroy(ctx.getDevice()); workBuf_[f].destroy(ctx.getDevice());
+        if (!preparedBuf_[f].create(ctx, pool, prepBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) ||
+            !scanBuf_[f].create(ctx, pool, VkDeviceSize(scanWords_)*4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) ||
+            !particleBuf_[f].create(ctx, pool, VkDeviceSize(particleCapacity_)*16u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) ||
+            !workBuf_[f].createMapped(ctx, 8u*4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT))
+            return false;
+        const uint32_t zero[8] = {};
+        workBuf_[f].write(zero, sizeof(zero));
+    }
+    return true;
 }
 
 void GaussianPointRenderer::onCleanup(VkDevice device)
@@ -579,6 +701,8 @@ void GaussianPointRenderer::onCleanup(VkDevice device)
     shRest_.destroy(device);
     readbackBuf_.destroy(device);
     compositePipe_.destroy(device);
+    scanPipe_.destroy(device);
+    compactPipe_.destroy(device);
     splatPipe_.destroy(device);
     pbvr3dPipe_.destroy(device);
     resolvePipe_.destroy(device);

@@ -1,0 +1,86 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+layout(local_size_x = 64) in;
+#include "gps_work.glsl"
+layout(std430, binding = 1) buffer DepthB { uint depthBuf[]; };
+layout(std430, binding = 2) buffer ColorB { uint colorBuf[]; };
+layout(std430, binding = 4) buffer StatsB { uint stats[]; };
+layout(std430, binding = 6) readonly buffer ShRestB { float shRest[]; };
+layout(std140, binding = 5) uniform Params {
+    mat4  view;    // world -> camera (GLM convention: camera looks -Z)
+    vec4  p0;      // focalX, focalY, cx, cy        (pixels)
+    vec4  p1;      // nearZ, lowPass, shC0, opacityCutoff
+    uvec4 dims;    // width, height, spp, sppSide
+    uvec4 ctrl;    // numSplats, frameIndex, seedMode, countMode
+    vec4  p2;      // maxPointsPerGaussian, footprintCullPx, densityScale, unused
+    vec4  bg;      // background rgb, unused
+    vec4  camPos;  // world-space camera position, unused
+    uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, unused
+    vec4  p3;      // gamma, unused, budgetThin, SH storage stride/channel
+} u;
+
+layout(push_constant) uniform PC { uint pass; } pc;
+#include "gps_sampling.glsl"
+vec2 normalPair(inout RS rs) {
+    float r = sqrt(-2.0 * log(max(rnd(rs), 1e-7)));
+    float t = TWO_PI * rnd(rs);
+    return r * vec2(cos(t), sin(t));
+}
+shared uvec2 totals[64];
+void main() {
+    uvec2 counts = uvec2(0);
+    for (uint index = gl_GlobalInvocationID.x; index < work[3]; index += gl_NumWorkGroups.x * 64u) {
+        if (pc.pass == 1u && work[4] == 0u) {
+            uvec4 v = particles[index];
+            if (v.w != 0u && depthBuf[v.x] == v.y) atomicMin(colorBuf[v.x], v.z);
+            continue;
+        }
+        // Upper bound of exclusive offsets handles zero-count primitives.
+        uint lo = 0u, hi = u.ctrl.x;
+        while (lo < hi) {
+            uint mid = lo + (hi-lo)/2u;
+            if (offsets[mid] <= index) lo = mid + 1u; else hi = mid;
+        }
+        uint id = lo - 1u;
+        Prepared q = prepared[id];
+        RS rs; rs.s = pcg(q.meta.x ^ ((index-offsets[id]) * 2891336453u + 1u));
+        if (work[4] == 0u) particles[index] = uvec4(0);
+        vec2 pixel;
+        uint key = q.meta.z;
+        if (q.meta.w == 0u) {
+            float r = sampleRadius(q.info.x, rnd(rs));
+            float t = TWO_PI * rnd(rs);
+            vec2 v = r * vec2(cos(t), sin(t));
+            pixel = q.a.xy + vec2(q.a.z*v.x, q.a.w*v.x + q.b.x*v.y);
+        } else {
+            vec2 ab = normalPair(rs), cd = normalPair(rs);
+            if (u.ctrl2.w == 2u && rnd(rs) >= q.info.y) continue;
+            vec3 world = q.a.xyz + mat3(q.b.xyz, q.c.xyz, q.d.xyz) * vec3(ab, cd.x);
+            vec3 cam = (u.view * vec4(world, 1)).xyz;
+            if (pc.pass == 0u) counts.x++;
+            if (-cam.z <= u.p1.x) continue;
+            pixel = vec2(u.p0.x*cam.x/(-cam.z), -u.p0.y*cam.y/(-cam.z)) + u.p0.zw;
+            key = orderedDepthKey(-cam.z);
+        }
+        if (q.meta.w == 0u && pc.pass == 0u) counts.x++;
+        if (any(isnan(pixel)) || any(isinf(pixel)) || any(lessThan(pixel, vec2(0))) ||
+            any(greaterThanEqual(pixel, vec2(u.dims.xy)))) continue;
+        uvec2 sub = min(uvec2(fract(pixel)*float(u.dims.w)), uvec2(u.dims.w-1u));
+        uint sampleIndex = (uint(pixel.y)*u.dims.x + uint(pixel.x))*u.dims.z + sub.y*u.dims.w + sub.x;
+        if (work[4] == 0u) particles[index] = uvec4(sampleIndex, key, q.meta.y, 1u);
+        if (pc.pass == 0u) {
+            atomicMin(depthBuf[sampleIndex], key);
+            counts.y++;
+        } else if (depthBuf[sampleIndex] == key) atomicMin(colorBuf[sampleIndex], q.meta.y);
+    }
+    totals[gl_LocalInvocationID.x] = counts;
+    barrier();
+    for (uint step = 32u; step > 0u; step >>= 1u) {
+        if (gl_LocalInvocationID.x < step) totals[gl_LocalInvocationID.x] += totals[gl_LocalInvocationID.x+step];
+        barrier();
+    }
+    if (gl_LocalInvocationID.x == 0u && pc.pass == 0u) {
+        atomicAdd(stats[1], totals[0].x);
+        atomicAdd(stats[3], totals[0].y);
+    }
+}

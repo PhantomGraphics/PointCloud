@@ -14,4 +14,7 @@ cd /d "%~dp0"
 "%VULKAN_SDK%\Bin\glslc.exe" gps_composite.vert -o gps_composite.vert.spv
 "%VULKAN_SDK%\Bin\glslc.exe" gps_composite.frag -o gps_composite.frag.spv
 
+"%VULKAN_SDK%\Bin\glslc.exe" gps_scan.comp -o gps_scan.comp.spv
+"%VULKAN_SDK%\Bin\glslc.exe" gps_compact.comp -o gps_compact.comp.spv
+
 echo Done.

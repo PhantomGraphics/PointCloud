@@ -112,6 +112,12 @@ double invDilog(double target);
 
 double expectedPointCount(double detCov2d, double opacity);
 
+// Object-level PixelLength calibration: referencePixelLength^2 / pixelArea.
+// Perspective pixel area at the object centre is depth^2 / (focalX*focalY).
+// Invalid/behind-near-plane centres return zero, never an infinite density.
+double pixelDensityScale(double depth, double focalX, double focalY,
+                         double referencePixelLength, double nearZ);
+
 // ---------------------------------------------------------------------------
 // Sampling
 // ---------------------------------------------------------------------------

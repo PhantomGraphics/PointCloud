@@ -247,3 +247,11 @@ endif()
 else()
     message(WARNING "PointCloud: vulkan/vulkan.h not found -- PointCloudView is skipped. Pass -DVULKAN_INCLUDE_DIR=/path/to/include to enable it (on Windows, check $ENV{VULKAN_SDK} is set).")
 endif()
+
+if(TARGET GSViewShaders)
+    foreach(shader gps_splat.comp gps_pbvr3d.comp gps_compact.comp)
+        add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/GSView_shaders/${shader}.spv" APPEND
+            DEPENDS "${POINTCLOUD_ROOT}/GSView/shaders/gps_work.glsl"
+                    "${POINTCLOUD_ROOT}/GSView/shaders/gps_sampling.glsl")
+    endforeach()
+endif()

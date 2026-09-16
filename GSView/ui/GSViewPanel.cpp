@@ -72,6 +72,10 @@ void GSViewPanel::onImGui()
 		if (pbvrChanged && onPBVRParamsChanged_)
 			onPBVRParamsChanged_(densityScale_, maxParticlesPerSplat_, pbvrParticleSize_, pbvr3dMethod_);
 		ImGui::Spacing();
+		bool zoomChanged = ImGui::Checkbox("Zoom density recalibration", &gp_.pbvrZoomRecalibration);
+		if (gp_.pbvrZoomRecalibration)
+			zoomChanged |= ImGui::SliderFloat("Reference pixel length", &gp_.pbvrReferencePixelLength, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
+		if (zoomChanged && onGpParamsChanged_) onGpParamsChanged_(gp_);
 		ImGui::Text("expected/generated: %u / %u", gpStats_.expectedCount, gpStats_.generatedCount);
 		ImGui::Text("candidates / drawn: %u / %u", gpStats_.candidateCount, gpStats_.drawnPoints);
 		ImGui::Text("active / accum frames: %u / %u", gpStats_.activeSamples, gpStats_.accumFrames);

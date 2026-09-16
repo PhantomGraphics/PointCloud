@@ -1,4 +1,6 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+#include "gps_work.glsl"
 
 // PBVR3DExperimental -- object-space "3D Gaussian -> world-space particles".
 // Same two-pass depth/colour scatter and the same depth/colour/accum buffers as
@@ -156,7 +158,12 @@ vec3 footprintCov2d(vec3 camMean, mat3 cov3) {
     return vec3(c[0][0] + u.p1.y, c[0][1], c[1][1] + u.p1.y);
 }
 
+void addExpected(uint value) {
+    uint previous = atomicAdd(stats[0], value);
+    if (previous > 0xffffffffu-value) atomicAdd(stats[6], 1u);
+}
 void splatOne(uint id) {
+    if (pc.pass == 2u) { prepared[id].count = uvec4(0); offsets[id] = 0u; }
     GsPoint sp = splats[id];
 
     vec3 world = vec3(sp.x, sp.y, sp.z);
@@ -184,7 +191,7 @@ void splatOne(uint id) {
 
     uint method = u.ctrl2.w;
     float dS   = u.p2.z;
-    float baseK = u.p3.y;
+    float baseK = u.p3.y * (method == 2u ? 1.0 : u.p2.w);
     float bthin = (u.p3.z > 0.0) ? u.p3.z : 1.0;
 
     float lambda;      // candidate count
@@ -217,7 +224,7 @@ void splatOne(uint id) {
         Ni = max(int(round(lambda + sqrt(lambda) * g.x)), 0);
     }
     if (Ni <= 0) {
-        if (pc.pass == 0u) atomicAdd(stats[0], uint(lambda * keepProb * 256.0));
+        if (pc.pass == 2u) addExpected(uint(lambda * keepProb * 256.0));
         return;
     }
 
@@ -225,11 +232,28 @@ void splatOne(uint id) {
     vec3 lin  = evalSH(id, vec3(sp.f0, sp.f1, sp.f2), vdir);
     uint packed = packLinearColor(lin);
 
+    if (pc.pass == 2u) {
+        Prepared q;
+        q.a = vec4(world, 0); q.b = vec4(L3[0], 0);
+        q.c = vec4(L3[1], 0); q.d = vec4(L3[2], 0);
+        q.info = vec4(op, keepProb, 0, 0);
+        q.meta = uvec4(rs.s, packed, 0, 1);
+        q.count = uvec4(uint(Ni), 0, 0, 0);
+        prepared[id] = q;
+        offsets[id] = uint(Ni);
+        addExpected(uint(lambda * keepProb * 256.0));
+        atomicAdd(stats[4], uint(Ni));
+
+
+        return;
+    }
     uint W_ = u.dims.x, H_ = u.dims.y, side = u.dims.w, sppI = u.dims.z;
     float fx = u.p0.x, fy = u.p0.y, cx = u.p0.z, cy = u.p0.w;
     uint generated = 0u;
     uint drawn = 0u;
+    uint pointSeed = rs.s;
     for (int i = 0; i < Ni; ++i) {
+        rs.s = pcg(pointSeed ^ (uint(i) * 2891336453u + 1u));
         vec2 ab = boxMuller(rs);
         vec2 cdn = boxMuller(rs);
         vec3 z = vec3(ab.x, ab.y, cdn.x);
@@ -259,14 +283,15 @@ void splatOne(uint id) {
     }
 
     if (pc.pass == 0u) {
-        atomicAdd(stats[0], uint(lambda * keepProb * 256.0));
+
         atomicAdd(stats[1], generated);
         atomicAdd(stats[3], drawn);
-        atomicAdd(stats[4], uint(Ni));
+
     }
 }
 
 void main() {
+    if (pc.pass != 2u && work[4] != 2u) return;
     uint stride = gl_NumWorkGroups.x * 64u;
     for (uint id = gl_GlobalInvocationID.x; id < u.ctrl.x; id += stride)
         splatOne(id);
