@@ -22,6 +22,25 @@ public:
 
 	void setInitialPLY(const std::string& path) { initialPLYPath_ = path; }
 
+	// Headless single-shot capture (call before run()): initial render mode
+	// (see GSView::parseRenderModeName for accepted names), initial camera
+	// pose for the GaussianPoint/PBVR3D evaluation camera (see
+	// GSViewRenderer::setEvaluationCamera), and whether to close the window
+	// (causing run() to return) right after the requested --screenshot is
+	// written -- turning --screenshot into a true one-shot headless capture.
+	void setInitialRenderMode(const std::string& mode) { initialRenderMode_ = mode; }
+	void setInitialCamera(float theta, float phi, float distance) {
+		hasInitialCamera_ = true;
+		initialCamTheta_ = theta;
+		initialCamPhi_ = phi;
+		initialCamDistance_ = distance;
+	}
+	void setExitAfterScreenshot(bool v) { exitAfterScreenshot_ = v; }
+	// Suppresses all ImGui drawing (menu bar, control panel, debug overlays) so
+	// --screenshot captures a plain render of the scene, for use as a general
+	// offscreen renderer rather than an app-state verification snapshot.
+	void setHideUI(bool v) { hideUI_ = v; }
+
 	// Scenario runner control (call before run()).
 	bool loadScenario(const std::string& jsonPath) override;
 	void setExitOnScenarioComplete(bool v) override { exitOnComplete_ = v; }
@@ -60,6 +79,13 @@ private:
 	void setupCallbacks();
 
 	std::string initialPLYPath_;
+	std::string initialRenderMode_;
+	bool        hasInitialCamera_    = false;
+	float       initialCamTheta_     = 0.f;
+	float       initialCamPhi_       = 0.f;
+	float       initialCamDistance_  = 0.f;
+	bool        exitAfterScreenshot_ = false;
+	bool        hideUI_               = false;
 };
 
 } // namespace GSView

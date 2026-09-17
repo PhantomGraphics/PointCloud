@@ -78,6 +78,23 @@ void GSViewApp::onInit()
 		if (!loadPLY(initialPLYPath_, err))
 			std::fprintf(stderr, "[GSView] Failed to load PLY: %s\n", err.c_str());
 	}
+
+	if (!initialRenderMode_.empty()) {
+		RenderMode mode;
+		if (!parseRenderModeName(initialRenderMode_, mode)) {
+			std::fprintf(stderr, "[GSView] Unknown --render-mode: %s\n", initialRenderMode_.c_str());
+		} else if (mode != RenderMode::SortBased && !renderer_.isGaussianPointAvailable()) {
+			std::fprintf(stderr, "[GSView] --render-mode %s unavailable (renderer init failed); staying SortBased\n",
+			             initialRenderMode_.c_str());
+		} else {
+			renderer_.setRenderMode(mode);
+		}
+	}
+
+	if (hasInitialCamera_) {
+		if (!renderer_.setEvaluationCamera(initialCamTheta_, initialCamPhi_, initialCamDistance_))
+			std::fprintf(stderr, "[GSView] Invalid --camera-theta/--camera-phi/--camera-distance\n");
+	}
 }
 
 void GSViewApp::onUpdate(uint32_t frameIndex)
@@ -96,7 +113,8 @@ void GSViewApp::onUpdate(uint32_t frameIndex)
 			}
 			if (exitOnComplete_) getWindow().close();
 		}
-	} else {
+	} else if (exitAfterScreenshot_ && isScreenshotDone()) {
+		getWindow().close();
 	}
 
 	::VKG::VkAppBase::onUpdate(frameIndex);
@@ -124,6 +142,7 @@ void GSViewApp::onSwapChainCreated()
 
 void GSViewApp::onImGui()
 {
+	if (hideUI_) return; // rendering-only mode: draw nothing so the scene alone is captured
 	menuBar_.onImGui();
 	panel_.onImGui();
 	::VKG::VkAppBase::onImGui();

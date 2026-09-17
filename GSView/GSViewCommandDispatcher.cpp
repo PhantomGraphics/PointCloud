@@ -270,25 +270,13 @@ std::string GSViewCommandDispatcher::cmdGetGSAvailable()
 std::string GSViewCommandDispatcher::cmdSetRenderMode(const std::string& mode)
 {
     if (!renderer_) return "Error:renderer not available";
-    if (mode == "SortBased") {
-        renderer_->setRenderMode(RenderMode::SortBased);
-        return "OK";
-    }
-    // "PBVR" is a temporary backward-compat alias for the renamed experimental mode
-    // (Phase 0). Old scenario files keep working; new ones use the canonical name.
-    if (mode == "PBVR3DExperimental" || mode == "PBVR") {
-        if (!renderer_->isGaussianPointAvailable())
-            return "Error:PBVR3DExperimental unavailable (renderer init failed)";
-        renderer_->setRenderMode(RenderMode::PBVR3DExperimental);
-        return "OK";
-    }
-    if (mode == "GaussianPoint") {
-        if (!renderer_->isGaussianPointAvailable())
-            return "Error:GaussianPoint unavailable (renderer init failed)";
-        renderer_->setRenderMode(RenderMode::GaussianPoint);
-        return "OK";
-    }
-    return "Error:unknown mode " + mode;
+    RenderMode parsed;
+    if (!parseRenderModeName(mode, parsed))
+        return "Error:unknown mode " + mode;
+    if (parsed != RenderMode::SortBased && !renderer_->isGaussianPointAvailable())
+        return "Error:" + mode + " unavailable (renderer init failed)";
+    renderer_->setRenderMode(parsed);
+    return "OK";
 }
 
 std::string GSViewCommandDispatcher::cmdSetSplatSizeScale(const std::string& arg)

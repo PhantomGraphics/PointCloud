@@ -14,6 +14,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace Phantom::PointCloud { struct GSPointCloud; }
@@ -26,6 +27,12 @@ namespace GSView {
 //                        3 particle-isation methods, runs on the GaussianPoint pipeline).
 //   GaussianPoint      - GPS-style screen-space stochastic-opaque-point renderer (Phase 2).
 enum class RenderMode { SortBased, PBVR3DExperimental, GaussianPoint };
+
+// Parses a render-mode name (canonical, or the legacy "PBVR" alias for
+// PBVR3DExperimental) into `out`. Returns false (leaving `out` untouched) for
+// unknown names. Shared by GSViewCommandDispatcher (scenario command) and
+// main.cpp (--render-mode CLI flag).
+bool parseRenderModeName(const std::string& name, RenderMode& out);
 
 struct DebugSplatInfo {
     float rawScale[3]  = {};

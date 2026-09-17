@@ -144,6 +144,15 @@ void GSViewRenderer::setGaussianPointParams(const GaussianPointRenderer::Params&
 	if (sppChanged) gpExtentDirty_ = true;  // subpixel buffers are sized by spp
 }
 
+bool parseRenderModeName(const std::string& name, RenderMode& out)
+{
+	if (name == "SortBased") { out = RenderMode::SortBased; return true; }
+	// "PBVR" is a temporary backward-compat alias for the renamed experimental mode.
+	if (name == "PBVR3DExperimental" || name == "PBVR") { out = RenderMode::PBVR3DExperimental; return true; }
+	if (name == "GaussianPoint") { out = RenderMode::GaussianPoint; return true; }
+	return false;
+}
+
 bool GSViewRenderer::setEvaluationCamera(float theta, float phi, float distance)
 {
 	if (!std::isfinite(theta) || !std::isfinite(phi) || !std::isfinite(distance)
