@@ -119,13 +119,13 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     Phantom::VKG::ComputePipelineConfig splatCfg{};
     splatCfg.compSpv = splatSpv;
     splatCfg.descriptorSetLayout = computeDsl_.get();
-    splatCfg.pushConstantRange = { VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants) };
+    splatCfg.pushConstantRange = { VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SplatPushConstants) };
     if (!splatPipe_.create(ctx, splatCfg)) { available_ = false; return; }
 
     Phantom::VKG::ComputePipelineConfig pbvrCfg{};
     pbvrCfg.compSpv = pbvrSpv;
     pbvrCfg.descriptorSetLayout = computeDsl_.get();
-    pbvrCfg.pushConstantRange = { VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants) };
+    pbvrCfg.pushConstantRange = { VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SplatPushConstants) };
     if (!pbvr3dPipe_.create(ctx, pbvrCfg)) { available_ = false; return; }
 
     auto scanCfg = splatCfg;
@@ -133,6 +133,7 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     scanCfg.pushConstantRange.size = sizeof(ScanConstants);
     auto compactCfg = splatCfg;
     compactCfg.compSpv = ::VKG::loadSPVRepo("shaders/gps_compact.comp.spv");
+    compactCfg.pushConstantRange.size = sizeof(PushConstants);  // gps_compact.comp only reads `pass`
     if (scanCfg.compSpv.empty() || compactCfg.compSpv.empty() ||
         !scanPipe_.create(ctx, scanCfg) || !compactPipe_.create(ctx, compactCfg)) {
         available_ = false; return;
@@ -141,6 +142,7 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     Phantom::VKG::ComputePipelineConfig resolveCfg{};
     resolveCfg.compSpv = resolveSpv;
     resolveCfg.descriptorSetLayout = computeDsl_.get();
+    resolveCfg.pushConstantRange = { VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ResolvePushConstants) };
     if (!resolvePipe_.create(ctx, resolveCfg)) { available_ = false; return; }
 
     Phantom::VKG::PipelineConfig compCfg{};
@@ -174,12 +176,16 @@ void GaussianPointRenderer::setParams(const Params& p)
     params_.tonemapMode = std::clamp(params_.tonemapMode, 0, 2);
     params_.pbvr3dMethod = std::clamp(params_.pbvr3dMethod, 0, 2);
     params_.compactPipeline = std::clamp(params_.compactPipeline, 0, 2);
+    params_.lodMode = std::clamp(params_.lodMode, 0, 2);
+    params_.ensemblesPerFrame = std::clamp(params_.ensemblesPerFrame, 1, 8);
+    params_.targetEnsembles = std::max(1, params_.targetEnsembles);
     spp_ = static_cast<uint32_t>(params_.sppSide * params_.sppSide);
 }
 
 void GaussianPointRenderer::resetAccumulation()
 {
     resetPending_ = frames_;
+    ++ensembleEpoch_;
 }
 
 void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
@@ -221,7 +227,7 @@ void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
         writeComputeSet(dev, f);
         writeCompositeSet(dev, f);
     }
-    resetPending_ = frames_;   // fresh buffers -> restart accumulation
+    resetAccumulation();   // fresh buffers -> restart accumulation
 }
 
 void GaussianPointRenderer::destroyFrameBuffers(VkDevice device)
@@ -339,7 +345,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
         if (!createWorkBuffers(ctx, pool)) { available_ = false; return; }
         cachedGeneration_ = cloud_->generation;
         for (uint32_t f = 0; f < frames_; ++f) writeComputeSet(ctx.getDevice(), f);
-        resetPending_ = frames_;
+        resetAccumulation();
     } else if (!haveCloud) {
         numSplats_ = 0;
         shDegreeData_ = 0;
@@ -378,7 +384,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     }
     const double budgetDelta = std::abs(budgetThin_ - previousBudgetThin);
     if (budgetDelta > std::max(1.0e-4, std::abs(previousBudgetThin) * 5.0e-3))
-        resetPending_ = frames_;
+        resetAccumulation();
     else
         budgetThin_ = previousBudgetThin;
 
@@ -410,6 +416,11 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     mix(static_cast<std::uint64_t>(shDeg) * 7 + params_.tonemapMode);
     mix(static_cast<std::uint64_t>(params_.pbvr3dMethod) * 3
         + static_cast<std::uint64_t>(path_ == Path::Pbvr3d));
+    // lodMode changes the RNG stream structure (ensembleSeed mixing turns on/off),
+    // so it must restart accumulation. ensemblesPerFrame/targetEnsembles are
+    // deliberately excluded: tuning the quality knobs should continue an
+    // existing history rather than discard it (PLAN_pbvr_gps_ensemble_lod.md Phase 2).
+    mix(static_cast<std::uint64_t>(params_.lodMode));
     mixFloat(params_.background.x);
     mixFloat(params_.background.y);
     mixFloat(params_.background.z);
@@ -421,13 +432,14 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     mixFloat(camera_.camPos.y);
     mixFloat(camera_.camPos.z);
     if (h != lastChangeHash_ || camera_.view != lastView_) {
-        resetPending_ = frames_;
+        resetAccumulation();
         lastChangeHash_ = h;
         lastView_ = camera_.view;
     }
 
     const uint32_t resetAccum = (resetPending_ > 0) ? 1u : 0u;
     if (resetPending_ > 0) --resetPending_;
+    if (resetAccum) ensembleHistory_[frameIndex] = 0;
 
     ParamsUBO ubo{};
     ubo.view = camera_.view;
@@ -475,109 +487,193 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     if (queryPool_) { vkCmdResetQueryPool(cmd, queryPool_, tsBase, kMarks); tsWritten_[frameIndex] = true; }
     ts(0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
 
-    // 1. clear
-    vkCmdFillBuffer(cmd, depth, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
-    vkCmdFillBuffer(cmd, color, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
-    vkCmdFillBuffer(cmd, stats, 0, VK_WHOLE_SIZE, 0u);
+    // --- decide how many independent ensembles to dispatch this frame -------
+    // (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 1). Off always runs exactly
+    // one and always uses ensembleSeed 0, reproducing the pre-Phase-1 renderer's
+    // RNG stream bit-for-bit.
+    const bool lodActive = params_.lodMode != static_cast<int>(LodMode::Off);
+    const uint32_t requestedR = lodActive
+        ? static_cast<uint32_t>(std::clamp(params_.ensemblesPerFrame, 1, 8)) : 1u;
+    const uint32_t target = lodActive
+        ? static_cast<uint32_t>(std::max(1, params_.targetEnsembles)) : 1u;
+    uint32_t& history = ensembleHistory_[frameIndex];
+    const bool isResetFrame = (history == 0);
+    const uint32_t remaining = (target > history) ? (target - history) : 0u;
+    uint32_t effectiveR = lodActive ? std::min(requestedR, remaining) : 1u;
+    if (numSplats_ == 0) effectiveR = std::min(effectiveR, 1u);
+    lastEffectiveR_[frameIndex] = effectiveR;
 
-    VkBufferMemoryBarrier toCompute[3] = {
-        bufBarrier(depth, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
-        bufBarrier(color, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
-        bufBarrier(stats, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
+    if (effectiveR == 0) {
+        // Converged: this slot already holds `target` independent samples --
+        // skip all GPU work and keep displaying accumBuf as-is.
+        ts(1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+        ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+        ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+        ts(4, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+        return;
+    }
+
+    // Identifies one independent ensemble's RNG stream, unique per (epoch, slot,
+    // cumulative index) so a resumed/target-increased slot never replays a
+    // stream it already used (design principle 5 in the plan doc). 0 is
+    // reserved for the legacy bit-identical stream and only ever produced when
+    // !lodActive.
+    auto ensembleSeedFor = [&](uint32_t globalIndex) -> uint32_t {
+        uint32_t h = ensembleEpoch_ * 2654435761u + frameIndex * 40503u + globalIndex * 2246822519u + 1u;
+        h ^= h >> 16; h *= 0x7feb352du;
+        h ^= h >> 15; h *= 0x846ca68bu;
+        h ^= h >> 16;
+        return h;
     };
+
+    // stats is an atomic-accumulate target for every pass; clearing it once and
+    // letting every ensemble atomicAdd into it makes the reported counts a
+    // total across the whole frame's ensembles rather than just the last one.
+    vkCmdFillBuffer(cmd, stats, 0, VK_WHOLE_SIZE, 0u);
+    VkBufferMemoryBarrier statsToCompute =
+        bufBarrier(stats, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                         0, 0, nullptr, 3, toCompute, 0, nullptr);
-    ts(1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+                         0, 0, nullptr, 1, &statsToCompute, 0, nullptr);
 
     // Grid-stride splat: cap the dispatch so any splat count is valid.
     const uint32_t groups = std::min<uint32_t>((numSplats_ + 63u) / 64u, 65535u);
 
-    if (numSplats_ > 0) {
-        const auto& splat = (path_ == Path::Pbvr3d) ? pbvr3dPipe_ : splatPipe_;
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
-                                0, 1, &computeSets_[frameIndex], 0, nullptr);
+    for (uint32_t i = 0; i < effectiveR; ++i) {
+        const bool first = (i == 0);
+        const bool last  = (i + 1 == effectiveR);
+        const uint32_t ensembleSeed = lodActive ? ensembleSeedFor(history + i) : 0u;
 
-        auto computeBarrier = [&]() {
-            VkMemoryBarrier barrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
-            barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+        // 1. clear this ensemble's depth/colour subpixel buffers
+        vkCmdFillBuffer(cmd, depth, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
+        vkCmdFillBuffer(cmd, color, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
+        VkBufferMemoryBarrier toCompute[2] = {
+            bufBarrier(depth, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
+            bufBarrier(color, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
         };
-        PushConstants prepare{2};
-        vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(prepare), &prepare);
-        vkCmdDispatch(cmd, groups, 1, 1);
-        computeBarrier();
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, scanPipe_.getPipeline());
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, scanPipe_.getLayout(),
-            0, 1, &computeSets_[frameIndex], 0, nullptr);
-        auto scanPass = [&](uint32_t mode, const ScanLevel& level) {
-            ScanConstants pc{mode, level.base, level.size, level.parent};
-            vkCmdPushConstants(cmd, scanPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, std::min(65535u, (level.size + 255u) / 256u), 1, 1);
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                             0, 0, nullptr, 2, toCompute, 0, nullptr);
+        if (first) ts(1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+        if (numSplats_ > 0) {
+            const auto& splat = (path_ == Path::Pbvr3d) ? pbvr3dPipe_ : splatPipe_;
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
+                                    0, 1, &computeSets_[frameIndex], 0, nullptr);
+
+            auto computeBarrier = [&]() {
+                VkMemoryBarrier barrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+                barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+            };
+            SplatPushConstants prepare{2, ensembleSeed};
+            vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(prepare), &prepare);
+            vkCmdDispatch(cmd, groups, 1, 1);
             computeBarrier();
-        };
-        for (const auto& level : scanLevels_) scanPass(0, level);
-        for (size_t i = scanLevels_.size(); i > 1; --i) scanPass(1, scanLevels_[i-2]);
-        scanPass(params_.compactPipeline == 0 ? 3u : params_.compactPipeline == 2 ? 4u : 2u,
-                 {scanLevels_.back().parent, 1, 0});
-        VkBufferMemoryBarrier indirect = bufBarrier(workBuf_[frameIndex].getBuffer(),
-            VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT);
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0, 0, nullptr, 1, &indirect, 0, nullptr);
-        auto compactPass = [&](uint32_t pass) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, compactPipe_.getPipeline());
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, compactPipe_.getLayout(),
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, scanPipe_.getPipeline());
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, scanPipe_.getLayout(),
                 0, 1, &computeSets_[frameIndex], 0, nullptr);
-            PushConstants pc{pass};
-            vkCmdPushConstants(cmd, compactPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatchIndirect(cmd, workBuf_[frameIndex].getBuffer(), 0);
-        };
-        compactPass(0);
-        computeBarrier();
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
-            0, 1, &computeSets_[frameIndex], 0, nullptr);
-        PushConstants pcDepth{ 0 };
-        vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcDepth), &pcDepth);
-        vkCmdDispatch(cmd, groups, 1, 1);
+            auto scanPass = [&](uint32_t mode, const ScanLevel& level) {
+                ScanConstants pc{mode, level.base, level.size, level.parent};
+                vkCmdPushConstants(cmd, scanPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatch(cmd, std::min(65535u, (level.size + 255u) / 256u), 1, 1);
+                computeBarrier();
+            };
+            for (const auto& level : scanLevels_) scanPass(0, level);
+            for (size_t li = scanLevels_.size(); li > 1; --li) scanPass(1, scanLevels_[li-2]);
+            scanPass(params_.compactPipeline == 0 ? 3u : params_.compactPipeline == 2 ? 4u : 2u,
+                     {scanLevels_.back().parent, 1, 0});
+            VkBufferMemoryBarrier indirect = bufBarrier(workBuf_[frameIndex].getBuffer(),
+                VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_SHADER_READ_BIT);
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0, 0, nullptr, 1, &indirect, 0, nullptr);
+            auto compactPass = [&](uint32_t pass) {
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, compactPipe_.getPipeline());
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, compactPipe_.getLayout(),
+                    0, 1, &computeSets_[frameIndex], 0, nullptr);
+                PushConstants pc{pass};
+                vkCmdPushConstants(cmd, compactPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatchIndirect(cmd, workBuf_[frameIndex].getBuffer(), 0);
+            };
+            compactPass(0);
+            computeBarrier();
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
+                0, 1, &computeSets_[frameIndex], 0, nullptr);
+            SplatPushConstants pcDepth{ 0, ensembleSeed };
+            vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcDepth), &pcDepth);
+            vkCmdDispatch(cmd, groups, 1, 1);
 
-        VkBufferMemoryBarrier depthRW = bufBarrier(depth, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                             0, 0, nullptr, 1, &depthRW, 0, nullptr);
+            VkBufferMemoryBarrier depthRW = bufBarrier(depth, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                 0, 0, nullptr, 1, &depthRW, 0, nullptr);
 
-        ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+            if (first) ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
-        compactPass(1);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
-            0, 1, &computeSets_[frameIndex], 0, nullptr);
-        PushConstants pcColor{ 1 };
-        vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcColor), &pcColor);
-        vkCmdDispatch(cmd, groups, 1, 1);
+            compactPass(1);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
+                0, 1, &computeSets_[frameIndex], 0, nullptr);
+            SplatPushConstants pcColor{ 1, ensembleSeed };
+            vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcColor), &pcColor);
+            vkCmdDispatch(cmd, groups, 1, 1);
 
-        VkBufferMemoryBarrier toResolve[2] = {
-            bufBarrier(depth, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT),
-            bufBarrier(color, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-        };
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                             0, 0, nullptr, 2, toResolve, 0, nullptr);
-        ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-    } else {
-        ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-        ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+            VkBufferMemoryBarrier toResolve[2] = {
+                bufBarrier(depth, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT),
+                bufBarrier(color, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+            };
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                 0, 0, nullptr, 2, toResolve, 0, nullptr);
+            if (first) ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+        } else if (first) {
+            ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+            ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+        }
+
+        // 4. resolve -- fold this ensemble into the progressive accumulator.
+        // Only the very first ensemble of a freshly-reset slot may restart the
+        // average; every later ensemble (this frame or a later one) accumulates.
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resolvePipe_.getPipeline());
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resolvePipe_.getLayout(),
+                                0, 1, &computeSets_[frameIndex], 0, nullptr);
+        ResolvePushConstants resolvePc{ (first && isResetFrame) ? 1u : 0u };
+        vkCmdPushConstants(cmd, resolvePipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                           sizeof(resolvePc), &resolvePc);
+        vkCmdDispatch(cmd, (extent_.width + 7u) / 8u, (extent_.height + 7u) / 8u, 1);
+        if (last) ts(4, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+        if (!last) {
+            // Re-synchronize everything this ensemble touched before the next
+            // ensemble's clear (depth/colour/stats) and prepare pass (prepared/
+            // scan/particle/work) reuse the same buffers.
+            VkBufferMemoryBarrier next[8] = {
+                bufBarrier(accum, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
+                bufBarrier(depth, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT),
+                bufBarrier(color, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT),
+                bufBarrier(stats, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
+                bufBarrier(preparedBuf_[frameIndex].getBuffer(),
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT),
+                bufBarrier(scanBuf_[frameIndex].getBuffer(),
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT),
+                bufBarrier(particleBuf_[frameIndex].getBuffer(),
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT),
+                bufBarrier(workBuf_[frameIndex].getBuffer(),
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT),
+            };
+            vkCmdPipelineBarrier(cmd,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0, 0, nullptr, 8, next, 0, nullptr);
+        }
     }
+    history += effectiveR;
 
-    // 4. resolve
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resolvePipe_.getPipeline());
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, resolvePipe_.getLayout(),
-                            0, 1, &computeSets_[frameIndex], 0, nullptr);
-    vkCmdDispatch(cmd, (extent_.width + 7u) / 8u, (extent_.height + 7u) / 8u, 1);
-    ts(4, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
-
-    (void)stats;
     VkBufferMemoryBarrier toFrag =
         bufBarrier(accum, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -656,6 +752,12 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.splatColorMs = t.splatColorMs;
     s.resolveMs = t.resolveMs;
     s.computeMs = t.computeMs;
+
+    s.ensemblesThisFrame = lastEffectiveR_[f];
+    s.displayedEnsembles = ensembleHistory_[f];
+    s.epoch = ensembleEpoch_;
+    s.requestedEnsemblesPerFrame = static_cast<uint32_t>(std::max(1, params_.ensemblesPerFrame));
+    s.effectiveEnsemblesPerFrame = lastEffectiveR_[f];
     return s;
 }
 

@@ -39,7 +39,11 @@ layout(std140, binding = 5) uniform Params {
     vec4  p3;      // gamma, unused, budgetThin, SH storage stride/channel
 } u;
 
-layout(push_constant) uniform PC { uint pass; } pc; // 0 = depth, 1 = colour
+// pass: 0 = depth, 1 = colour, 2 = prepare. ensembleSeed identifies one
+// independent ensemble's RNG stream within this frame's dispatch sequence
+// (PLAN_pbvr_gps_ensemble_lod.md Phase 1); 0 reproduces the pre-Phase-1 stream
+// exactly (see the `pc.ensembleSeed != 0u` guard below).
+layout(push_constant) uniform PC { uint pass; uint ensembleSeed; } pc;
 
 const float PI2_6  = 1.6449340668482264;
 const float TWO_PI = 6.283185307179586;
@@ -208,6 +212,7 @@ void splatOne(uint id) {
 
     uint seed = pcg(id * 747796405u + 1u);
     if (u.ctrl.z == 1u || u.ctrl.y != 0u) seed = pcg(seed ^ (u.ctrl.y * 2654435761u + 1u));
+    if (pc.ensembleSeed != 0u) seed = pcg(seed ^ (pc.ensembleSeed * 2246822519u + 1u));
     RS rs; rs.s = (seed == 0u) ? 1u : seed;
 
     int Ni;

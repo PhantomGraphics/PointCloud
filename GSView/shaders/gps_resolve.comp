@@ -23,9 +23,14 @@ layout(std140, binding = 5) uniform Params {
     vec4  p2;
     vec4  bg;
     vec4  camPos;
-    uvec4 ctrl2;  // resetAccum, shDegree, tonemapMode, unused
+    uvec4 ctrl2;  // unused here (resetAccum moved to a push constant, see below), shDegree, tonemapMode, unused
     vec4  p3;
 } u;
+
+// Whether THIS resolve call restarts the progressive average. A frame can now
+// resolve several independent ensembles (PLAN_pbvr_gps_ensemble_lod.md Phase 1);
+// only the first ensemble of a freshly-reset slot may pass 1 here.
+layout(push_constant) uniform PC { uint resetAccum; } pc;
 
 vec3 unpackLinearColor(uint packed) {
     uvec3 quantized = uvec3(packed & 0x7ffu,
@@ -55,7 +60,7 @@ void main() {
 
     uint pix = gid.y * u.dims.x + gid.x;
     float accumCount;
-    if (u.ctrl2.x != 0u) {
+    if (pc.resetAccum != 0u) {
         accumBuf[pix] = vec4(frame, 1.0);
         accumCount = 1.0;
     } else {

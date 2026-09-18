@@ -116,6 +116,12 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGpTonemap")           return cmdGetGpTonemap();
     if (name == "GetGpGamma")             return cmdGetGpGamma();
     if (name == "GetPbvr3dMethod")        return cmdGetPbvr3dMethod();
+    if (name == "GetGpLodMode")           return cmdGetGpLodMode();
+    if (name == "GetGpEnsemblesPerFrame") return cmdGetGpEnsemblesPerFrame();
+    if (name == "GetGpTargetEnsembles")   return cmdGetGpTargetEnsembles();
+    if (name == "GetGpEnsembleStats")     return cmdGetGpEnsembleStats();
+    if (name == "GetGpEnsemblesThisFrame")return cmdGetGpEnsemblesThisFrame();
+    if (name == "GetGpDisplayedEnsembles")return cmdGetGpDisplayedEnsembles();
     if (name == "GetPbvrZoom") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().pbvrZoomRecalibration) : "Error:renderer not available";
     if (name == "GetGpCompactFallback") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().compactFallback) : "Error:renderer not available";
     if (name == "SetPbvrZoom" || name == "SetGpCompact") {
@@ -186,6 +192,9 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "SetGpGamma")             return cmdSetGpGamma(rest);
     if (name == "SetPbvr3dMethod")        return cmdSetPbvr3dMethod(rest);
     if (name == "SetGpPointBudget")       return cmdSetGpPointBudget(rest);
+    if (name == "SetGpLodMode")           return cmdSetGpLodMode(rest);
+    if (name == "SetGpEnsemblesPerFrame") return cmdSetGpEnsemblesPerFrame(rest);
+    if (name == "SetGpTargetEnsembles")   return cmdSetGpTargetEnsembles(rest);
     if (name == "LoadPLY")                return cmdLoadPLY(rest);
     if (name == "Screenshot")             return cmdScreenshot(rest);
 
@@ -443,7 +452,13 @@ std::string GSViewCommandDispatcher::buildProfile() const
         ";compact=" + std::to_string(p.compactPipeline) +
         ";compactFallback=" + std::to_string(s.compactFallback) +
         ";pbvrZoom=" + std::to_string(p.pbvrZoomRecalibration) +
-        ";referencePixelLength=" + fmtF(p.pbvrReferencePixelLength);
+        ";referencePixelLength=" + fmtF(p.pbvrReferencePixelLength) +
+        ";lodMode=" + std::to_string(p.lodMode) +
+        ";ensemblesPerFrame=" + std::to_string(p.ensemblesPerFrame) +
+        ";targetEnsembles=" + std::to_string(p.targetEnsembles) +
+        ";ensemblesThisFrame=" + std::to_string(s.ensemblesThisFrame) +
+        ";displayedEnsembles=" + std::to_string(s.displayedEnsembles) +
+        ";ensembleEpoch=" + std::to_string(s.epoch);
 }
 
 std::string GSViewCommandDispatcher::cmdGetGpProfile()
@@ -591,6 +606,89 @@ std::string GSViewCommandDispatcher::cmdSetGpDensityScale(const std::string& arg
     p.densityScale = v;
     renderer_->setGaussianPointParams(p);
     return "OK";
+}
+
+// ---- Ensemble LOD (Phase 1) --------------------------------------------------
+
+std::string GSViewCommandDispatcher::cmdGetGpLodMode()
+{
+    if (!renderer_) return "Val:off";
+    switch (renderer_->getGaussianPointParams().lodMode) {
+        case 1:  return "Val:manual";
+        case 2:  return "Val:adaptive";
+        default: return "Val:off";
+    }
+}
+
+std::string GSViewCommandDispatcher::cmdSetGpLodMode(const std::string& arg)
+{
+    if (!renderer_) return "Error:renderer not available";
+    auto p = renderer_->getGaussianPointParams();
+    if      (arg == "off")      p.lodMode = 0;
+    else if (arg == "manual")   p.lodMode = 1;
+    else if (arg == "adaptive") p.lodMode = 2;
+    else return "Error:lod mode must be off|manual|adaptive";
+    renderer_->setGaussianPointParams(p);
+    return "OK";
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpEnsemblesPerFrame()
+{
+    if (!renderer_) return "Val:1";
+    return "Val:" + std::to_string(renderer_->getGaussianPointParams().ensemblesPerFrame);
+}
+
+std::string GSViewCommandDispatcher::cmdSetGpEnsemblesPerFrame(const std::string& arg)
+{
+    if (!renderer_) return "Error:renderer not available";
+    int n;
+    if (!tryInt(arg, n)) return "Error:invalid int";
+    if (n < 1 || n > 8) return "Error:ensembles per frame must be 1..8";
+    auto p = renderer_->getGaussianPointParams();
+    p.ensemblesPerFrame = n;
+    renderer_->setGaussianPointParams(p);
+    return "OK";
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpTargetEnsembles()
+{
+    if (!renderer_) return "Val:1";
+    return "Val:" + std::to_string(renderer_->getGaussianPointParams().targetEnsembles);
+}
+
+std::string GSViewCommandDispatcher::cmdSetGpTargetEnsembles(const std::string& arg)
+{
+    if (!renderer_) return "Error:renderer not available";
+    int n;
+    if (!tryInt(arg, n)) return "Error:invalid int";
+    if (n < 1) return "Error:target ensembles must be >= 1";
+    auto p = renderer_->getGaussianPointParams();
+    p.targetEnsembles = n;
+    renderer_->setGaussianPointParams(p);
+    return "OK";
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpEnsembleStats()
+{
+    if (!renderer_) return "Error:renderer not available";
+    const auto s = renderer_->getGaussianPointStats();
+    return "ThisFrame:" + std::to_string(s.ensemblesThisFrame) +
+           ",Displayed:" + std::to_string(s.displayedEnsembles) +
+           ",Epoch:" + std::to_string(s.epoch) +
+           ",Requested:" + std::to_string(s.requestedEnsemblesPerFrame) +
+           ",Effective:" + std::to_string(s.effectiveEnsemblesPerFrame);
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpEnsemblesThisFrame()
+{
+    if (!renderer_) return "Val:0";
+    return "Val:" + std::to_string(renderer_->getGaussianPointStats().ensemblesThisFrame);
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpDisplayedEnsembles()
+{
+    if (!renderer_) return "Val:0";
+    return "Val:" + std::to_string(renderer_->getGaussianPointStats().displayedEnsembles);
 }
 
 // ---- file / IO commands -----------------------------------------------------

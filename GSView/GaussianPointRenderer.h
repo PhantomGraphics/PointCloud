@@ -57,6 +57,16 @@ public:
     //                     spp * 2*pi*sqrt(det Sigma2d) * Li2(o).
     enum class Pbvr3dMethod { Proportional = 0, Extinction = 1, ViewConditioned = 2 };
 
+    // Ensemble LOD mode (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 1).
+    // An "ensemble" is one complete independent clear -> splat -> resolve pass,
+    // folded into the progressive accumulator as one more independent sample set.
+    //   Off      - exactly one ensemble per displayed frame (legacy behaviour, bit-identical RNG stream).
+    //   Manual   - up to `ensemblesPerFrame` ensembles per displayed frame, capped at `targetEnsembles`
+    //              cumulative samples in the slot's current history.
+    //   Adaptive - reserved for the Phase 2 Moving/Settling/Refining/Converged controller;
+    //              behaves exactly like Manual until that controller lands.
+    enum class LodMode { Off = 0, Manual = 1, Adaptive = 2 };
+
     struct Params {
         int   sppSide          = 2;      // subpixel grid side (spp = sppSide^2), 1..4
         int   seedMode         = 1;      // 0 = deterministic, 1 = frame-varying
@@ -78,6 +88,9 @@ public:
         float pbvrReferencePixelLength = 0.01f;
         int compactPipeline = 1; // 0 primitive replay, 1 automatic compact, 2 force point replay
         float pointBudget      = 0.f;    // 0 = unlimited; else adaptive stochastic thinning
+        int   lodMode           = 0;     // LodMode
+        int   ensemblesPerFrame = 1;     // R, clamped to 1..8 (Manual/Adaptive only; Off always runs 1)
+        int   targetEnsembles   = 1;     // cumulative independent samples a slot's history stops refining at
     };
 
     struct Camera {
@@ -98,6 +111,16 @@ public:
         int      shDegreeData   = 0;   // SH degree present in the loaded data
         // GPU pass times in ms (0 when timestamps are unsupported), lagged one frame.
         float    clearMs = 0.f, splatDepthMs = 0.f, splatColorMs = 0.f, resolveMs = 0.f, computeMs = 0.f;
+
+        // Ensemble LOD (Phase 1). displayedEnsembles is the CPU-tracked cumulative
+        // independent-sample count of the displayed slot's current history --
+        // authoritative (unlike accumFrames, it is not subject to the one-frame
+        // GPU readback lag or double-buffering skew, docs/todo/PLAN_pbvr_gps_ensemble_lod.md Sec.2).
+        uint32_t ensemblesThisFrame          = 0; // R actually dispatched this frame for the displayed slot
+        uint32_t displayedEnsembles          = 0; // cumulative independent samples in the displayed slot's history
+        uint32_t epoch                       = 0; // increments each time the sample history restarts
+        uint32_t requestedEnsemblesPerFrame  = 0; // raw Params.ensemblesPerFrame
+        uint32_t effectiveEnsemblesPerFrame  = 0; // == ensemblesThisFrame, kept alongside the request for clarity
     };
 
     // Force the progressive accumulation to restart on the next frames.
@@ -154,8 +177,19 @@ private:
         glm::uvec4 ctrl2; // resetAccum, shDegree, tonemapMode, pbvr3dMethod
         glm::vec4  p3;    // gamma, basePointsPerSplat, budgetThin, SH storage stride/channel
     };
-    struct PushConstants { uint32_t pass; };
+    struct PushConstants { uint32_t pass; };  // gps_compact.comp (pass only, unchanged layout)
+    // gps_splat.comp / gps_pbvr3d.comp: ensembleSeed identifies one independent
+    // ensemble's RNG stream within this frame's dispatch sequence. 0 reproduces
+    // the pre-Phase-1 stream exactly (see the `pc.ensembleSeed != 0u` guard in
+    // both shaders), so LodMode::Off and the first ensemble of every epoch stay
+    // bit-identical to the legacy single-pass renderer.
+    struct SplatPushConstants { uint32_t pass; uint32_t ensembleSeed; };
     struct ScanConstants { uint32_t mode, base, size, parent; };
+    // gps_resolve.comp: whether THIS ensemble restarts the progressive average.
+    // Moved out of ParamsUBO (Phase 1) because that UBO is written once per
+    // update() call but a frame can now resolve several ensembles -- only the
+    // first ensemble of a freshly-reset slot may restart the accumulator.
+    struct ResolvePushConstants { uint32_t resetAccum; };
 
     bool available_ = false;
     std::string deviceName_;
@@ -182,6 +216,16 @@ private:
     uint32_t resetPending_ = kMaxFrames;
     glm::mat4 lastView_{ 0.0f };
     uint64_t  lastChangeHash_ = 0;
+
+    // Ensemble LOD bookkeeping (Phase 1). ensembleEpoch_ increments once per
+    // resetAccumulation() call (i.e. once per history restart, shared by both
+    // frame slots); ensembleHistory_[slot] is the cumulative count of ensembles
+    // accumulated into that slot since its own last restart, reset to 0 the
+    // moment that slot next observes resetAccum in update(). lastEffectiveR_
+    // records what recordCompute() actually dispatched, for Stats reporting.
+    uint32_t ensembleEpoch_ = 0;
+    std::array<uint32_t, kMaxFrames> ensembleHistory_{};
+    std::array<uint32_t, kMaxFrames> lastEffectiveR_{};
 
     VkExtent2D extent_{ 0, 0 };
     uint32_t   spp_ = 4;
