@@ -23,12 +23,14 @@
 #include "../../CGLib/VulkanGraphics/VulkanComputePipeline.h"
 #include "../../CGLib/VulkanGraphics/VulkanPipeline.h"
 #include "../../CGLib/VulkanGraphics/VulkanDescriptorPool.h"
+#include "EnsembleLodController.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -63,8 +65,11 @@ public:
     //   Off      - exactly one ensemble per displayed frame (legacy behaviour, bit-identical RNG stream).
     //   Manual   - up to `ensemblesPerFrame` ensembles per displayed frame, capped at `targetEnsembles`
     //              cumulative samples in the slot's current history.
-    //   Adaptive - reserved for the Phase 2 Moving/Settling/Refining/Converged controller;
-    //              behaves exactly like Manual until that controller lands.
+    //   Adaptive - R and the cumulative target come from `lodController_`
+    //              (EnsembleLodController, Phase 2) instead of Params.ensemblesPerFrame/
+    //              targetEnsembles: R=1 while the camera/params/data are moving or still
+    //              settling, then ramps up within a GPU time budget once quiet, and stops
+    //              once the controller's target is reached.
     enum class LodMode { Off = 0, Manual = 1, Adaptive = 2 };
 
     struct Params {
@@ -121,6 +126,11 @@ public:
         uint32_t epoch                       = 0; // increments each time the sample history restarts
         uint32_t requestedEnsemblesPerFrame  = 0; // raw Params.ensemblesPerFrame
         uint32_t effectiveEnsemblesPerFrame  = 0; // == ensemblesThisFrame, kept alongside the request for clarity
+
+        // Ensemble LOD (Phase 2). Only meaningful when lodMode == Adaptive; holds
+        // the EnsembleLodController::State the displayed slot is in
+        // (0=Moving, 1=Settling, 2=Refining, 3=Converged).
+        uint32_t adaptiveState = 0;
     };
 
     // Force the progressive accumulation to restart on the next frames.
@@ -226,6 +236,18 @@ private:
     uint32_t ensembleEpoch_ = 0;
     std::array<uint32_t, kMaxFrames> ensembleHistory_{};
     std::array<uint32_t, kMaxFrames> lastEffectiveR_{};
+
+    // Adaptive ensemble LOD (Phase 2). lodController_.notifyMotion() is called
+    // from resetAccumulation() -- the single choke point every history-invalidating
+    // change (camera, params, data, resize, lodMode switch) already goes through --
+    // so the controller sees every "Moving" trigger without recordCompute()/update()
+    // needing to know which of those changes fired. adaptiveRequest_ is refreshed
+    // once per frame in update() (where wall-clock dt and the last GPU timing are
+    // available) and consumed by recordCompute() when Params.lodMode == Adaptive.
+    EnsembleLodController lodController_;
+    EnsembleLodController::Request adaptiveRequest_{1u, 1u};
+    std::chrono::steady_clock::time_point lastUpdateTime_{};
+    bool hasLastUpdateTime_ = false;
 
     VkExtent2D extent_{ 0, 0 };
     uint32_t   spp_ = 4;

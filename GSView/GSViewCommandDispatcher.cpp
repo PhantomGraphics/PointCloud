@@ -672,11 +672,14 @@ std::string GSViewCommandDispatcher::cmdGetGpEnsembleStats()
 {
     if (!renderer_) return "Error:renderer not available";
     const auto s = renderer_->getGaussianPointStats();
+    static const char* kAdaptiveStateNames[] = { "moving", "settling", "refining", "converged" };
+    const char* stateName = s.adaptiveState < 4 ? kAdaptiveStateNames[s.adaptiveState] : "unknown";
     return "ThisFrame:" + std::to_string(s.ensemblesThisFrame) +
            ",Displayed:" + std::to_string(s.displayedEnsembles) +
            ",Epoch:" + std::to_string(s.epoch) +
            ",Requested:" + std::to_string(s.requestedEnsemblesPerFrame) +
-           ",Effective:" + std::to_string(s.effectiveEnsemblesPerFrame);
+           ",Effective:" + std::to_string(s.effectiveEnsemblesPerFrame) +
+           ",State:" + stateName;
 }
 
 std::string GSViewCommandDispatcher::cmdGetGpEnsemblesThisFrame()

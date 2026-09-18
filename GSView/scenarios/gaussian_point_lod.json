@@ -87,6 +87,22 @@
       "command": "GetGpEnsemblesThisFrame",
       "expect": "Val:1" },
 
+    { "label": "Enable adaptive LOD (Phase 2 EnsembleLodController)",
+      "command": "SetGpLodMode:adaptive",
+      "expect": "OK" },
+    { "label": "LOD mode reads back as adaptive",
+      "command": "GetGpLodMode",
+      "expect": "Val:adaptive" },
+    { "label": "adaptive mode renders several frames without erroring -- exact R/target timing is Phase 3's job, this is a wiring smoke test",
+      "command": "GetStatus", "expect": "OK", "repeat": 20 },
+    { "label": "adaptive ensemble stats are readable",
+      "command": "GetGpEnsembleStats", "expect_not_prefix": "Error:" },
+    { "label": "adaptive mode has generated at least one independent sample by now",
+      "command": "GetGpDisplayedEnsembles", "expect_not": "Val:0" },
+    { "label": "switching back to manual restarts the history",
+      "command": "SetGpLodMode:manual",
+      "expect": "OK" },
+
     { "label": "App still healthy",
       "command": "GetStatus",
       "expect": "OK" }

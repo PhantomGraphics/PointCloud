@@ -186,6 +186,13 @@ void GaussianPointRenderer::resetAccumulation()
 {
     resetPending_ = frames_;
     ++ensembleEpoch_;
+    // Every history-invalidating change (camera, params, data, resize, lodMode
+    // switch) routes through here, so this is the single point that needs to
+    // tell the adaptive controller "motion happened" (docs/todo/PLAN_pbvr_gps_ensemble_lod.md
+    // Phase 2). Harmless when LodMode != Adaptive -- the flag is only consumed
+    // by EnsembleLodController::advance(), which recordCompute()/update() only
+    // call in Adaptive mode.
+    lodController_.notifyMotion();
 }
 
 void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
@@ -388,6 +395,24 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     else
         budgetThin_ = previousBudgetThin;
 
+    // --- adaptive ensemble LOD (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 2) ---
+    // Runs once per displayed frame regardless of lodMode so dt tracking stays
+    // continuous; only consumed by recordCompute() when lodMode == Adaptive.
+    {
+        const auto now = std::chrono::steady_clock::now();
+        float dtMs = 16.7f;
+        if (hasLastUpdateTime_)
+            dtMs = std::chrono::duration<float, std::milli>(now - lastUpdateTime_).count();
+        lastUpdateTime_ = now;
+        hasLastUpdateTime_ = true;
+
+        if (params_.lodMode == static_cast<int>(LodMode::Adaptive)) {
+            const bool timestampsSupported = queryPool_ != VK_NULL_HANDLE && tsPeriodNs_ > 0.0f;
+            adaptiveRequest_ = lodController_.advance(dtMs, lastTimings_[frameIndex].computeMs,
+                                                       timestampsSupported, ensembleHistory_[frameIndex]);
+        }
+    }
+
     const int shDeg = std::min(std::clamp(params_.shDegree, 0, 3), shDegreeData_);
 
     // Restart the progressive accumulation when the camera or a render parameter
@@ -488,14 +513,21 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     ts(0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
 
     // --- decide how many independent ensembles to dispatch this frame -------
-    // (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 1). Off always runs exactly
+    // (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 1-2). Off always runs exactly
     // one and always uses ensembleSeed 0, reproducing the pre-Phase-1 renderer's
-    // RNG stream bit-for-bit.
+    // RNG stream bit-for-bit. Manual takes R/target straight from Params;
+    // Adaptive takes them from lodController_ via the request update() computed
+    // this frame (Phase 2).
     const bool lodActive = params_.lodMode != static_cast<int>(LodMode::Off);
+    const bool adaptive  = params_.lodMode == static_cast<int>(LodMode::Adaptive);
     const uint32_t requestedR = lodActive
-        ? static_cast<uint32_t>(std::clamp(params_.ensemblesPerFrame, 1, 8)) : 1u;
+        ? (adaptive ? std::clamp(adaptiveRequest_.ensemblesPerFrame, 1u, 8u)
+                    : static_cast<uint32_t>(std::clamp(params_.ensemblesPerFrame, 1, 8)))
+        : 1u;
     const uint32_t target = lodActive
-        ? static_cast<uint32_t>(std::max(1, params_.targetEnsembles)) : 1u;
+        ? (adaptive ? std::max(1u, adaptiveRequest_.targetEnsembles)
+                    : static_cast<uint32_t>(std::max(1, params_.targetEnsembles)))
+        : 1u;
     uint32_t& history = ensembleHistory_[frameIndex];
     const bool isResetFrame = (history == 0);
     const uint32_t remaining = (target > history) ? (target - history) : 0u;
@@ -758,6 +790,7 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.epoch = ensembleEpoch_;
     s.requestedEnsemblesPerFrame = static_cast<uint32_t>(std::max(1, params_.ensemblesPerFrame));
     s.effectiveEnsemblesPerFrame = lastEffectiveR_[f];
+    s.adaptiveState = static_cast<uint32_t>(lodController_.state());
     return s;
 }
 
