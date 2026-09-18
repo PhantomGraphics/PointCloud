@@ -295,7 +295,58 @@ void splatOne(uint id) {
     }
 }
 
+// Reproject one bank entry under the CURRENT camera without resampling its
+// world-space position (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 4). Only
+// projection and SH colour (both view-dependent) are redone here; entry
+// existence/position was already decided when the bank was generated, so this
+// intentionally does not re-apply ViewConditioned's keepProb thinning -- that
+// was already baked into which candidates exist in the bank.
+// pass: 3 = depth, 4 = colour.
+void reprojectOne(uint index) {
+    vec4 entry = bank[index];
+    vec3 world = entry.xyz;
+    uint id = floatBitsToUint(entry.w);
+
+    // Already an accepted candidate (thinning was baked in when the bank was
+    // generated) -- counts as "generated" the same as gps_compact.comp's
+    // generate pass does, once per invocation regardless of this pass's cull.
+    if (pc.pass == 3u) atomicAdd(stats[1], 1u);
+
+    vec3 camp = (u.view * vec4(world, 1.0)).xyz;
+    float pz = -camp.z;
+    if (pz <= u.p1.x) return;
+
+    float fxp =  u.p0.x * (camp.x / pz) + u.p0.z;
+    float fyp = -u.p0.y * (camp.y / pz) + u.p0.w;
+    if (fxp < 0.0 || fxp >= float(u.dims.x) || fyp < 0.0 || fyp >= float(u.dims.y)) return;
+
+    uint px = uint(fxp), py = uint(fyp), side = u.dims.w, sppI = u.dims.z;
+    uint sx = min(uint(fract(fxp) * float(side)), side - 1u);
+    uint sy = min(uint(fract(fyp) * float(side)), side - 1u);
+    uint sidx = ((py * u.dims.x + px) * sppI) + (sy * side + sx);
+    uint dkey = orderedDepthKey(pz);
+
+    if (pc.pass == 3u) {
+        atomicMin(depthBuf[sidx], dkey);
+        atomicAdd(stats[3], 1u); // drawnPoints: this reused entry landed on screen
+    } else if (depthBuf[sidx] == dkey) {
+        GsPoint sp = splats[id];
+        vec3 vdir = normalize(world - u.camPos.xyz);
+        vec3 lin = evalSH(id, vec3(sp.f0, sp.f1, sp.f2), vdir);
+        atomicMin(colorBuf[sidx], packLinearColor(lin));
+    }
+}
+
 void main() {
+    if (pc.pass >= 3u) {
+        // Bank reuse (Phase 4): iterate the particle count left over from the
+        // generation pass that populated bank[] (gps_compact.comp), not numSplats.
+        uint count = work[3];
+        uint stride = gl_NumWorkGroups.x * 64u;
+        for (uint index = gl_GlobalInvocationID.x; index < count; index += stride)
+            reprojectOne(index);
+        return;
+    }
     if (pc.pass != 2u && work[4] != 2u) return;
     uint stride = gl_NumWorkGroups.x * 64u;
     for (uint id = gl_GlobalInvocationID.x; id < u.ctrl.x; id += stride)

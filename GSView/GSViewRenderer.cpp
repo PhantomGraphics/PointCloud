@@ -160,7 +160,9 @@ bool GSViewRenderer::setEvaluationCamera(float theta, float phi, float distance)
 	camTheta_ = theta;
 	camPhi_ = phi;
 	camDist_ = distance;
-	gaussianPoint_.resetAccumulation();
+	// GaussianPointRenderer::update() observes the camera change and decides
+	// whether this is a hard reset or an eligible PBVR3D bank-reuse soft reset.
+	// Resetting here would invalidate the bank before that decision is made.
 	return true;
 }
 

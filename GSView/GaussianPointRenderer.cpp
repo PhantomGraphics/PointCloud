@@ -23,7 +23,7 @@ constexpr double kShC0 = 0.28209479177387814;
 
 // Binding indices shared by the compute shaders (see gps_splat.comp / gps_resolve.comp).
 enum : uint32_t {
-    B_INPUT = 0, B_DEPTH = 1, B_COLOR = 2, B_ACCUM = 3, B_STATS = 4, B_PARAMS = 5, B_SHREST = 6, B_PREPARED = 7, B_SCAN = 8, B_PARTICLES = 9, B_WORK = 10
+    B_INPUT = 0, B_DEPTH = 1, B_COLOR = 2, B_ACCUM = 3, B_STATS = 4, B_PARAMS = 5, B_SHREST = 6, B_PREPARED = 7, B_SCAN = 8, B_PARTICLES = 9, B_WORK = 10, B_BANK = 11
 };
 
 VkBufferMemoryBarrier bufBarrier(VkBuffer buf, VkAccessFlags src, VkAccessFlags dst)
@@ -81,6 +81,7 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
         ssbo(B_SCAN, VK_SHADER_STAGE_COMPUTE_BIT),
         ssbo(B_PARTICLES, VK_SHADER_STAGE_COMPUTE_BIT),
         ssbo(B_WORK, VK_SHADER_STAGE_COMPUTE_BIT),
+        ssbo(B_BANK, VK_SHADER_STAGE_COMPUTE_BIT),
     });
 
     // --- composite descriptor set layout (resolvedBuf + params, fragment) ---
@@ -94,7 +95,7 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
 
     // --- descriptor pool ---
     std::vector<VkDescriptorPoolSize> sizes = {
-        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 11 * frames_ },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 12 * frames_ },
         { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 * frames_ },
     };
     descPool_.create(dev, sizes, 2 * frames_);
@@ -198,7 +199,7 @@ void GaussianPointRenderer::setParams(const Params& p)
     }
 }
 
-void GaussianPointRenderer::resetAccumulation()
+void GaussianPointRenderer::resetAccumulation(bool hard)
 {
     resetPending_ = frames_;
     ++ensembleEpoch_;
@@ -210,6 +211,12 @@ void GaussianPointRenderer::resetAccumulation()
     // by EnsembleLodController::advance(), which recordCompute()/update() only
     // call in Adaptive mode.
     lodController_.notifyMotion();
+    // Pbvr3d particle-bank reuse (Phase 4): only a hard reset invalidates the
+    // world-space bank. update()'s camera-only path calls resetAccumulation(false)
+    // instead, so bankBuiltEpoch_[slot] == desiredBankEpoch_ stays true and
+    // recordCompute() can reproject the existing bank under the new camera
+    // rather than resampling it.
+    if (hard) ++desiredBankEpoch_;
 }
 
 void GaussianPointRenderer::onResize(const Phantom::VKG::VulkanContext& ctx,
@@ -261,6 +268,7 @@ void GaussianPointRenderer::destroyFrameBuffers(VkDevice device)
         scanBuf_[f].destroy(device);
         particleBuf_[f].destroy(device);
         workBuf_[f].destroy(device);
+        bankBuf_[f].destroy(device);
         depthBuf_[f].destroy(device);
         colorBuf_[f].destroy(device);
         accumBuf_[f].destroy(device);
@@ -282,7 +290,8 @@ void GaussianPointRenderer::writeComputeSet(VkDevice device, uint32_t f)
     VkDescriptorBufferInfo scan{ scanBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
     VkDescriptorBufferInfo points{ particleBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
     VkDescriptorBufferInfo work{ workBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
-    VkWriteDescriptorSet w[11]{};
+    VkDescriptorBufferInfo bank{ bankBuf_[f].getBuffer(), 0, VK_WHOLE_SIZE };
+    VkWriteDescriptorSet w[12]{};
     auto set = [&](int i, uint32_t bind, VkDescriptorType type, const VkDescriptorBufferInfo* bi) {
         w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         w[i].dstSet = computeSets_[f];
@@ -302,7 +311,8 @@ void GaussianPointRenderer::writeComputeSet(VkDevice device, uint32_t f)
     set(8, B_SCAN, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &scan);
     set(9, B_PARTICLES, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &points);
     set(10, B_WORK, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &work);
-    vkUpdateDescriptorSets(device, 11, w, 0, nullptr);
+    set(11, B_BANK, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, &bank);
+    vkUpdateDescriptorSets(device, 12, w, 0, nullptr);
 }
 
 void GaussianPointRenderer::writeCompositeSet(VkDevice device, uint32_t f)
@@ -394,6 +404,16 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
         }
     }
 
+    // --- confirm a pending Pbvr3d bank generation (Phase 4) -----------------
+    // workBuf_ is host-coherent; by the time this slot is next visited (one
+    // real frame later, given double buffering) the GPU has finished the
+    // dispatch that set bankPendingEpoch_[frameIndex] in recordCompute().
+    if (bankPendingEpoch_[frameIndex] != 0) {
+        const auto* work = static_cast<const uint32_t*>(workBuf_[frameIndex].getMapped());
+        if (work && work[4] == 0u) bankBuiltEpoch_[frameIndex] = bankPendingEpoch_[frameIndex];
+        bankPendingEpoch_[frameIndex] = 0;
+    }
+
     // --- adaptive stochastic thinning to a point budget ---
     const double previousBudgetThin = budgetThin_;
     if (params_.pointBudget > 0.0f) {
@@ -470,13 +490,20 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     mixFloat(camera_.focalY);
     mixFloat(camera_.cx);
     mixFloat(camera_.cy);
-    mixFloat(camera_.camPos.x);
-    mixFloat(camera_.camPos.y);
-    mixFloat(camera_.camPos.z);
-    if (h != lastChangeHash_ || camera_.view != lastView_) {
-        resetAccumulation();
+    // camera_.camPos is deliberately NOT mixed into h -- it and camera_.view are
+    // compared separately below so Pbvr3d bank reuse (Phase 4) can tell "only the
+    // camera moved" apart from every other invalidating change (which must always
+    // hard-reset, camera-only changes may soft-reset when reuse is eligible).
+    const bool paramsChanged = (h != lastChangeHash_);
+    const bool cameraChanged = (camera_.view != lastView_) || (camera_.camPos != lastCamPos_);
+    if (paramsChanged || cameraChanged) {
+        const bool cameraOnly = cameraChanged && !paramsChanged;
+        const bool canSoftReset = cameraOnly && path_ == Path::Pbvr3d && params_.pbvrBankReuse &&
+            !params_.pbvrZoomRecalibration && params_.compactPipeline == 1;
+        resetAccumulation(!canSoftReset);
         lastChangeHash_ = h;
         lastView_ = camera_.view;
+        lastCamPos_ = camera_.camPos;
     }
 
     const uint32_t resetAccum = (resetPending_ > 0) ? 1u : 0u;
@@ -588,6 +615,25 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     // Grid-stride splat: cap the dispatch so any splat count is valid.
     const uint32_t groups = std::min<uint32_t>((numSplats_ + 63u) / 64u, 65535u);
 
+    // Pbvr3d particle-bank reuse (Phase 4): only the ensemble immediately
+    // following a reset (isResetFrame) may reuse -- i.e. only the sample that a
+    // camera-only soft reset just forced back to R=1. A stationary frame with no
+    // new resetAccumulation() call has isResetFrame==false and always falls
+    // through to a genuine independent draw, so Off/Manual/Adaptive's progressive
+    // refinement while the camera is NOT moving is completely unaffected by this
+    // feature (design principle 4: one ensemble's probability model persists
+    // while moving; independent refinement resumes once settled). During
+    // continuous camera movement every frame re-triggers a soft reset, so every
+    // frame qualifies -- exactly the case this is meant to speed up.
+    // effectiveR==1 is a defensive re-check (a camera-only soft reset never
+    // changes target/rMax, so it's implied whenever bankBuiltEpoch_ could still
+    // match); see update()'s camera-only-change detection for the other
+    // eligibility conditions.
+    const bool bankReuse = isResetFrame && path_ == Path::Pbvr3d && params_.pbvrBankReuse &&
+        !params_.pbvrZoomRecalibration && params_.compactPipeline == 1 &&
+        effectiveR == 1 && bankBuiltEpoch_[frameIndex] == desiredBankEpoch_;
+    lastBankReused_[frameIndex] = bankReuse && numSplats_ > 0;
+
     for (uint32_t i = 0; i < effectiveR; ++i) {
         const bool first = (i == 0);
         const bool last  = (i + 1 == effectiveR);
@@ -604,7 +650,40 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
                              0, 0, nullptr, 2, toCompute, 0, nullptr);
         if (first) ts(1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
-        if (numSplats_ > 0) {
+        if (numSplats_ > 0 && bankReuse) {
+            // Pbvr3d bank reuse (Phase 4): skip prepare/scan/compact entirely and
+            // reproject the existing world-space bank (gps_compact.comp's last
+            // generate pass) under the current camera -- only projection + SH
+            // colour are redone (gps_pbvr3d.comp passes 3/4). work[3]/bank[] are
+            // read exactly as left by that earlier generate.
+            const auto* workMapped = static_cast<const uint32_t*>(workBuf_[frameIndex].getMapped());
+            const uint32_t bankCount = workMapped ? workMapped[3] : 0u;
+            const uint32_t reprojectGroups = std::min<uint32_t>((bankCount + 63u) / 64u, 65535u);
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pbvr3dPipe_.getPipeline());
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pbvr3dPipe_.getLayout(),
+                                    0, 1, &computeSets_[frameIndex], 0, nullptr);
+            SplatPushConstants pcDepth{ 3, 0 };
+            vkCmdPushConstants(cmd, pbvr3dPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcDepth), &pcDepth);
+            vkCmdDispatch(cmd, reprojectGroups, 1, 1);
+
+            VkBufferMemoryBarrier depthRW = bufBarrier(depth, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                 0, 0, nullptr, 1, &depthRW, 0, nullptr);
+            if (first) ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+            SplatPushConstants pcColor{ 4, 0 };
+            vkCmdPushConstants(cmd, pbvr3dPipe_.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcColor), &pcColor);
+            vkCmdDispatch(cmd, reprojectGroups, 1, 1);
+
+            VkBufferMemoryBarrier toResolve[2] = {
+                bufBarrier(depth, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT),
+                bufBarrier(color, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+            };
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                 0, 0, nullptr, 2, toResolve, 0, nullptr);
+            if (first) ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+        } else if (numSplats_ > 0) {
             const auto& splat = (path_ == Path::Pbvr3d) ? pbvr3dPipe_ : splatPipe_;
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getPipeline());
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, splat.getLayout(),
@@ -670,6 +749,9 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
             vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcColor), &pcColor);
             vkCmdDispatch(cmd, groups, 1, 1);
 
+            if (path_ == Path::Pbvr3d && params_.compactPipeline == 1)
+                bankPendingEpoch_[frameIndex] = desiredBankEpoch_;
+
             VkBufferMemoryBarrier toResolve[2] = {
                 bufBarrier(depth, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT),
                 bufBarrier(color, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
@@ -698,7 +780,7 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
             // Re-synchronize everything this ensemble touched before the next
             // ensemble's clear (depth/colour/stats) and prepare pass (prepared/
             // scan/particle/work) reuse the same buffers.
-            VkBufferMemoryBarrier next[8] = {
+            VkBufferMemoryBarrier next[9] = {
                 bufBarrier(accum, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT),
                 bufBarrier(depth, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT),
                 bufBarrier(color, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT),
@@ -715,11 +797,13 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
                 bufBarrier(workBuf_[frameIndex].getBuffer(),
                     VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
                     VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT),
+                bufBarrier(bankBuf_[frameIndex].getBuffer(),
+                    VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT),
             };
             vkCmdPipelineBarrier(cmd,
                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-                0, 0, nullptr, 8, next, 0, nullptr);
+                0, 0, nullptr, 9, next, 0, nullptr);
         }
     }
     history += effectiveR;
@@ -772,7 +856,8 @@ uint64_t GaussianPointRenderer::bufferBytes() const
     for (uint32_t f = 0; f < frames_; ++f)
         bytes += depthBuf_[f].getSize() + colorBuf_[f].getSize() + accumBuf_[f].getSize()
                + statsBuf_[f].getSize() + paramsUbo_[f].getSize()
-               + preparedBuf_[f].getSize() + scanBuf_[f].getSize() + particleBuf_[f].getSize() + workBuf_[f].getSize();
+               + preparedBuf_[f].getSize() + scanBuf_[f].getSize() + particleBuf_[f].getSize() + workBuf_[f].getSize()
+               + bankBuf_[f].getSize();
     return bytes;
 }
 
@@ -810,6 +895,7 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.effectiveEnsemblesPerFrame = lastEffectiveR_[f];
     s.adaptiveState = static_cast<uint32_t>(lodController_.state());
     s.framesSinceReset = framesSinceReset_;
+    s.bankReused = lastBankReused_[f];
     return s;
 }
 
@@ -834,9 +920,11 @@ bool GaussianPointRenderer::createWorkBuffers(const Phantom::VKG::VulkanContext&
     for (uint32_t f = 0; f < frames_; ++f) {
         preparedBuf_[f].destroy(ctx.getDevice()); scanBuf_[f].destroy(ctx.getDevice());
         particleBuf_[f].destroy(ctx.getDevice()); workBuf_[f].destroy(ctx.getDevice());
+        bankBuf_[f].destroy(ctx.getDevice());
         if (!preparedBuf_[f].create(ctx, pool, prepBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) ||
             !scanBuf_[f].create(ctx, pool, VkDeviceSize(scanWords_)*4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) ||
             !particleBuf_[f].create(ctx, pool, VkDeviceSize(particleCapacity_)*16u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) ||
+            !bankBuf_[f].create(ctx, pool, VkDeviceSize(particleCapacity_)*16u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) ||
             !workBuf_[f].createMapped(ctx, 8u*4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT))
             return false;
         const uint32_t zero[8] = {};

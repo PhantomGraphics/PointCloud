@@ -125,12 +125,16 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGpLodFrameBudget")    return cmdGetGpLodFrameBudget();
     if (name == "GetPbvrZoom") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().pbvrZoomRecalibration) : "Error:renderer not available";
     if (name == "GetGpCompactFallback") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().compactFallback) : "Error:renderer not available";
-    if (name == "SetPbvrZoom" || name == "SetGpCompact") {
+    // Pbvr3d particle-bank reuse (PLAN_pbvr_gps_ensemble_lod.md Phase 4).
+    if (name == "GetPbvrBankReuse") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().pbvrBankReuse) : "Error:renderer not available";
+    if (name == "GetGpBankReused") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().bankReused) : "Error:renderer not available";
+    if (name == "SetPbvrZoom" || name == "SetGpCompact" || name == "SetPbvrBankReuse") {
         if (!renderer_) return "Error:renderer not available";
         if (rest != "0" && rest != "1" && !(name == "SetGpCompact" && rest == "2"))
             return "Error:expected 0 or 1 (compact also accepts 2 for point replay)";
         auto p = renderer_->getGaussianPointParams();
         if (name == "SetPbvrZoom") p.pbvrZoomRecalibration = rest == "1";
+        else if (name == "SetPbvrBankReuse") p.pbvrBankReuse = rest == "1";
         else p.compactPipeline = rest[0] - '0';
         renderer_->setGaussianPointParams(p);
         return "OK";
@@ -464,7 +468,9 @@ std::string GSViewCommandDispatcher::buildProfile() const
         ";lodFrameBudgetLowMs=" + fmtF(p.lodFrameBudgetLowMs) +
         ";lodFrameBudgetHighMs=" + fmtF(p.lodFrameBudgetHighMs) +
         ";adaptiveState=" + std::to_string(s.adaptiveState) +
-        ";framesSinceReset=" + std::to_string(s.framesSinceReset);
+        ";framesSinceReset=" + std::to_string(s.framesSinceReset) +
+        ";pbvrBankReuse=" + std::to_string(p.pbvrBankReuse) +
+        ";bankReused=" + std::to_string(s.bankReused);
 }
 
 std::string GSViewCommandDispatcher::cmdGetGpProfile()

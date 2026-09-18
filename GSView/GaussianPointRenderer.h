@@ -102,6 +102,14 @@ public:
         // up while under lodFrameBudgetLowMs, down once over lodFrameBudgetHighMs.
         float lodFrameBudgetLowMs  = 16.7f;
         float lodFrameBudgetHighMs = 33.3f;
+        // Pbvr3d-only, opt-in (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 4, default off
+        // = zero behaviour change). When true, a camera-only change (same data/params, only
+        // the view matrix moved) reuses the last generated ensemble's world-space particle
+        // bank instead of resampling it -- only reprojection + SH colour are redone. Ineligible
+        // combinations (pbvrZoomRecalibration on, compactPipeline != automatic-compact, R>1,
+        // no bank built yet) silently fall back to full regeneration; never a correctness issue,
+        // only a missed speedup. See GaussianPointRenderer::recordCompute().
+        bool pbvrBankReuse = false;
     };
 
     struct Camera {
@@ -143,10 +151,18 @@ public:
         // relate displayedEnsembles/adaptiveState to how long the scene has been
         // settled, without depending on wall-clock time (which varies by machine).
         uint32_t framesSinceReset = 0;
+
+        // Pbvr3d particle-bank reuse (Phase 4). true when this frame's ensemble
+        // reprojected the displayed slot's existing world-space bank instead of
+        // resampling it (see Params::pbvrBankReuse). Always false outside Pbvr3d.
+        bool bankReused = false;
     };
 
-    // Force the progressive accumulation to restart on the next frames.
-    void resetAccumulation();
+    // Force the progressive accumulation to restart on the next frames. `hard`
+    // also invalidates the Pbvr3d particle bank (Phase 4); pass false only from
+    // the camera-only-change path in update(), which keeps the bank valid since
+    // its world-space contents don't depend on the camera.
+    void resetAccumulation(bool hard = true);
 
     void onInit(const Phantom::VKG::VulkanContext& ctx, const Phantom::VKG::VulkanCommandPool& pool,
                 VkRenderPass renderPass, uint32_t framesInFlight);
@@ -239,6 +255,7 @@ private:
     // `frames_` frames so both frame-in-flight accumulators restart.
     uint32_t resetPending_ = kMaxFrames;
     glm::mat4 lastView_{ 0.0f };
+    glm::vec3 lastCamPos_{ 0.0f }; // tracked apart from lastChangeHash_ (Phase 4 camera-only detection)
     uint64_t  lastChangeHash_ = 0;
 
     // Ensemble LOD bookkeeping (Phase 1). ensembleEpoch_ increments once per
@@ -263,6 +280,25 @@ private:
     std::chrono::steady_clock::time_point lastUpdateTime_{};
     bool hasLastUpdateTime_ = false;
 
+    // Pbvr3d particle-bank reuse (Phase 4). desiredBankEpoch_ increments only on
+    // "hard" resetAccumulation() calls (data/params/resolution changes); a
+    // camera-only change (Params.pbvrBankReuse path in update()) leaves it alone,
+    // so bankBuiltEpoch_[slot] == desiredBankEpoch_ tells recordCompute() that
+    // slot's bank (world position + Gaussian id, written by gps_compact.comp's
+    // generate pass into bankBuf_[slot]) is still valid to reproject under the
+    // new camera instead of resampling. Starts at 1 so the zero-initialized
+    // bankBuiltEpoch_ never accidentally matches on the very first frame.
+    uint32_t desiredBankEpoch_ = 1;
+    std::array<uint32_t, kMaxFrames> bankBuiltEpoch_{};
+    std::array<bool, kMaxFrames> lastBankReused_{};
+    // A generate dispatch under compactPipeline==1 doesn't know at record time
+    // whether the GPU will actually land in cached mode (gps_scan.comp decides
+    // work[4] at *execution* time) -- only readable once that dispatch has
+    // completed, one real frame later via this same slot's host-coherent
+    // workBuf_. bankPendingEpoch_[slot] != 0 means "confirm on next visit to
+    // this slot" (see update()); 0 means nothing pending.
+    std::array<uint32_t, kMaxFrames> bankPendingEpoch_{};
+
     VkExtent2D extent_{ 0, 0 };
     uint32_t   spp_ = 4;
 
@@ -274,6 +310,9 @@ private:
     uint64_t cachedGeneration_ = ~0ull;
 
     std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> preparedBuf_, scanBuf_, particleBuf_, workBuf_;
+    // Pbvr3d particle bank (Phase 4): vec4(world.xyz, uintBitsToFloat(gaussianId))
+    // per particle, same capacity/indexing as particleBuf_.
+    std::array<Phantom::VKG::VulkanBuffer, kMaxFrames> bankBuf_;
     Phantom::VKG::VulkanComputePipeline scanPipe_, compactPipe_;
     bool createWorkBuffers(const Phantom::VKG::VulkanContext&, const Phantom::VKG::VulkanCommandPool&);
 

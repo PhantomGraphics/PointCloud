@@ -56,6 +56,10 @@ void main() {
             vec2 ab = normalPair(rs), cd = normalPair(rs);
             if (u.ctrl2.w == 2u && rnd(rs) >= q.info.y) continue;
             vec3 world = q.a.xyz + mat3(q.b.xyz, q.c.xyz, q.d.xyz) * vec3(ab, cd.x);
+            // Camera-independent by construction -- written regardless of this
+            // ensemble's near-plane cull below, so a reused bank (Phase 4) stays
+            // valid for a different camera pose that might not cull it.
+            if (pc.pass == 0u && work[4] == 0u) bank[index] = vec4(world, uintBitsToFloat(id));
             vec3 cam = (u.view * vec4(world, 1)).xyz;
             if (pc.pass == 0u) counts.x++;
             if (-cam.z <= u.p1.x) continue;
