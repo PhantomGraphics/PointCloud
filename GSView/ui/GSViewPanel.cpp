@@ -18,10 +18,55 @@ void GSViewPanel::init(
 	onGpParamsChanged_ = std::move(onGpParamsChanged);
 }
 
+void GSViewPanel::drawEnsembleLodControls()
+{
+	ImGui::Spacing();
+	ImGui::TextUnformatted("Ensemble LOD");
+	bool lodChanged = false;
+	if (ImGui::Combo("LOD Mode", &gp_.lodMode, "Off\0" "Manual\0" "Adaptive\0"))
+		lodChanged = true;
+
+	const bool manual = gp_.lodMode == 1;
+	const bool adaptive = gp_.lodMode == 2;
+	if (manual || adaptive) {
+		lodChanged |= ImGui::SliderInt(adaptive ? "Max Ensembles/Frame" : "Ensembles/Frame",
+			&gp_.ensemblesPerFrame, 1, 8);
+		lodChanged |= ImGui::SliderInt("Target Ensembles", &gp_.targetEnsembles, 1, 512);
+		if (adaptive) {
+			lodChanged |= ImGui::SliderFloat("Frame Budget Low (ms)", &gp_.lodFrameBudgetLowMs, 4.0f, 66.0f);
+			lodChanged |= ImGui::SliderFloat("Frame Budget High (ms)", &gp_.lodFrameBudgetHighMs, gp_.lodFrameBudgetLowMs, 100.0f);
+		}
+		if (gp_.pointBudget > 0.0f) {
+			ImGui::TextColored(ImVec4(1.f, 0.75f, 0.2f, 1.f),
+				"Point Budget > 0 changes density -- combined with LOD this is\n"
+				"not a pure sample-count refinement.");
+		}
+	}
+	if (lodChanged && onGpParamsChanged_) onGpParamsChanged_(gp_);
+
+	if (manual || adaptive) {
+		ImGui::Text("Ensembles this frame: %u  displayed: %u  (epoch %u)",
+			gpStats_.ensemblesThisFrame, gpStats_.displayedEnsembles, gpStats_.epoch);
+		if (adaptive) {
+			static const char* kStateNames[] = { "Moving", "Settling", "Refining", "Converged" };
+			const char* stateName = gpStats_.adaptiveState < 4 ? kStateNames[gpStats_.adaptiveState] : "?";
+			ImGui::Text("State: %s  (%u frames since reset)", stateName, gpStats_.framesSinceReset);
+			if (gpStats_.effectiveEnsemblesPerFrame <= 1 && gpStats_.computeMs > gp_.lodFrameBudgetHighMs) {
+				ImGui::TextColored(ImVec4(1.f, 0.4f, 0.3f, 1.f),
+					"GPU budget exceeded even at R=1 -- LOD alone cannot reach the target frame time.");
+			}
+		}
+	}
+}
+
 void GSViewPanel::onImGui()
 {
 	ImGui::SetNextWindowPos(ImVec2(10.f, 35.f), ImGuiCond_Once);
-	ImGui::SetNextWindowSize(ImVec2(320.f, 340.f), ImGuiCond_Once);
+	// Tall enough for the GaussianPoint/PBVR3D panel plus the common part of the
+	// Phase 3 Ensemble LOD block (mode combo + Manual's two sliders); Adaptive's
+	// extra budget sliders and state/warning text may need the scrollbar ImGui
+	// adds automatically once content exceeds this.
+	ImGui::SetNextWindowSize(ImVec2(330.f, 400.f), ImGuiCond_Once);
 	if (!ImGui::Begin("GSView Control")) {
 		ImGui::End();
 		return;
@@ -80,6 +125,7 @@ void GSViewPanel::onImGui()
 		ImGui::Text("candidates / drawn: %u / %u", gpStats_.candidateCount, gpStats_.drawnPoints);
 		ImGui::Text("active / accum frames: %u / %u", gpStats_.activeSamples, gpStats_.accumFrames);
 		ImGui::Text("GPU: %.2f ms", gpStats_.computeMs);
+		drawEnsembleLodControls();
 	} else { // GaussianPoint
 		bool gpChanged = false;
 		int sppIdx = gp_.sppSide - 1;
@@ -117,6 +163,7 @@ void GSViewPanel::onImGui()
 		ImGui::Text("accumulated frames: %u", gpStats_.accumFrames);
 		ImGui::Text("GPU: %.2f ms  (splat %.2f  resolve %.2f)",
 			gpStats_.computeMs, gpStats_.splatDepthMs + gpStats_.splatColorMs, gpStats_.resolveMs);
+		drawEnsembleLodControls();
 	}
 
 	ImGui::Separator();
@@ -127,8 +174,8 @@ void GSViewPanel::onImGui()
 	ImGui::End();
 
 	// ---- Debug window (splat #0) ----------------------------------------
-	ImGui::SetNextWindowPos(ImVec2(10.f, 390.f), ImGuiCond_Once);
-	ImGui::SetNextWindowSize(ImVec2(320.f, 300.f), ImGuiCond_Once);
+	ImGui::SetNextWindowPos(ImVec2(10.f, 445.f), ImGuiCond_Once);
+	ImGui::SetNextWindowSize(ImVec2(330.f, 265.f), ImGuiCond_Once);
 	if (ImGui::Begin("GS Debug (splat #0)")) {
 		ImGui::TextColored(
 			gsAvailable_ ? ImVec4(0.2f,1.f,0.2f,1.f) : ImVec4(1.f,0.3f,0.3f,1.f),

@@ -122,6 +122,7 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "GetGpEnsembleStats")     return cmdGetGpEnsembleStats();
     if (name == "GetGpEnsemblesThisFrame")return cmdGetGpEnsemblesThisFrame();
     if (name == "GetGpDisplayedEnsembles")return cmdGetGpDisplayedEnsembles();
+    if (name == "GetGpLodFrameBudget")    return cmdGetGpLodFrameBudget();
     if (name == "GetPbvrZoom") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().pbvrZoomRecalibration) : "Error:renderer not available";
     if (name == "GetGpCompactFallback") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().compactFallback) : "Error:renderer not available";
     if (name == "SetPbvrZoom" || name == "SetGpCompact") {
@@ -195,6 +196,7 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     if (name == "SetGpLodMode")           return cmdSetGpLodMode(rest);
     if (name == "SetGpEnsemblesPerFrame") return cmdSetGpEnsemblesPerFrame(rest);
     if (name == "SetGpTargetEnsembles")   return cmdSetGpTargetEnsembles(rest);
+    if (name == "SetGpLodFrameBudget")    return cmdSetGpLodFrameBudget(rest);
     if (name == "LoadPLY")                return cmdLoadPLY(rest);
     if (name == "Screenshot")             return cmdScreenshot(rest);
 
@@ -458,7 +460,11 @@ std::string GSViewCommandDispatcher::buildProfile() const
         ";targetEnsembles=" + std::to_string(p.targetEnsembles) +
         ";ensemblesThisFrame=" + std::to_string(s.ensemblesThisFrame) +
         ";displayedEnsembles=" + std::to_string(s.displayedEnsembles) +
-        ";ensembleEpoch=" + std::to_string(s.epoch);
+        ";ensembleEpoch=" + std::to_string(s.epoch) +
+        ";lodFrameBudgetLowMs=" + fmtF(p.lodFrameBudgetLowMs) +
+        ";lodFrameBudgetHighMs=" + fmtF(p.lodFrameBudgetHighMs) +
+        ";adaptiveState=" + std::to_string(s.adaptiveState) +
+        ";framesSinceReset=" + std::to_string(s.framesSinceReset);
 }
 
 std::string GSViewCommandDispatcher::cmdGetGpProfile()
@@ -679,7 +685,8 @@ std::string GSViewCommandDispatcher::cmdGetGpEnsembleStats()
            ",Epoch:" + std::to_string(s.epoch) +
            ",Requested:" + std::to_string(s.requestedEnsemblesPerFrame) +
            ",Effective:" + std::to_string(s.effectiveEnsemblesPerFrame) +
-           ",State:" + stateName;
+           ",State:" + stateName +
+           ",FramesSinceReset:" + std::to_string(s.framesSinceReset);
 }
 
 std::string GSViewCommandDispatcher::cmdGetGpEnsemblesThisFrame()
@@ -692,6 +699,31 @@ std::string GSViewCommandDispatcher::cmdGetGpDisplayedEnsembles()
 {
     if (!renderer_) return "Val:0";
     return "Val:" + std::to_string(renderer_->getGaussianPointStats().displayedEnsembles);
+}
+
+// Phase 3: EnsembleLodController's GPU time budget (Adaptive only; Manual/Off ignore it).
+std::string GSViewCommandDispatcher::cmdGetGpLodFrameBudget()
+{
+    if (!renderer_) return "Error:renderer not available";
+    const auto& p = renderer_->getGaussianPointParams();
+    return "Low:" + fmtF(p.lodFrameBudgetLowMs) + ",High:" + fmtF(p.lodFrameBudgetHighMs);
+}
+
+std::string GSViewCommandDispatcher::cmdSetGpLodFrameBudget(const std::string& arg)
+{
+    if (!renderer_) return "Error:renderer not available";
+    const size_t comma = arg.find(',');
+    float low, high;
+    if (comma == std::string::npos
+        || !tryFloat(arg.substr(0, comma), low)
+        || !tryFloat(arg.substr(comma + 1), high)
+        || !std::isfinite(low) || !std::isfinite(high) || low <= 0.0f || high < low)
+        return "Error:lod frame budget requires low,high (ms, 0 < low <= high)";
+    auto p = renderer_->getGaussianPointParams();
+    p.lodFrameBudgetLowMs = low;
+    p.lodFrameBudgetHighMs = high;
+    renderer_->setGaussianPointParams(p);
+    return "OK";
 }
 
 // ---- file / IO commands -----------------------------------------------------

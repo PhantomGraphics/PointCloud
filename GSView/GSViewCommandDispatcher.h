@@ -70,7 +70,7 @@ private:
     std::string cmdSetGpTonemap(const std::string& arg);
     std::string cmdSetGpGamma(const std::string& arg);
 
-    // Ensemble LOD (PLAN_pbvr_gps_ensemble_lod.md Phase 1)
+    // Ensemble LOD (PLAN_pbvr_gps_ensemble_lod.md Phase 1-3)
     std::string cmdGetGpLodMode();
     std::string cmdSetGpLodMode(const std::string& arg);
     std::string cmdGetGpEnsemblesPerFrame();
@@ -80,6 +80,8 @@ private:
     std::string cmdGetGpEnsembleStats();
     std::string cmdGetGpEnsemblesThisFrame();
     std::string cmdGetGpDisplayedEnsembles();
+    std::string cmdGetGpLodFrameBudget();
+    std::string cmdSetGpLodFrameBudget(const std::string& arg);
 
     // Mutation commands
     std::string cmdSetRenderMode(const std::string& mode);

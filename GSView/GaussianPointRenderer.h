@@ -65,11 +65,13 @@ public:
     //   Off      - exactly one ensemble per displayed frame (legacy behaviour, bit-identical RNG stream).
     //   Manual   - up to `ensemblesPerFrame` ensembles per displayed frame, capped at `targetEnsembles`
     //              cumulative samples in the slot's current history.
-    //   Adaptive - R and the cumulative target come from `lodController_`
-    //              (EnsembleLodController, Phase 2) instead of Params.ensemblesPerFrame/
-    //              targetEnsembles: R=1 while the camera/params/data are moving or still
-    //              settling, then ramps up within a GPU time budget once quiet, and stops
-    //              once the controller's target is reached.
+    //   Adaptive - `ensemblesPerFrame`/`targetEnsembles` set `lodController_`'s R cap and
+    //              convergence target (Phase 3: the same two knobs Manual uses directly,
+    //              reinterpreted as an upper bound here); the actual per-frame R comes from
+    //              `lodController_` (EnsembleLodController, Phase 2): R=1 while the
+    //              camera/params/data are moving or still settling, then ramps up within
+    //              `lodFrameBudgetLowMs`/`lodFrameBudgetHighMs` once quiet, and stops once
+    //              the target is reached.
     enum class LodMode { Off = 0, Manual = 1, Adaptive = 2 };
 
     struct Params {
@@ -94,8 +96,12 @@ public:
         int compactPipeline = 1; // 0 primitive replay, 1 automatic compact, 2 force point replay
         float pointBudget      = 0.f;    // 0 = unlimited; else adaptive stochastic thinning
         int   lodMode           = 0;     // LodMode
-        int   ensemblesPerFrame = 1;     // R, clamped to 1..8 (Manual/Adaptive only; Off always runs 1)
+        int   ensemblesPerFrame = 1;     // R (Manual) / R cap (Adaptive), clamped to 1..8 (Off always runs 1)
         int   targetEnsembles   = 1;     // cumulative independent samples a slot's history stops refining at
+        // Adaptive-only (Phase 3): EnsembleLodController's GPU time budget, in ms. Ramps R
+        // up while under lodFrameBudgetLowMs, down once over lodFrameBudgetHighMs.
+        float lodFrameBudgetLowMs  = 16.7f;
+        float lodFrameBudgetHighMs = 33.3f;
     };
 
     struct Camera {
@@ -131,6 +137,12 @@ public:
         // the EnsembleLodController::State the displayed slot is in
         // (0=Moving, 1=Settling, 2=Refining, 3=Converged).
         uint32_t adaptiveState = 0;
+
+        // Ensemble LOD (Phase 3). Frames of update() elapsed since the last
+        // resetAccumulation() -- the "elapsed time" evaluation scripts need to
+        // relate displayedEnsembles/adaptiveState to how long the scene has been
+        // settled, without depending on wall-clock time (which varies by machine).
+        uint32_t framesSinceReset = 0;
     };
 
     // Force the progressive accumulation to restart on the next frames.
@@ -220,6 +232,8 @@ private:
     uint32_t frames_ = kMaxFrames;
     uint32_t frameCounter_ = 0;
     uint32_t lastFrameIndex_ = 0;
+    // Frames of update() elapsed since the last resetAccumulation() (Phase 3 Stats::framesSinceReset).
+    uint32_t framesSinceReset_ = 0;
 
     // Progressive accumulation reset bookkeeping. resetPending_ counts down over
     // `frames_` frames so both frame-in-flight accumulators restart.

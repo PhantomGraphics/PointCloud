@@ -179,13 +179,30 @@ void GaussianPointRenderer::setParams(const Params& p)
     params_.lodMode = std::clamp(params_.lodMode, 0, 2);
     params_.ensemblesPerFrame = std::clamp(params_.ensemblesPerFrame, 1, 8);
     params_.targetEnsembles = std::max(1, params_.targetEnsembles);
+    params_.lodFrameBudgetLowMs = std::max(0.1f, params_.lodFrameBudgetLowMs);
+    params_.lodFrameBudgetHighMs = std::max(params_.lodFrameBudgetLowMs, params_.lodFrameBudgetHighMs);
     spp_ = static_cast<uint32_t>(params_.sppSide * params_.sppSide);
+
+    // Keep the adaptive controller's config in sync with the same two knobs Manual
+    // uses directly (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 3) -- R cap and
+    // convergence target -- plus the Adaptive-only time budget. Harmless to update
+    // unconditionally: lodController_.advance() only reads this config when
+    // lodMode == Adaptive, and setConfig() takes effect on the next advance() call.
+    {
+        EnsembleLodController::Config cfg = lodController_.config();
+        cfg.rMax = static_cast<uint32_t>(params_.ensemblesPerFrame);
+        cfg.targetMax = static_cast<uint32_t>(params_.targetEnsembles);
+        cfg.frameBudgetLowMs = params_.lodFrameBudgetLowMs;
+        cfg.frameBudgetHighMs = params_.lodFrameBudgetHighMs;
+        lodController_.setConfig(cfg);
+    }
 }
 
 void GaussianPointRenderer::resetAccumulation()
 {
     resetPending_ = frames_;
     ++ensembleEpoch_;
+    framesSinceReset_ = 0;
     // Every history-invalidating change (camera, params, data, resize, lodMode
     // switch) routes through here, so this is the single point that needs to
     // tell the adaptive controller "motion happened" (docs/todo/PLAN_pbvr_gps_ensemble_lod.md
@@ -494,6 +511,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
 
     lastFrameIndex_ = frameIndex;
     ++frameCounter_;
+    ++framesSinceReset_;
 }
 
 void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameIndex)
@@ -791,6 +809,7 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.requestedEnsemblesPerFrame = static_cast<uint32_t>(std::max(1, params_.ensemblesPerFrame));
     s.effectiveEnsemblesPerFrame = lastEffectiveR_[f];
     s.adaptiveState = static_cast<uint32_t>(lodController_.state());
+    s.framesSinceReset = framesSinceReset_;
     return s;
 }
 

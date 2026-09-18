@@ -38,6 +38,10 @@ public:
 	void onImGui();
 
 private:
+	// Ensemble LOD controls shared by the GaussianPoint and PBVR3DExperimental
+	// branches (both drive the same GaussianPointRenderer::Params/Stats;
+	// docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 3).
+	void drawEnsembleLodControls();
 	RenderMode currentMode_ = RenderMode::SortBased;
 	float sortPointSize_ = 2.0f;
 	float densityScale_ = 1.0f;
