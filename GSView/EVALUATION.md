@@ -82,6 +82,22 @@ target configuration. A different-shaped bottleneck (very high per-Gaussian
 `maxPointsPerSplat`, i.e. an expensive prepare/scan/compact relative to a sparse
 splat) is a more promising case to re-measure.
 
+**Repeated on the real 'train' scene (Tanks & Temples, 559,263 Gaussians, SH
+degree 3 -- the dataset the GPS/3DGS literature evaluates on,
+`docs/paper/gps_pbvr_2026/download_train.py`) with the same conclusion**: see
+`docs/paper/gps_pbvr_2026/results_bank_reuse_train/README.md` and its own
+`bank_reuse_train_evaluation.py`. `computeMs` was again statistically flat
+between `bankReuse` on/off for all 3 methods (proportional 24.71 vs 24.61 ms,
+extinction 34.44 vs 34.78 ms, view_conditioned 31.37 vs 31.31 ms, 8 seeds each),
+ruling out "the synthetic scene was just too small" as the reason no speedup
+showed up above. That script also documents a real-dataset-specific pitfall:
+`LoadPLY` before `SetRenderMode:PBVR3DExperimental` renders the first several
+frames in the default SortBased mode, whose per-frame resort
+(`VkGSPointRenderer::sortByView`) is an O(n)-pass odd-even transposition sort --
+fine at the <=15000-point synthetic samples every other scenario in this repo
+uses, but O(n^2) and multi-minutes-per-frame at this scene's ~560K points.
+Switch render mode before loading real-scale data.
+
 **Correctness note (found and fixed while writing this measurement):**
 `gps_compact.comp`'s generate pass only writes `bank[index]` for candidates
 ViewConditioned's keep-probability *accepted*; a rejected candidate's slot was
