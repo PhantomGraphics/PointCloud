@@ -304,8 +304,14 @@ void splatOne(uint id) {
 // pass: 3 = depth, 4 = colour.
 void reprojectOne(uint index) {
     vec4 entry = bank[index];
-    vec3 world = entry.xyz;
     uint id = floatBitsToUint(entry.w);
+    // gps_compact.comp writes this sentinel for a ViewConditioned candidate slot
+    // it rejected (reprojectOne iterates every slot up to the pre-thinning total,
+    // not just accepted ones) -- skip it exactly as gps_compact.comp's own
+    // generate pass would have, instead of reprojecting stale/undefined bank
+    // contents as a phantom particle.
+    if (id == 0xFFFFFFFFu) return;
+    vec3 world = entry.xyz;
 
     // Already an accepted candidate (thinning was baked in when the bank was
     // generated) -- counts as "generated" the same as gps_compact.comp's
