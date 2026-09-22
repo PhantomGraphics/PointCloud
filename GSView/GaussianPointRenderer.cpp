@@ -21,6 +21,18 @@ namespace GSView {
 namespace {
 constexpr double kShC0 = 0.28209479177387814;
 
+// Pbvr3d bank reuse, ViewConditioned invalidation (PLAN_pbvr_gps_ensemble_lod.md
+// Phase 4, "Proportional/Extinction の候補生成と ViewConditioned の視点依存採択を
+// 分ける"). ViewConditioned's keep-probability targets a view-dependent on-screen
+// density (gpsTarget ~ sqrt(det Sigma2d), which scales like 1/viewDepth^2 under a
+// dolly); reusing a bank generated at a very different distance silently drifts
+// from that target instead of resampling to it. Proportional/Extinction's
+// candidate count (lambda) has no view dependence, so they are exempt from this
+// check. 15% is an applied placeholder, not a measured threshold -- unverified
+// pending real-data tuning, same status as the Phase 2 LOD controller's initial
+// candidates.
+constexpr float kViewConditionedBankDriftTolerance = 1.15f;
+
 // Binding indices shared by the compute shaders (see gps_splat.comp / gps_resolve.comp).
 enum : uint32_t {
     B_INPUT = 0, B_DEPTH = 1, B_COLOR = 2, B_ACCUM = 3, B_STATS = 4, B_PARAMS = 5, B_SHREST = 6, B_PREPARED = 7, B_SCAN = 8, B_PARTICLES = 9, B_WORK = 10, B_BANK = 11
@@ -629,9 +641,23 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     // changes target/rMax, so it's implied whenever bankBuiltEpoch_ could still
     // match); see update()'s camera-only-change detection for the other
     // eligibility conditions.
+    // ViewConditioned-only drift check (Phase 4 slice 2): its keep-probability
+    // targets a view-depth-dependent on-screen density, so a bank generated at a
+    // very different distance would silently drift from that target instead of
+    // resampling to it. Proportional/Extinction's candidate count has no view
+    // dependence and are exempt (design principle in PLAN_pbvr_gps_ensemble_lod.md
+    // Phase 4: "Proportional/Extinction の候補生成と ViewConditioned の視点依存
+    // 採択を分ける").
+    const bool isViewConditioned = params_.pbvr3dMethod == static_cast<int>(Pbvr3dMethod::ViewConditioned);
+    const float curViewDepth = -(camera_.view * glm::vec4(objectCenter_, 1.0f)).z;
+    const bool bankDistanceOk = !isViewConditioned ||
+        bankRefViewDepth_ <= 0.0f || curViewDepth <= 0.0f ||
+        (curViewDepth / bankRefViewDepth_ >= 1.0f / kViewConditionedBankDriftTolerance &&
+         curViewDepth / bankRefViewDepth_ <= kViewConditionedBankDriftTolerance);
+
     const bool bankReuse = isResetFrame && path_ == Path::Pbvr3d && params_.pbvrBankReuse &&
         !params_.pbvrZoomRecalibration && params_.compactPipeline == 1 &&
-        effectiveR == 1 && bankBuiltEpoch_[frameIndex] == desiredBankEpoch_;
+        effectiveR == 1 && bankBuiltEpoch_[frameIndex] == desiredBankEpoch_ && bankDistanceOk;
     lastBankReused_[frameIndex] = bankReuse && numSplats_ > 0;
 
     for (uint32_t i = 0; i < effectiveR; ++i) {
@@ -749,8 +775,16 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
             vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pcColor), &pcColor);
             vkCmdDispatch(cmd, groups, 1, 1);
 
-            if (path_ == Path::Pbvr3d && params_.compactPipeline == 1)
+            if (path_ == Path::Pbvr3d && params_.compactPipeline == 1) {
                 bankPendingEpoch_[frameIndex] = desiredBankEpoch_;
+                // Every generate dispatch recalibrates the bank to the CURRENT
+                // camera, whether triggered by a hard reset or by the drift
+                // fallback below finding the previous reference too stale --
+                // always overwrite so a bank refreshed by drift-fallback is
+                // immediately reuse-eligible again at its new distance instead
+                // of being perpetually re-flagged against a stale reference.
+                bankRefViewDepth_ = curViewDepth;
+            }
 
             VkBufferMemoryBarrier toResolve[2] = {
                 bufBarrier(depth, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT),

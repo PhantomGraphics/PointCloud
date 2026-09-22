@@ -299,6 +299,15 @@ private:
     // this slot" (see update()); 0 means nothing pending.
     std::array<uint32_t, kMaxFrames> bankPendingEpoch_{};
 
+    // ViewConditioned bank-drift invalidation (Phase 4 slice 2). The camera view
+    // depth to objectCenter_ the bank currently in bankBuf_ was calibrated for --
+    // overwritten on every generate dispatch (hard reset or drift-fallback
+    // regeneration alike), so it always reflects the distance of whichever bank
+    // content is actually resident. 0 means "no bank generated yet" (permissive).
+    // Compared every reuse-eligible frame in recordCompute() when
+    // Params.pbvr3dMethod == ViewConditioned; Proportional/Extinction ignore it.
+    float bankRefViewDepth_ = 0.0f;
+
     VkExtent2D extent_{ 0, 0 };
     uint32_t   spp_ = 4;
 
