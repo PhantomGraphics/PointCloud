@@ -115,6 +115,21 @@ public:
         // to full regeneration for the whole frame; never a correctness issue, only a missed
         // speedup. See GaussianPointRenderer::recordCompute().
         bool pbvrBankReuse = false;
+        // Extinction/ViewConditioned candidate-count clamp (docs/todo/PLAN_pbvr_gps_ensemble_lod.md
+        // Phase 0, literature-confirmed via kvs::CellByCellSampling::ParticleDensityMap -- the JCST
+        // 2010 paper's own co-author's reference implementation). The extinction density formula
+        // -log(1-opacity) is unbounded as opacity->1; the reference implementation clamps the
+        // resulting per-volume density at max_density = 1/pixelLength^3 (pixelLength = object-space
+        // size of one screen pixel at the splat's depth), which is algebraically equivalent to
+        // capping the candidate count itself at splatVolume/pixelLength^3 -- at most ~1 candidate per
+        // pixel-footprint-sized volume of the splat's own world-space extent. Proportional (method 0)
+        // is exempt: its op-bounded formula never diverges, matching the literature's density formula
+        // only needing this clamp for the extinction branch. Opt-in (default off = zero behaviour
+        // change): scenes/configs already calibrated against the uncapped formula would see fewer
+        // candidates once this clamps them -- a deliberate, literature-accurate density change, not a
+        // bug fix to apply silently. Unlike pbvrBankReuse/pbvrZoomRecalibration this changes the
+        // rendered image, so toggling it must invalidate accumulation (see update()'s hash mixing).
+        bool pbvrDensityClamp = false;
     };
 
     struct Camera {

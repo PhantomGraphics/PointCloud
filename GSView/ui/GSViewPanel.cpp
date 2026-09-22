@@ -120,7 +120,13 @@ void GSViewPanel::onImGui()
 		bool zoomChanged = ImGui::Checkbox("Zoom density recalibration", &gp_.pbvrZoomRecalibration);
 		if (gp_.pbvrZoomRecalibration)
 			zoomChanged |= ImGui::SliderFloat("Reference pixel length", &gp_.pbvrReferencePixelLength, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
-		if (zoomChanged && onGpParamsChanged_) onGpParamsChanged_(gp_);
+		bool densityClampChanged = ImGui::Checkbox("Extinction density clamp (literature)", &gp_.pbvrDensityClamp);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Caps Extinction/View-conditioned candidate counts at ~1 per\n"
+				"pixel-footprint-sized volume of the splat, matching the JCST 2010\n"
+				"reference implementation's max_density clamp. Off by default; guards\n"
+				"against runaway candidate counts for near-opaque splats.");
+		if ((zoomChanged || densityClampChanged) && onGpParamsChanged_) onGpParamsChanged_(gp_);
 		ImGui::Text("expected/generated: %u / %u", gpStats_.expectedCount, gpStats_.generatedCount);
 		ImGui::Text("candidates / drawn: %u / %u", gpStats_.candidateCount, gpStats_.drawnPoints);
 		ImGui::Text("active / accum frames: %u / %u", gpStats_.activeSamples, gpStats_.accumFrames);

@@ -485,6 +485,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     mixFloat(params_.basePointsPerSplat);
     mixFloat(params_.pointBudget);
     mix(params_.pbvrZoomRecalibration);
+    mix(params_.pbvrDensityClamp);
     mix(params_.compactPipeline);
     mixFloat(params_.pbvrReferencePixelLength);
     mix(static_cast<std::uint64_t>(shDeg) * 7 + params_.tonemapMode);
@@ -537,7 +538,9 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
                            -(camera_.view * glm::vec4(objectCenter_, 1.0f)).z,
                            camera_.focalX, camera_.focalY, params_.pbvrReferencePixelLength,
                            params_.nearZ)) : 1.0f);
-    ubo.bg = glm::vec4(params_.background, 0.0f);
+    // bg.w is otherwise unused (composite/resolve only read bg.rgb) -- reused to
+    // carry the density-clamp flag into gps_pbvr3d.comp without growing the UBO.
+    ubo.bg = glm::vec4(params_.background, params_.pbvrDensityClamp ? 1.0f : 0.0f);
     ubo.camPos = glm::vec4(camera_.camPos, 0.0f);
     ubo.ctrl2 = glm::uvec4(resetAccum, static_cast<uint32_t>(shDeg),
                            static_cast<uint32_t>(params_.tonemapMode),

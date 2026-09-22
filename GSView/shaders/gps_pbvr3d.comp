@@ -201,6 +201,23 @@ void splatOne(uint id) {
     float lambda;      // candidate count
     if (method == 0u)       lambda = dS * op * baseK;
     else                    lambda = dS * (-log(max(1.0 - op, 1e-6))) * baseK;
+
+    // Extinction/ViewConditioned density clamp (opt-in, u.bg.w != 0; PLAN_pbvr_gps_ensemble_lod.md
+    // Phase 0, literature-confirmed via kvs::CellByCellSampling::ParticleDensityMap). The extinction
+    // formula's -log(1-op) term is unbounded as op->1; the reference implementation clamps the
+    // per-volume density at max_density = 1/pixelLength^3, equivalent to capping the candidate count
+    // at this splat's own world-space volume divided by pixelLength^3 -- at most ~1 candidate per
+    // pixel-footprint-sized volume of the splat's extent. pixelLength uses this splat's own camera-
+    // space depth (tzc), not a single frame-wide reference, so the cap is inherently view-dependent
+    // (unlike Extinction's base formula) even though Proportional/Extinction were designed to be
+    // view-independent -- this option is exempt for method==0 (Proportional never diverges).
+    if (method != 0u && u.bg.w != 0.0) {
+        float pixelLength = tzc / max(u.p0.x, 1e-6);
+        float splatVolume = (4.0 / 3.0) * 3.14159265 * sc.x * sc.y * sc.z;
+        float maxCandidates = splatVolume / max(pixelLength * pixelLength * pixelLength, 1e-20);
+        lambda = min(lambda, maxCandidates);
+    }
+
     lambda = min(lambda * bthin, u.p2.x);
 
     // ViewConditioned keep-probability so the on-screen count matches GPS.
