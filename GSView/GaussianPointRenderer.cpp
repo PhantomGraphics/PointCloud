@@ -187,8 +187,23 @@ void GaussianPointRenderer::setParams(const Params& p)
     params_.sppSide = std::clamp(params_.sppSide, 1, 4);
     params_.shDegree = std::clamp(params_.shDegree, 0, 3);
     params_.tonemapMode = std::clamp(params_.tonemapMode, 0, 2);
-    params_.pbvr3dMethod = std::clamp(params_.pbvr3dMethod, 0, 2);
+    params_.pbvr3dMethod = std::clamp(params_.pbvr3dMethod, 0, 3);
     params_.compactPipeline = std::clamp(params_.compactPipeline, 0, 2);
+    // Metropolis (Phase 5) runs a sequential Markov chain per splat in
+    // GaussianPointRenderer's own per-splat loop (gps_pbvr3d.comp), never through
+    // gps_compact.comp's per-particle-parallel path -- that path has no notion of
+    // "the previous accepted sample" a chain needs. compactPipeline==0 ("primitive
+    // replay") is the one value that routes generation through that per-splat loop
+    // (gps_scan.comp's mode==3 sets work[4]=2, which is gps_pbvr3d.comp::main()'s
+    // gate for it; compactPipeline==1 "automatic compact" and ==2 "force point
+    // replay" -- a confusingly-named value, it actually forces gps_scan.comp's
+    // mode==4, work[4]=1, still handled by gps_compact.comp -- both stay on the
+    // per-particle-parallel path). Force it unconditionally whenever Metropolis is
+    // selected; never a silent wrong-answer risk, just an enforced combination
+    // (same spirit as clamping sppSide/shDegree above, not a soft warning like
+    // pointBudget+LOD-preset).
+    if (params_.pbvr3dMethod == static_cast<int>(Pbvr3dMethod::Metropolis))
+        params_.compactPipeline = 0;
     params_.lodMode = std::clamp(params_.lodMode, 0, 2);
     params_.ensemblesPerFrame = std::clamp(params_.ensemblesPerFrame, 1, 8);
     params_.targetEnsembles = std::max(1, params_.targetEnsembles);

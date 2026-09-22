@@ -13,6 +13,14 @@
 //   2 ViewConditioned generate an extinction-count candidate set, then keep each
 //                     particle with probability  gpsTarget / Ncand, where
 //                     gpsTarget = spp * 2*pi*sqrt(det Sigma2d) * Li2(o) * densityScale.
+//   3 Metropolis      same target count N as Extinction, but positions come from an
+//                     independence-sampler Metropolis chain (uniform proposal over a
+//                     +/-3-sigma whitened cube, standard Metropolis acceptance against
+//                     the Gaussian's own density) instead of direct sampling --
+//                     literature-confirmed via kvs::CellByCellMetropolisSampling
+//                     (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 5). Always runs
+//                     through this shader's own per-splat loop (never gps_compact.comp;
+//                     see GaussianPointRenderer::setParams()'s compactPipeline force).
 // Positions are regenerated deterministically in both passes. Deterministic seed
 // mode reproduces one world-space set; frame-varying mode draws independent sets.
 // Persistent cross-frame sample storage is intentionally not claimed here.
@@ -274,38 +282,107 @@ void splatOne(uint id) {
     uint generated = 0u;
     uint drawn = 0u;
     uint pointSeed = rs.s;
-    for (int i = 0; i < Ni; ++i) {
-        rs.s = pcg(pointSeed ^ (uint(i) * 2891336453u + 1u));
-        vec2 ab = boxMuller(rs);
-        vec2 cdn = boxMuller(rs);
-        vec3 z = vec3(ab.x, ab.y, cdn.x);
-        if (method == 2u && rnd(rs) >= keepProb) continue;
-        generated++;
 
-        vec3 pw  = world + L3 * z;
-        vec3 pc3 = (u.view * vec4(pw, 1.0)).xyz;
-        float pz = -pc3.z;
-        if (pz <= u.p1.x) continue;
+    if (method == 3u) {
+        // Metropolis sampling (PLAN_pbvr_gps_ensemble_lod.md Phase 5, literature-confirmed
+        // via kvs::CellByCellMetropolisSampling / CellByCellSampling::GridSampler). One
+        // sequential independence-sampler chain per splat: uniform proposal over a
+        // +/-kSigma cube in whitened (Cholesky) coordinates, accepted/rejected by the
+        // ratio of the (unnormalised) Gaussian density exp(-0.5*dot(u,u)) at the trial vs.
+        // the current chain state. Deterministically replayed in full from `rs` (seeded
+        // above, same as the direct-sampling branch's `pointSeed`) once per pass -- pass 0
+        // (depth) and pass 1 (colour) each redo the whole chain rather than persisting
+        // state between passes, consistent with this file's existing "positions are
+        // regenerated deterministically in both passes" design (see header comment).
+        const float kSigma = 3.0;
+        const uint maxLoops = uint(Ni) * 10u + 16u;
 
-        float fxp =  fx * (pc3.x / pz) + cx;
-        float fyp = -fy * (pc3.y / pz) + cy;
-        if (fxp < 0.0 || fxp >= float(W_) || fyp < 0.0 || fyp >= float(H_)) continue;
-
-        uint px = uint(fxp), py = uint(fyp);
-        uint sx = min(uint(fract(fxp) * float(side)), side - 1u);
-        uint sy = min(uint(fract(fyp) * float(side)), side - 1u);
-        uint sidx = ((py * W_ + px) * sppI) + (sy * side + sx);
-        uint dkey = orderedDepthKey(pz);
-        if (pc.pass == 0u) {
-            atomicMin(depthBuf[sidx], dkey);
-        } else if (depthBuf[sidx] == dkey) {
-            atomicMin(colorBuf[sidx], packed);
+        vec3 current = vec3((rnd(rs)*2.0-1.0)*kSigma, (rnd(rs)*2.0-1.0)*kSigma, (rnd(rs)*2.0-1.0)*kSigma);
+        float densityCur = exp(-0.5 * dot(current, current));
+        // Burn-in (KVS's GridSampler::sample(max_loops)): retry until a nonzero-density
+        // start is found, or give up after maxLoops attempts. In whitened coordinates with
+        // kSigma=3 the Gaussian density never underflows to exactly zero in practice, so
+        // this loop is a no-op safety net here rather than a load-bearing warm-up.
+        for (uint b = 0u; b < maxLoops && densityCur <= 0.0; ++b) {
+            current = vec3((rnd(rs)*2.0-1.0)*kSigma, (rnd(rs)*2.0-1.0)*kSigma, (rnd(rs)*2.0-1.0)*kSigma);
+            densityCur = exp(-0.5 * dot(current, current));
         }
-        drawn++;
+
+        uint counter = 0u, nduplications = 0u;
+        for (uint loopI = 0u; loopI < maxLoops && counter < uint(Ni); ++loopI) {
+            vec3 trial = vec3((rnd(rs)*2.0-1.0)*kSigma, (rnd(rs)*2.0-1.0)*kSigma, (rnd(rs)*2.0-1.0)*kSigma);
+            float densityTrial = exp(-0.5 * dot(trial, trial));
+            // Explicit if/else, not `a || b`: GLSL does not guarantee short-circuit
+            // evaluation of logical operators, and rnd(rs) here has a side effect
+            // (advances the RNG stream) that must only happen on the ratio<1 branch,
+            // exactly matching kvs::CellByCellMetropolisSampling's structure where
+            // RandomNumber() is called only in the `else` arm.
+            bool accept;
+            if (densityTrial >= densityCur) accept = true;
+            else accept = (densityTrial >= densityCur * rnd(rs));
+            if (!accept) {
+                nduplications++;
+                if (nduplications > maxLoops) break; // give up: fewer than Ni particles for this splat
+                continue;
+            }
+            current = trial; densityCur = densityTrial;
+            counter++;
+            generated++;
+
+            vec3 pw  = world + L3 * current;
+            vec3 pc3 = (u.view * vec4(pw, 1.0)).xyz;
+            float pz = -pc3.z;
+            if (pz <= u.p1.x) continue;
+
+            float fxp =  fx * (pc3.x / pz) + cx;
+            float fyp = -fy * (pc3.y / pz) + cy;
+            if (fxp < 0.0 || fxp >= float(W_) || fyp < 0.0 || fyp >= float(H_)) continue;
+
+            uint px = uint(fxp), py = uint(fyp);
+            uint sx = min(uint(fract(fxp) * float(side)), side - 1u);
+            uint sy = min(uint(fract(fyp) * float(side)), side - 1u);
+            uint sidx = ((py * W_ + px) * sppI) + (sy * side + sx);
+            uint dkey = orderedDepthKey(pz);
+            if (pc.pass == 0u) {
+                atomicMin(depthBuf[sidx], dkey);
+            } else if (depthBuf[sidx] == dkey) {
+                atomicMin(colorBuf[sidx], packed);
+            }
+            drawn++;
+        }
+    } else {
+        for (int i = 0; i < Ni; ++i) {
+            rs.s = pcg(pointSeed ^ (uint(i) * 2891336453u + 1u));
+            vec2 ab = boxMuller(rs);
+            vec2 cdn = boxMuller(rs);
+            vec3 z = vec3(ab.x, ab.y, cdn.x);
+            if (method == 2u && rnd(rs) >= keepProb) continue;
+            generated++;
+
+            vec3 pw  = world + L3 * z;
+            vec3 pc3 = (u.view * vec4(pw, 1.0)).xyz;
+            float pz = -pc3.z;
+            if (pz <= u.p1.x) continue;
+
+            float fxp =  fx * (pc3.x / pz) + cx;
+            float fyp = -fy * (pc3.y / pz) + cy;
+            if (fxp < 0.0 || fxp >= float(W_) || fyp < 0.0 || fyp >= float(H_)) continue;
+
+            uint px = uint(fxp), py = uint(fyp);
+            uint sx = min(uint(fract(fxp) * float(side)), side - 1u);
+            uint sy = min(uint(fract(fyp) * float(side)), side - 1u);
+            uint sidx = ((py * W_ + px) * sppI) + (sy * side + sx);
+            uint dkey = orderedDepthKey(pz);
+            if (pc.pass == 0u) {
+                atomicMin(depthBuf[sidx], dkey);
+            } else if (depthBuf[sidx] == dkey) {
+                atomicMin(colorBuf[sidx], packed);
+            }
+            drawn++;
+        }
     }
 
     if (pc.pass == 0u) {
-
         atomicAdd(stats[1], generated);
         atomicAdd(stats[3], drawn);
 

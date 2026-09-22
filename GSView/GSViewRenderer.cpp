@@ -322,7 +322,7 @@ void GSViewRenderer::setPbvrParticleSize(float s)
 
 void GSViewRenderer::setPbvr3dMethod(int method)
 {
-	gpParams_.pbvr3dMethod = std::clamp(method, 0, 2);
+	gpParams_.pbvr3dMethod = std::clamp(method, 0, 3);
 	gaussianPoint_.setParams(gpParams_);
 }
 

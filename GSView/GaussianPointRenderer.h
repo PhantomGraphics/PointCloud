@@ -57,7 +57,22 @@ public:
     //   ViewConditioned - generate an extinction-count candidate set, then thin per
     //                     particle so the on-screen count matches the GPS target
     //                     spp * 2*pi*sqrt(det Sigma2d) * Li2(o).
-    enum class Pbvr3dMethod { Proportional = 0, Extinction = 1, ViewConditioned = 2 };
+    //   Metropolis      - same target count (N) as Extinction, but positions are drawn by an
+    //                     independence-sampler Metropolis chain (uniform proposal over a +/-3-sigma
+    //                     whitened cube, standard Metropolis acceptance against the Gaussian's own
+    //                     density) instead of direct closed-form sampling -- literature-confirmed
+    //                     via kvs::CellByCellMetropolisSampling (docs/todo/PLAN_pbvr_gps_ensemble_lod.md
+    //                     Phase 5). A research comparison only: Gaussians can already be sampled
+    //                     directly/exactly, so this exists to compare against that, not to replace it.
+    //                     Requires compactPipeline == 0 "primitive replay" (setParams() enforces
+    //                     this): the chain's sequential state dependency across accepted samples is
+    //                     incompatible with gps_compact.comp's per-particle-parallel path (used by
+    //                     both compactPipeline==1 "automatic compact" and ==2 "force point replay" --
+    //                     despite that name, 2 still ends up on gps_compact.comp), so this method
+    //                     always runs through GaussianPointRenderer's own per-splat loop in
+    //                     gps_pbvr3d.comp instead (the one compactPipeline value -- 0 -- that reaches
+    //                     it, via gps_scan.comp's mode==3 setting work[4]=2).
+    enum class Pbvr3dMethod { Proportional = 0, Extinction = 1, ViewConditioned = 2, Metropolis = 3 };
 
     // Ensemble LOD mode (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 1).
     // An "ensemble" is one complete independent clear -> splat -> resolve pass,

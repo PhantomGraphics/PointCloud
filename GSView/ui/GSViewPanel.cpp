@@ -109,7 +109,7 @@ void GSViewPanel::onImGui()
 	} else if (currentMode_ == RenderMode::PBVR3DExperimental) {
 		bool pbvrChanged = false;
 		if (ImGui::Combo("Method", &pbvr3dMethod_,
-				"Proportional\0" "Extinction -log(1-o)\0" "View-conditioned\0"))
+				"Proportional\0" "Extinction -log(1-o)\0" "View-conditioned\0" "Metropolis (research)\0"))
 			pbvrChanged = true;
 		pbvrChanged |= ImGui::SliderFloat("Density Scale", &densityScale_, 0.1f, 10.0f);
 		pbvrChanged |= ImGui::SliderInt("Max Particles/Splat", &maxParticlesPerSplat_, 1, 4096);
