@@ -627,20 +627,27 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
     // Grid-stride splat: cap the dispatch so any splat count is valid.
     const uint32_t groups = std::min<uint32_t>((numSplats_ + 63u) / 64u, 65535u);
 
-    // Pbvr3d particle-bank reuse (Phase 4): only the ensemble immediately
-    // following a reset (isResetFrame) may reuse -- i.e. only the sample that a
-    // camera-only soft reset just forced back to R=1. A stationary frame with no
-    // new resetAccumulation() call has isResetFrame==false and always falls
-    // through to a genuine independent draw, so Off/Manual/Adaptive's progressive
-    // refinement while the camera is NOT moving is completely unaffected by this
-    // feature (design principle 4: one ensemble's probability model persists
-    // while moving; independent refinement resumes once settled). During
-    // continuous camera movement every frame re-triggers a soft reset, so every
-    // frame qualifies -- exactly the case this is meant to speed up.
-    // effectiveR==1 is a defensive re-check (a camera-only soft reset never
-    // changes target/rMax, so it's implied whenever bankBuiltEpoch_ could still
-    // match); see update()'s camera-only-change detection for the other
-    // eligibility conditions.
+    // Pbvr3d particle-bank reuse (Phase 4, connected to ensemble-LOD iteration
+    // in slice 3, docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 4). Eligibility
+    // (bankReuseEligible) no longer requires effectiveR == 1: a camera-only soft
+    // reset can coincide with Manual/Adaptive requesting R > 1 ensembles this
+    // frame (e.g. Manual with ensemblesPerFrame=4 while continuously dragging
+    // the camera -- every frame re-triggers a soft reset, so every frame is
+    // reset-eligible regardless of R). Only ensemble i==0 of the loop below may
+    // actually reproject the existing bank; ensembles i==1..effectiveR-1 always
+    // run a genuine independent prepare/scan/compact/generate, exactly as they
+    // would with reuse disabled. This keeps every reported "independent sample"
+    // honest -- the plan's "同じ有限bankの繰り返しで標本数だけを増やさない":
+    // the R-1 later ensembles never replay the bank i==0 reused, and each of
+    // them overwrites bankBuf_[frameIndex] with a fresh candidate set, so the
+    // *next* reuse-eligible frame reprojects a bank that is itself only one
+    // frame old, not an ever-more-stale copy of the same one. A stationary frame
+    // with no new resetAccumulation() call has isResetFrame==false and always
+    // falls through to genuine independent draws for all R ensembles, so
+    // Off/Manual/Adaptive's progressive refinement while the camera is NOT
+    // moving is completely unaffected by this feature (design principle 4: one
+    // ensemble's probability model persists while moving; independent
+    // refinement resumes once settled).
     // ViewConditioned-only drift check (Phase 4 slice 2): its keep-probability
     // targets a view-depth-dependent on-screen density, so a bank generated at a
     // very different distance would silently drift from that target instead of
@@ -655,10 +662,10 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
         (curViewDepth / bankRefViewDepth_ >= 1.0f / kViewConditionedBankDriftTolerance &&
          curViewDepth / bankRefViewDepth_ <= kViewConditionedBankDriftTolerance);
 
-    const bool bankReuse = isResetFrame && path_ == Path::Pbvr3d && params_.pbvrBankReuse &&
+    const bool bankReuseEligible = isResetFrame && path_ == Path::Pbvr3d && params_.pbvrBankReuse &&
         !params_.pbvrZoomRecalibration && params_.compactPipeline == 1 &&
-        effectiveR == 1 && bankBuiltEpoch_[frameIndex] == desiredBankEpoch_ && bankDistanceOk;
-    lastBankReused_[frameIndex] = bankReuse && numSplats_ > 0;
+        bankBuiltEpoch_[frameIndex] == desiredBankEpoch_ && bankDistanceOk;
+    lastBankReused_[frameIndex] = bankReuseEligible && numSplats_ > 0;
 
     for (uint32_t i = 0; i < effectiveR; ++i) {
         const bool first = (i == 0);
@@ -676,6 +683,11 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
                              0, 0, nullptr, 2, toCompute, 0, nullptr);
         if (first) ts(1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
+        // Only the first ensemble of a reset frame may reproject the existing
+        // bank; every later ensemble in this same R-loop (i > 0) always draws a
+        // genuine independent sample below, regenerating the bank it leaves
+        // behind (see the bankReuseEligible comment above).
+        const bool bankReuse = first && bankReuseEligible;
         if (numSplats_ > 0 && bankReuse) {
             // Pbvr3d bank reuse (Phase 4): skip prepare/scan/compact entirely and
             // reproject the existing world-space bank (gps_compact.comp's last
@@ -831,8 +843,14 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
                 bufBarrier(workBuf_[frameIndex].getBuffer(),
                     VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
                     VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT),
+                // WRITE covers a regenerating ensemble (gps_compact.comp's
+                // generate pass); READ covers ensemble i==0 having only
+                // reprojected (bank reuse, slice 3) -- either way the next
+                // ensemble's own generate pass must wait for this one to finish
+                // touching bankBuf_[frameIndex] before writing it.
                 bufBarrier(bankBuf_[frameIndex].getBuffer(),
-                    VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT),
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT,
+                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT),
             };
             vkCmdPipelineBarrier(cmd,
                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,

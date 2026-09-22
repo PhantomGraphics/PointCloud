@@ -83,6 +83,14 @@ private:
     std::string cmdGetGpLodFrameBudget();
     std::string cmdSetGpLodFrameBudget(const std::string& arg);
 
+    // Pbvr3d particle-bank reuse (Phase 4 slice 3). BankReused + ThisFrame +
+    // Displayed in a single atomic read, so a scenario asserting all three
+    // together isn't racing the background render loop between commands
+    // (each separate Get* round-trip can let several more real frames run,
+    // long enough for a transient reset-frame's bankReused==1 to already be
+    // overwritten by the time the next command is processed).
+    std::string cmdGetGpBankReuseStats();
+
     // Mutation commands
     std::string cmdSetRenderMode(const std::string& mode);
     std::string cmdSetSplatSizeScale(const std::string& arg);

@@ -128,6 +128,7 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     // Pbvr3d particle-bank reuse (PLAN_pbvr_gps_ensemble_lod.md Phase 4).
     if (name == "GetPbvrBankReuse") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().pbvrBankReuse) : "Error:renderer not available";
     if (name == "GetGpBankReused") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().bankReused) : "Error:renderer not available";
+    if (name == "GetGpBankReuseStats") return cmdGetGpBankReuseStats();
     if (name == "SetPbvrZoom" || name == "SetGpCompact" || name == "SetPbvrBankReuse") {
         if (!renderer_) return "Error:renderer not available";
         if (rest != "0" && rest != "1" && !(name == "SetGpCompact" && rest == "2"))
@@ -705,6 +706,15 @@ std::string GSViewCommandDispatcher::cmdGetGpDisplayedEnsembles()
 {
     if (!renderer_) return "Val:0";
     return "Val:" + std::to_string(renderer_->getGaussianPointStats().displayedEnsembles);
+}
+
+std::string GSViewCommandDispatcher::cmdGetGpBankReuseStats()
+{
+    if (!renderer_) return "Error:renderer not available";
+    const auto s = renderer_->getGaussianPointStats();
+    return "BankReused:" + std::to_string(s.bankReused) +
+           ",ThisFrame:" + std::to_string(s.ensemblesThisFrame) +
+           ",Displayed:" + std::to_string(s.displayedEnsembles);
 }
 
 // Phase 3: EnsembleLodController's GPU time budget (Adaptive only; Manual/Off ignore it).

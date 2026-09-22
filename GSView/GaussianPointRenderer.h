@@ -105,10 +105,15 @@ public:
         // Pbvr3d-only, opt-in (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 4, default off
         // = zero behaviour change). When true, a camera-only change (same data/params, only
         // the view matrix moved) reuses the last generated ensemble's world-space particle
-        // bank instead of resampling it -- only reprojection + SH colour are redone. Ineligible
-        // combinations (pbvrZoomRecalibration on, compactPipeline != automatic-compact, R>1,
-        // no bank built yet) silently fall back to full regeneration; never a correctness issue,
-        // only a missed speedup. See GaussianPointRenderer::recordCompute().
+        // bank instead of resampling it -- only reprojection + SH colour are redone. This
+        // applies to at most the FIRST ensemble of that reset frame; if ensemble-LOD requests
+        // R>1 for that same frame (e.g. Manual with ensemblesPerFrame>1 during continuous
+        // camera drag), ensembles 2..R still draw genuine independent samples and overwrite
+        // the bank, so the same finite bank is never replayed to inflate the reported sample
+        // count. Ineligible combinations (pbvrZoomRecalibration on, compactPipeline !=
+        // automatic-compact, no bank built yet, ViewConditioned bank drift) silently fall back
+        // to full regeneration for the whole frame; never a correctness issue, only a missed
+        // speedup. See GaussianPointRenderer::recordCompute().
         bool pbvrBankReuse = false;
     };
 
@@ -152,9 +157,12 @@ public:
         // settled, without depending on wall-clock time (which varies by machine).
         uint32_t framesSinceReset = 0;
 
-        // Pbvr3d particle-bank reuse (Phase 4). true when this frame's ensemble
-        // reprojected the displayed slot's existing world-space bank instead of
-        // resampling it (see Params::pbvrBankReuse). Always false outside Pbvr3d.
+        // Pbvr3d particle-bank reuse (Phase 4). true when this frame's FIRST
+        // ensemble reprojected the displayed slot's existing world-space bank
+        // instead of resampling it (see Params::pbvrBankReuse). When ensemble-LOD
+        // requests R>1 for this frame, any later ensembles (2..R) always drew a
+        // genuine independent sample regardless of this flag. Always false
+        // outside Pbvr3d.
         bool bankReused = false;
     };
 
