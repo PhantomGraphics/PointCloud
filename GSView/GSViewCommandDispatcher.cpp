@@ -146,6 +146,31 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     // Measurement-only splat-cost breakdown (PLAN_footprint_aware_density_calibration.md
     // Phase 0). 0 = normal; 1 = skip atomics; 2 = cheap radius; 3 = both. Renders a
     // deliberately wrong image -- never use in a correctness scenario.
+    // Footprint calibration (PLAN_footprint_aware_density_calibration.md Phase 3).
+    if (name == "GetPbvrFootprintCalibration") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().pbvrFootprintCalibration) : "Error:renderer not available";
+    if (name == "GetPbvrRadialCorrection") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().pbvrRadialCorrection) : "Error:renderer not available";
+    if (name == "GetPbvrCentreDepth") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().pbvrCentreDepth) : "Error:renderer not available";
+    if (name == "SetPbvrFootprintCalibration") {
+        if (!renderer_) return "Error:renderer not available";
+        int level = -1;
+        if (rest == "0" || rest == "none") level = 0;
+        else if (rest == "1" || rest == "object_zoom") level = 1;
+        else if (rest == "2" || rest == "per_splat_depth") level = 2;
+        else if (rest == "3" || rest == "per_splat_footprint") level = 3;
+        if (level < 0) return "Error:expected 0..3 or none/object_zoom/per_splat_depth/per_splat_footprint";
+        auto p = renderer_->getGaussianPointParams();
+        p.pbvrFootprintCalibration = level;
+        renderer_->setGaussianPointParams(p);
+        return "OK";
+    }
+    if (name == "SetPbvrRadialCorrection" || name == "SetPbvrCentreDepth") {
+        if (!renderer_) return "Error:renderer not available";
+        if (rest != "0" && rest != "1") return "Error:expected 0 or 1";
+        auto p = renderer_->getGaussianPointParams();
+        (name == "SetPbvrRadialCorrection" ? p.pbvrRadialCorrection : p.pbvrCentreDepth) = rest == "1";
+        renderer_->setGaussianPointParams(p);
+        return "OK";
+    }
     if (name == "GetCameraFlipY") return renderer_ ? "Val:" + std::to_string(renderer_->getCameraFlipY()) : "Error:renderer not available";
     if (name == "SetCameraFlipY") {
         if (!renderer_) return "Error:renderer not available";
@@ -505,6 +530,9 @@ std::string GSViewCommandDispatcher::buildProfile() const
         ";profileVariant=" + std::to_string(renderer_->getGaussianPointProfileVariant()) +
         ";cameraFlipY=" + std::to_string(renderer_->getCameraFlipY()) +
         ";pbvrZoom=" + std::to_string(p.pbvrZoomRecalibration) +
+        ";pbvrCalibration=" + std::to_string(GaussianPointRenderer::effectiveCalibrationLevel(p)) +
+        ";pbvrRadial=" + std::to_string(p.pbvrRadialCorrection) +
+        ";pbvrCentreDepth=" + std::to_string(p.pbvrCentreDepth) +
         ";referencePixelLength=" + fmtF(p.pbvrReferencePixelLength) +
         ";lodMode=" + std::to_string(p.lodMode) +
         ";ensemblesPerFrame=" + std::to_string(p.ensemblesPerFrame) +

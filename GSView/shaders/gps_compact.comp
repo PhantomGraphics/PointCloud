@@ -17,6 +17,8 @@ layout(std140, binding = 5) uniform Params {
     vec4  camPos;  // world-space camera position, w = measurement-only profile variant
     uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, unused
     vec4  p3;      // gamma, unused, budgetThin, SH storage stride/channel
+    uvec4 ctrl3;   // footprint calibration: level, radial correction, centre depth, unused
+    vec4  p4;      // referencePixelLength, unused x3
 } u;
 
 layout(push_constant) uniform PC { uint pass; } pc;
@@ -78,10 +80,21 @@ void main() {
             // valid for a different camera pose that might not cull it.
             if (pc.pass == 0u && work[4] == 0u) bank[index] = vec4(world, uintBitsToFloat(id));
             vec3 cam = (u.view * vec4(world, 1)).xyz;
+            bool front = -cam.z > u.p1.x;
+            if (front) {
+                pixel = vec2(u.p0.x*cam.x/(-cam.z), -u.p0.y*cam.y/(-cam.z)) + u.p0.zw;
+                // C3+R (gps_pbvr3d.comp sets up the Prepared fields): low-pass jitter, then
+                // keep by the projected Mahalanobis radius around the splat centre.
+                if (u.ctrl3.y != 0u && u.ctrl3.x == 3u && u.ctrl2.w == 1u) {
+                    pixel += normalPair(rs) * sqrt(max(u.p1.y, 0.0));
+                    vec2 dv = pixel - q.info.zw;
+                    float r2 = q.a.w * dv.x * dv.x + 2.0 * q.b.w * dv.x * dv.y + q.c.w * dv.y * dv.y;
+                    if (rnd(rs) >= radialKeep(q.info.x, r2)) continue;
+                }
+            }
             if (pc.pass == 0u) counts.x++;
-            if (-cam.z <= u.p1.x) continue;
-            pixel = vec2(u.p0.x*cam.x/(-cam.z), -u.p0.y*cam.y/(-cam.z)) + u.p0.zw;
-            key = orderedDepthKey(-cam.z);
+            if (!front) continue;
+            key = (u.ctrl3.z != 0u) ? q.meta.z : orderedDepthKey(-cam.z);
         }
         if (q.meta.w == 0u && pc.pass == 0u) counts.x++;
         if (any(isnan(pixel)) || any(isinf(pixel)) || any(lessThan(pixel, vec2(0))) ||

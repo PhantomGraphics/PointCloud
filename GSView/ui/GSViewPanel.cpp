@@ -130,8 +130,18 @@ void GSViewPanel::onImGui()
 			onPBVRParamsChanged_(densityScale_, maxParticlesPerSplat_, pbvrParticleSize_, pbvr3dMethod_);
 		ImGui::Spacing();
 		bool zoomChanged = ImGui::Checkbox("Zoom density recalibration", &gp_.pbvrZoomRecalibration);
-		if (gp_.pbvrZoomRecalibration)
+		if (gp_.pbvrZoomRecalibration || gp_.pbvrFootprintCalibration == 1 || gp_.pbvrFootprintCalibration == 2)
 			zoomChanged |= ImGui::SliderFloat("Reference pixel length", &gp_.pbvrReferencePixelLength, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
+		bool calibrationChanged = ImGui::Combo("Footprint calibration", &gp_.pbvrFootprintCalibration,
+			"C0 none\0" "C1 object zoom\0" "C2 per-splat depth\0" "C3 per-splat footprint\0");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("How the particle count follows the view (NOTE_footprint_density_calibration.md).\n"
+				"C1-C2 scale the base count by l0^2 fx fy / z^2 (object centre / each splat);\n"
+				"C3 uses each splat's projected footprint and ignores the base count.");
+		if (gp_.pbvrFootprintCalibration == 3)
+			calibrationChanged |= ImGui::Checkbox("Radial correction (C3+R, Extinction)", &gp_.pbvrRadialCorrection);
+		calibrationChanged |= ImGui::Checkbox("Splat-centre depth (GPS depth rule)", &gp_.pbvrCentreDepth);
+		if (calibrationChanged && onGpParamsChanged_) onGpParamsChanged_(gp_);
 		bool densityClampChanged = ImGui::Checkbox("Extinction density clamp (literature)", &gp_.pbvrDensityClamp);
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("Caps Extinction/View-conditioned candidate counts at ~1 per\n"

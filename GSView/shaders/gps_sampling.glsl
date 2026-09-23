@@ -47,6 +47,15 @@ float invDilog(float target) {
     }
     return y;
 }
+// C3+R keep probability (GaussianPointMath::radialKeepProbability).
+float radialKeep(float o, float r2) {
+    o = min(o, 1.0 - 1e-6);
+    float y = o * exp(-0.5 * r2);
+    float hy = (y < 1e-4) ? 1.0 + 0.5 * y : -log(1.0 - y) / y;
+    float ho = (o < 1e-4) ? 1.0 + 0.5 * o : -log(1.0 - o) / o;
+    return clamp(hy / ho, 0.0, 1.0);
+}
+
 float sampleRadius(float o, float uu) {
     o = clamp(o, 1e-4, 1.0);
     float D = dilog(o);

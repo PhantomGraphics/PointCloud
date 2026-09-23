@@ -188,6 +188,7 @@ void GaussianPointRenderer::setParams(const Params& p)
     params_.shDegree = std::clamp(params_.shDegree, 0, 3);
     params_.tonemapMode = std::clamp(params_.tonemapMode, 0, 2);
     params_.pbvr3dMethod = std::clamp(params_.pbvr3dMethod, 0, 4);
+    params_.pbvrFootprintCalibration = std::clamp(params_.pbvrFootprintCalibration, 0, 3);
     params_.compactPipeline = std::clamp(params_.compactPipeline, 0, 2);
     // Metropolis (Phase 5) runs a sequential Markov chain per splat in
     // GaussianPointRenderer's own per-splat loop (gps_pbvr3d.comp), never through
@@ -503,6 +504,8 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     mixFloat(params_.pointBudget);
     mix(params_.pbvrZoomRecalibration);
     mix(params_.pbvrDensityClamp);
+    mix(static_cast<std::uint64_t>(params_.pbvrFootprintCalibration) * 5
+        + (params_.pbvrRadialCorrection ? 2u : 0u) + (params_.pbvrCentreDepth ? 1u : 0u));
     mix(params_.compactPipeline);
     mixFloat(params_.pbvrReferencePixelLength);
     mix(static_cast<std::uint64_t>(shDeg) * 7 + params_.tonemapMode);
@@ -528,8 +531,10 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     const bool cameraChanged = (camera_.view != lastView_) || (camera_.camPos != lastCamPos_);
     if (paramsChanged || cameraChanged) {
         const bool cameraOnly = cameraChanged && !paramsChanged;
+        // Any view-dependent calibration (C1 and up) changes the count with the camera, so
+        // a camera-only change can never reuse the bank.
         const bool canSoftReset = cameraOnly && path_ == Path::Pbvr3d && params_.pbvrBankReuse &&
-            !params_.pbvrZoomRecalibration && params_.compactPipeline == 1;
+            effectiveCalibrationLevel(params_) == 0 && params_.compactPipeline == 1;
         resetAccumulation(!canSoftReset);
         lastChangeHash_ = h;
         lastView_ = camera_.view;
@@ -551,7 +556,7 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
                           static_cast<uint32_t>(params_.countMode != 0));
     ubo.p2 = glm::vec4(params_.maxPointsPerSplat, std::max(0.0f, params_.footprintCullPx),
                        params_.densityScale,
-                       params_.pbvrZoomRecalibration ? static_cast<float>(gpm::pixelDensityScale(
+                       effectiveCalibrationLevel(params_) == 1 ? static_cast<float>(gpm::pixelDensityScale(
                            -(camera_.view * glm::vec4(objectCenter_, 1.0f)).z,
                            camera_.focalX, camera_.focalY, params_.pbvrReferencePixelLength,
                            params_.nearZ)) : 1.0f);
@@ -568,6 +573,10 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
                        std::max(0.0f, params_.basePointsPerSplat),
                        static_cast<float>(budgetThin_),
                        static_cast<float>(Phantom::PointCloud::GSPointCloud::coeffsPerChannel(shDegreeData_)));
+    ubo.ctrl3 = glm::uvec4(static_cast<uint32_t>(effectiveCalibrationLevel(params_)),
+                           params_.pbvrRadialCorrection ? 1u : 0u,
+                           params_.pbvrCentreDepth ? 1u : 0u, 0u);
+    ubo.p4 = glm::vec4(params_.pbvrReferencePixelLength, 0.0f, 0.0f, 0.0f);
     paramsUbo_[frameIndex].write(&ubo, sizeof(ubo));
 
     lastFrameIndex_ = frameIndex;
@@ -685,7 +694,7 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
          curViewDepth / bankRefViewDepth_ <= kViewConditionedBankDriftTolerance);
 
     const bool bankReuseEligible = isResetFrame && path_ == Path::Pbvr3d && params_.pbvrBankReuse &&
-        !params_.pbvrZoomRecalibration && params_.compactPipeline == 1 &&
+        effectiveCalibrationLevel(params_) == 0 && params_.compactPipeline == 1 &&
         bankBuiltEpoch_[frameIndex] == desiredBankEpoch_ && bankDistanceOk;
     lastBankReused_[frameIndex] = bankReuseEligible && numSplats_ > 0;
 

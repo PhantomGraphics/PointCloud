@@ -52,6 +52,11 @@ layout(std140, binding = 5) uniform Params {
     vec4  camPos;
     uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, pbvr3dMethod
     vec4  p3;      // gamma, basePointsPerSplat, budgetThin, SH storage stride/channel
+    // Footprint calibration (docs/todo/PLAN_footprint_aware_density_calibration.md Phase 3):
+    // x = level (0 none, 1 object zoom via p2.w, 2 per-splat depth, 3 per-splat footprint),
+    // y = radial correction (C3+R, Extinction at level 3 only), z = splat-centre depth.
+    uvec4 ctrl3;
+    vec4  p4;      // referencePixelLength (C2), unused x3
 } u;
 
 // pass: 0 = depth, 1 = colour, 2 = prepare. ensembleSeed identifies one
@@ -170,6 +175,16 @@ vec3 footprintCov2d(vec3 camMean, mat3 cov3) {
     return vec3(c[0][0] + u.p1.y, c[0][1], c[1][1] + u.p1.y);
 }
 
+// C3+R keep probability p(r) = h(o e^{-r^2/2}) / h(o), h(y) = -log(1-y)/y
+// (GaussianPointMath::radialKeepProbability).
+float radialKeep(float o, float r2) {
+    o = min(o, 1.0 - 1e-6);
+    float y = o * exp(-0.5 * r2);
+    float hy = (y < 1e-4) ? 1.0 + 0.5 * y : -log(1.0 - y) / y;
+    float ho = (o < 1e-4) ? 1.0 + 0.5 * o : -log(1.0 - o) / o;
+    return clamp(hy / ho, 0.0, 1.0);
+}
+
 void addExpected(uint value) {
     uint previous = atomicAdd(stats[0], value);
     if (previous > 0xffffffffu-value) atomicAdd(stats[6], 1u);
@@ -209,6 +224,20 @@ void splatOne(uint id) {
     float lambda;      // candidate count
     if (method == 0u)       lambda = dS * op * baseK;
     else                    lambda = dS * (-log(max(1.0 - op, 1e-6))) * baseK;
+
+    // Footprint calibration levels C2/C3 (C1 arrives pre-multiplied in p2.w). ViewConditioned
+    // keeps its own GPS-targeted thinning and ignores the level.
+    uint level = u.ctrl3.x;
+    if (method != 2u && level == 2u) {
+        float ratio = u.p4.x / tzc;
+        lambda *= ratio * ratio * u.p0.x * u.p0.y;
+    } else if (method != 2u && level == 3u) {
+        float g = (method == 0u) ? op : -log(max(1.0 - op, 1e-6));
+        lambda = dS * g * float(u.dims.z) * TWO_PI * sqrt(det2d);
+    }
+    // C3+R: Extinction candidates at level 3 are thinned per particle so the projected
+    // intensity becomes the GPS -log(1 - o e^{-r^2/2}).
+    bool radial = (u.ctrl3.y != 0u) && level == 3u && method == 1u;
 
     // Extinction/ViewConditioned density clamp (opt-in, u.bg.w != 0; PLAN_pbvr_gps_ensemble_lod.md
     // Phase 0, literature-confirmed via kvs::CellByCellSampling::ParticleDensityMap). The extinction
@@ -258,10 +287,19 @@ void splatOne(uint id) {
         vec2 g = boxMuller(rs);
         Ni = max(int(round(lambda + sqrt(lambda) * g.x)), 0);
     }
+    float expectedKeep = radial ? dilog(op) / max(-log(max(1.0 - op, 1e-6)), 1e-12) : keepProb;
     if (Ni <= 0) {
-        if (pc.pass == 2u) addExpected(uint(lambda * keepProb * 256.0));
+        if (pc.pass == 2u) addExpected(uint(lambda * expectedKeep * 256.0));
         return;
     }
+
+    // Projected centre, inverse footprint covariance (C3+R) and centre depth key.
+    float mu = u.p0.x * (cam.x / tzc) + u.p0.z;
+    float mv = -u.p0.y * (cam.y / tzc) + u.p0.w;
+    float idet = 1.0 / max(det2d, 1e-12);
+    vec3 inv2d = vec3(fc2.z * idet, -fc2.y * idet, fc2.x * idet);
+    uint centreKey = orderedDepthKey(tzc);
+    float jitter = sqrt(max(u.p1.y, 0.0));
 
     vec3 vdir = normalize(world - u.camPos.xyz);
     vec3 lin  = evalSH(id, vec3(sp.f0, sp.f1, sp.f2), vdir);
@@ -269,14 +307,17 @@ void splatOne(uint id) {
 
     if (pc.pass == 2u) {
         Prepared q;
-        q.a = vec4(world, 0); q.b = vec4(L3[0], 0);
-        q.c = vec4(L3[1], 0); q.d = vec4(L3[2], 0);
-        q.info = vec4(op, keepProb, 0, 0);
-        q.meta = uvec4(rs.s, packed, 0, 1);
+        // PBVR entries: a.w/b.w/c.w carry the inverse footprint covariance, info.zw the
+        // projected centre and meta.z the centre depth key (gps_compact.comp's C3+R /
+        // centre-depth options); all unused by the GPS entries' layout.
+        q.a = vec4(world, inv2d.x); q.b = vec4(L3[0], inv2d.y);
+        q.c = vec4(L3[1], inv2d.z); q.d = vec4(L3[2], 0);
+        q.info = vec4(op, keepProb, mu, mv);
+        q.meta = uvec4(rs.s, packed, centreKey, 1);
         q.count = uvec4(uint(Ni), 0, 0, 0);
         prepared[id] = q;
         offsets[id] = uint(Ni);
-        addExpected(uint(lambda * keepProb * 256.0));
+        addExpected(uint(lambda * expectedKeep * 256.0));
         atomicAdd(stats[4], uint(Ni));
 
 
@@ -347,7 +388,7 @@ void splatOne(uint id) {
             uint sx = min(uint(fract(fxp) * float(side)), side - 1u);
             uint sy = min(uint(fract(fyp) * float(side)), side - 1u);
             uint sidx = ((py * W_ + px) * sppI) + (sy * side + sx);
-            uint dkey = orderedDepthKey(pz);
+            uint dkey = (u.ctrl3.z != 0u) ? centreKey : orderedDepthKey(pz);
             if (pc.pass == 0u) {
                 atomicMin(depthBuf[sidx], dkey);
             } else if (depthBuf[sidx] == dkey) {
@@ -362,22 +403,33 @@ void splatOne(uint id) {
             vec2 cdn = boxMuller(rs);
             vec3 z = vec3(ab.x, ab.y, cdn.x);
             if (method == 2u && rnd(rs) >= keepProb) continue;
-            generated++;
 
             vec3 pw  = world + L3 * z;
             vec3 pc3 = (u.view * vec4(pw, 1.0)).xyz;
             float pz = -pc3.z;
+            float fxp = 0.0, fyp = 0.0;
+            if (pz > u.p1.x) {
+                fxp =  fx * (pc3.x / pz) + cx;
+                fyp = -fy * (pc3.y / pz) + cy;
+                if (radial) {
+                    // Low-pass jitter gives the particle cloud the GPS footprint covariance,
+                    // then keep by the projected Mahalanobis radius.
+                    vec2 j = boxMuller(rs) * jitter;
+                    fxp += j.x; fyp += j.y;
+                    vec2 dv = vec2(fxp - mu, fyp - mv);
+                    float r2 = inv2d.x * dv.x * dv.x + 2.0 * inv2d.y * dv.x * dv.y + inv2d.z * dv.y * dv.y;
+                    if (rnd(rs) >= radialKeep(op, r2)) continue;
+                }
+            }
+            generated++;
             if (pz <= u.p1.x) continue;
-
-            float fxp =  fx * (pc3.x / pz) + cx;
-            float fyp = -fy * (pc3.y / pz) + cy;
             if (fxp < 0.0 || fxp >= float(W_) || fyp < 0.0 || fyp >= float(H_)) continue;
 
             uint px = uint(fxp), py = uint(fyp);
             uint sx = min(uint(fract(fxp) * float(side)), side - 1u);
             uint sy = min(uint(fract(fyp) * float(side)), side - 1u);
             uint sidx = ((py * W_ + px) * sppI) + (sy * side + sx);
-            uint dkey = orderedDepthKey(pz);
+            uint dkey = (u.ctrl3.z != 0u) ? centreKey : orderedDepthKey(pz);
             if (pc.pass == 0u) {
                 atomicMin(depthBuf[sidx], dkey);
             } else if (depthBuf[sidx] == dkey) {
@@ -430,6 +482,10 @@ void reprojectOne(uint index) {
     uint sy = min(uint(fract(fyp) * float(side)), side - 1u);
     uint sidx = ((py * u.dims.x + px) * sppI) + (sy * side + sx);
     uint dkey = orderedDepthKey(pz);
+    if (u.ctrl3.z != 0u) {
+        GsPoint src = splats[id];
+        dkey = orderedDepthKey(-(u.view * vec4(src.x, src.y, src.z, 1.0)).z);
+    }
 
     if (pc.pass == 3u) {
         atomicMin(depthBuf[sidx], dkey);

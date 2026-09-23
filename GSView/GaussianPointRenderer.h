@@ -145,7 +145,30 @@ public:
         // bug fix to apply silently. Unlike pbvrBankReuse/pbvrZoomRecalibration this changes the
         // rendered image, so toggling it must invalidate accumulation (see update()'s hash mixing).
         bool pbvrDensityClamp = false;
+        // Footprint calibration of the Pbvr3d particle count (docs/todo/
+        // PLAN_footprint_aware_density_calibration.md Phase 3; theory in
+        // docs/paper/NOTE_footprint_density_calibration.md). 0 None (C0, shipped rule),
+        // 1 ObjectZoom (C1 -- the same as pbvrZoomRecalibration, which stays as the
+        // legacy switch for C1 and only applies while this is 0), 2 PerSplatDepth (C2:
+        // baseK * l0^2 fx fy / z_i^2), 3 PerSplatFootprint (C3: spp * 2*pi*sqrt(det
+        // Sigma2d) * g(o), absolute -- basePointsPerSplat is ignored). ViewConditioned
+        // keeps its own GPS-targeted thinning and ignores the level.
+        int pbvrFootprintCalibration = 0;
+        // C3+R: with Extinction at level 3, add the low-pass jitter and keep each
+        // particle with GaussianPointMath::radialKeepProbability so the projected
+        // intensity is the GPS one. Ignored for other method/level combinations.
+        bool pbvrRadialCorrection = false;
+        // Give every Pbvr3d particle its splat-centre depth (the GPS depth rule) instead
+        // of its own; isolates the depth-rule residual (NOTE Sec. 5.2).
+        bool pbvrCentreDepth = false;
     };
+
+    // The calibration level actually applied: pbvrFootprintCalibration, or C1 when
+    // only the legacy pbvrZoomRecalibration switch is set.
+    static int effectiveCalibrationLevel(const Params& p) {
+        if (p.pbvrFootprintCalibration != 0) return p.pbvrFootprintCalibration;
+        return p.pbvrZoomRecalibration ? 1 : 0;
+    }
 
     struct Camera {
         glm::mat4 view{ 1.0f };   // world -> camera (GLM: camera looks -Z)
@@ -269,6 +292,8 @@ private:
         glm::vec4  camPos; // world-space camera position, 0
         glm::uvec4 ctrl2; // resetAccum, shDegree, tonemapMode, pbvr3dMethod
         glm::vec4  p3;    // gamma, basePointsPerSplat, budgetThin, SH storage stride/channel
+        glm::uvec4 ctrl3; // footprint calibration level, radial correction, centre depth, 0
+        glm::vec4  p4;    // referencePixelLength, 0, 0, 0
     };
     struct PushConstants { uint32_t pass; };  // gps_compact.comp (pass only, unchanged layout)
     // gps_splat.comp / gps_pbvr3d.comp: ensembleSeed identifies one independent
