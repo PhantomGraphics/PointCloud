@@ -146,6 +146,13 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     // Measurement-only splat-cost breakdown (PLAN_footprint_aware_density_calibration.md
     // Phase 0). 0 = normal; 1 = skip atomics; 2 = cheap radius; 3 = both. Renders a
     // deliberately wrong image -- never use in a correctness scenario.
+    if (name == "GetCameraFlipY") return renderer_ ? "Val:" + std::to_string(renderer_->getCameraFlipY()) : "Error:renderer not available";
+    if (name == "SetCameraFlipY") {
+        if (!renderer_) return "Error:renderer not available";
+        if (rest != "0" && rest != "1") return "Error:expected 0 or 1";
+        renderer_->setCameraFlipY(rest == "1");
+        return "OK";
+    }
     if (name == "GetGpKeepSaturated") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().keepSaturated) : "Error:renderer not available";
     if (name == "GetGpActiveSamples") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().activeSamples) : "Error:renderer not available";
     if (name == "GetGpProfileVariant") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointProfileVariant()) : "Error:renderer not available";
@@ -496,6 +503,7 @@ std::string GSViewCommandDispatcher::buildProfile() const
         ";keepSaturated=" + std::to_string(s.keepSaturated) +
         ";prepareMs=" + fmtF(s.prepareMs) + ";scanMs=" + fmtF(s.scanMs) +
         ";profileVariant=" + std::to_string(renderer_->getGaussianPointProfileVariant()) +
+        ";cameraFlipY=" + std::to_string(renderer_->getCameraFlipY()) +
         ";pbvrZoom=" + std::to_string(p.pbvrZoomRecalibration) +
         ";referencePixelLength=" + fmtF(p.pbvrReferencePixelLength) +
         ";lodMode=" + std::to_string(p.lodMode) +

@@ -28,6 +28,7 @@ int main(int argc, char* argv[])
     bool        noExitOnComplete    = false;
     bool        exitAfterScreenshot = false;
     bool        hideUI              = false;
+    bool        cameraFlipY         = false;
     bool        hasScreenshot       = false;
     bool        hasCamTheta = false, hasCamPhi = false, hasCamDistance = false;
     float       camTheta = 0.f, camPhi = 0.f, camDistance = 0.f;
@@ -53,6 +54,8 @@ int main(int argc, char* argv[])
             exitAfterScreenshot = true;
         } else if (a == "--hide-ui") {
             hideUI = true;
+        } else if (a == "--flip-y") {
+            cameraFlipY = true;   // Y-down (3DGS/COLMAP) data: camera up = -Y
         } else if (a == "--render-mode" && i + 1 < argc) {
             renderMode = argv[++i];
         } else if ((a == "--camera-theta" || a == "--camera-phi" || a == "--camera-distance")
@@ -98,6 +101,7 @@ int main(int argc, char* argv[])
     if (hasCamTheta)
         app.setInitialCamera(camTheta, camPhi, camDistance);
     app.setExitAfterScreenshot(exitAfterScreenshot);
+    app.setInitialCameraFlipY(cameraFlipY);
     // --exit-after-screenshot is a one-shot renderer workflow: hide UI by default
     // unless the caller passes --hide-ui explicitly (this only ever adds hiding,
     // never disables an explicit --hide-ui).

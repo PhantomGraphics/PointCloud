@@ -28,6 +28,8 @@ public:
 	void setGaussianPointParams(const GaussianPointRenderer::Params& p) { gp_ = p; }
 	void setGaussianPointStats(const GaussianPointRenderer::Stats& s) { gpStats_ = s; }
 	void setSplatSizeScale(float v) { splatSizeScale_ = v; }
+	void setCameraFlipY(bool v) { cameraFlipY_ = v; }
+	void setOnCameraFlipYChanged(std::function<void(bool)> fn) { onCameraFlipYChanged_ = std::move(fn); }
 	float getSplatSizeScale() const { return splatSizeScale_; }
 
 	float getSortPointSize() const { return sortPointSize_; }
@@ -58,6 +60,8 @@ private:
 	std::function<void(float, int, float, int)> onPBVRParamsChanged_;
 	std::function<void(float)> onSplatSizeChanged_;
 	std::function<void(const GaussianPointRenderer::Params&)> onGpParamsChanged_;
+	std::function<void(bool)> onCameraFlipYChanged_;
+	bool cameraFlipY_ = false;
 
 	DebugSplatInfo debugSplat_;
 	bool gsAvailable_ = false;

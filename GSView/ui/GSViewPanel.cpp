@@ -97,6 +97,12 @@ void GSViewPanel::onImGui()
 		ImGui::EndDisabled();
 	}
 
+	if (ImGui::Checkbox("Y-down data (flip camera up)", &cameraFlipY_) && onCameraFlipYChanged_)
+		onCameraFlipYChanged_(cameraFlipY_);
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("3DGS/COLMAP-trained scenes use a Y-down world and render upside\n"
+			"down with the default +Y camera up. Rotates the view 180 degrees.");
+
 	ImGui::Separator();
 
 	if (currentMode_ == RenderMode::SortBased) {

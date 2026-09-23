@@ -36,6 +36,7 @@ public:
 		initialCamDistance_ = distance;
 	}
 	void setExitAfterScreenshot(bool v) { exitAfterScreenshot_ = v; }
+	void setInitialCameraFlipY(bool v) { initialCameraFlipY_ = v; }
 	// Suppresses all ImGui drawing (menu bar, control panel, debug overlays) so
 	// --screenshot captures a plain render of the scene, for use as a general
 	// offscreen renderer rather than an app-state verification snapshot.
@@ -81,6 +82,7 @@ private:
 	std::string initialPLYPath_;
 	std::string initialRenderMode_;
 	bool        hasInitialCamera_    = false;
+	bool        initialCameraFlipY_  = false;
 	float       initialCamTheta_     = 0.f;
 	float       initialCamPhi_       = 0.f;
 	float       initialCamDistance_  = 0.f;

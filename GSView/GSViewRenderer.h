@@ -80,6 +80,12 @@ public:
 	// yaw (the eye stays put, the target swings around it) that the orbit angles
 	// alone cannot (docs/todo/PLAN_footprint_aware_density_calibration.md Phase 0).
 	bool setEvaluationCameraTarget(const glm::vec3& target);
+	// Camera up = -Y instead of +Y. 3DGS/COLMAP-trained scenes (train, bonsai, ...) use a
+	// Y-down world, so with the default +Y up they render rotated 180 degrees (sky at the
+	// bottom). Flipping the lookAt up vector rotates the image 180 degrees and nothing else:
+	// orbit angles, eye position and the sampled distribution are unchanged. Default off.
+	void setCameraFlipY(bool flip) { camFlipY_ = flip; }
+	bool getCameraFlipY() const { return camFlipY_; }
 	bool exportLinearPfm(const std::string& path, uint32_t& sampleSets);
 	void resetGaussianPointAccumulation() { gaussianPoint_.resetAccumulation(); }
 	// Measurement-only shader variant (GaussianPointRenderer::setProfileVariant).
@@ -121,6 +127,7 @@ private:
 	float camPhi_ = 0.5f;
 	float camDist_ = 3.0f;
 	glm::vec3 camTarget_{ 0.f, 0.f, 0.f };
+	bool camFlipY_ = false;
 	bool isDragging_ = false;
 	double lastX_ = 0.0;
 	double lastY_ = 0.0;
@@ -137,6 +144,7 @@ private:
 	void syncSortScene();
 	glm::mat4 computeMVP() const;
 	glm::vec3 computeEye() const;
+	glm::vec3 cameraUp() const { return glm::vec3(0.f, camFlipY_ ? -1.f : 1.f, 0.f); }
 };
 
 } // namespace GSView

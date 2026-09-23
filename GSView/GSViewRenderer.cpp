@@ -225,7 +225,7 @@ bool GSViewRenderer::validateGaussianPointOracle(double& psnrAll, double& psnrFo
 	if (W <= 0 || H <= 0 || gpuAccum.size() != static_cast<size_t>(W) * H) return false;
 
 	const glm::vec3 eye = computeEye();
-	const glm::mat4 view = glm::lookAt(eye, camTarget_, glm::vec3(0.f, 1.f, 0.f));
+	const glm::mat4 view = glm::lookAt(eye, camTarget_, cameraUp());
 	glm::mat3 flip(1.0f);
 	flip[1][1] = -1.0f;
 	flip[2][2] = -1.0f;
@@ -351,8 +351,11 @@ void GSViewRenderer::handleMouseButton(bool leftPressed)
 void GSViewRenderer::handleMouseMove(double x, double y)
 {
 	if (isDragging_) {
-		const float dx = static_cast<float>(x - lastX_) * 0.005f;
-		const float dy = static_cast<float>(y - lastY_) * 0.005f;
+		// With a flipped up vector the image is rotated 180 degrees; invert the drag so
+		// the scene still follows the mouse.
+		const float sign = camFlipY_ ? -1.f : 1.f;
+		const float dx = sign * static_cast<float>(x - lastX_) * 0.005f;
+		const float dy = sign * static_cast<float>(y - lastY_) * 0.005f;
 		camPhi_ -= dx;
 		camTheta_ = std::max(0.05f, std::min(3.09f, camTheta_ + dy));
 	}
@@ -415,7 +418,7 @@ void GSViewRenderer::onUpdate(uint32_t frameIndex)
 	}
 	{
 		GaussianPointRenderer::Camera cam;
-		cam.view = glm::lookAt(eye, camTarget_, glm::vec3(0.f, 1.f, 0.f));
+		cam.view = glm::lookAt(eye, camTarget_, cameraUp());
 		cam.camPos = eye;
 		const float tanFovY = std::tan(glm::radians(45.f) * 0.5f);
 		cam.focalY = (static_cast<float>(extent_.height) * 0.5f) / tanFovY;
@@ -461,7 +464,7 @@ void GSViewRenderer::syncSortScene()
 glm::mat4 GSViewRenderer::computeMVP() const
 {
 	const glm::vec3 eye = computeEye();
-	const glm::mat4 view = glm::lookAt(eye, camTarget_, glm::vec3(0.f, 1.f, 0.f));
+	const glm::mat4 view = glm::lookAt(eye, camTarget_, cameraUp());
 	const float aspect = (extent_.height > 0)
 		? static_cast<float>(extent_.width) / static_cast<float>(extent_.height)
 		: 1.f;

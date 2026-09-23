@@ -91,6 +91,7 @@ void GSViewApp::onInit()
 		}
 	}
 
+	renderer_.setCameraFlipY(initialCameraFlipY_);
 	if (hasInitialCamera_) {
 		if (!renderer_.setEvaluationCamera(initialCamTheta_, initialCamPhi_, initialCamDistance_))
 			std::fprintf(stderr, "[GSView] Invalid --camera-theta/--camera-phi/--camera-distance\n");
@@ -126,6 +127,7 @@ void GSViewApp::onUpdate(uint32_t frameIndex)
 	panel_.setDebugSplat(renderer_.getDebugSplat());
 	panel_.setGSAvailable(renderer_.isGSAvailable());
 	panel_.setSplatSizeScale(renderer_.getSplatSizeScale());
+	panel_.setCameraFlipY(renderer_.getCameraFlipY());
 	panel_.setGaussianPointAvailable(renderer_.isGaussianPointAvailable());
 	panel_.setGaussianPointStats(renderer_.getGaussianPointStats());
 }
@@ -189,6 +191,7 @@ void GSViewApp::setupCallbacks()
 	win.onScroll = [this](double, double dy) {
 		renderer_.handleScroll(dy);
 	};
+	panel_.setOnCameraFlipYChanged([this](bool flip) { renderer_.setCameraFlipY(flip); });
 }
 
 } // namespace GSView
