@@ -236,6 +236,93 @@ double expectedPointCount(double detCov2d, double opacity)
 }
 
 // ===========================================================================
+// Footprint-aware density calibration
+// ===========================================================================
+
+namespace {
+// -log(1-x)/x, continuous at 0 (= 1). Monotone increasing on [0,1).
+double extinctionOverLinear(double x)
+{
+	if (x < 1e-8) return 1.0 + 0.5 * x;
+	return -std::log1p(-x) / x;
+}
+constexpr double kMaxOpacity = 1.0 - 1e-12;
+}
+
+double projectedFootprintArea(const glm::dmat2& cov2d)
+{
+	const double det = cov2d[0][0] * cov2d[1][1] - cov2d[0][1] * cov2d[1][0];
+	if (!std::isfinite(det) || det <= 0.0) return 0.0;
+	return 2.0 * kPi * std::sqrt(det);
+}
+
+double opacityTerm(OpacityRule rule, double opacity)
+{
+	if (!std::isfinite(opacity) || opacity <= 0.0) return 0.0;
+	const double o = std::min(opacity, kMaxOpacity);
+	switch (rule) {
+	case OpacityRule::Proportional: return o;
+	case OpacityRule::Extinction:   return -std::log1p(-o);
+	case OpacityRule::Dilog:        return dilog(o);
+	}
+	return 0.0;
+}
+
+double calibratedCount(CalibrationLevel level, OpacityRule rule, double opacity,
+                       double baseK, double densityScale, const CalibrationInputs& in)
+{
+	const double g = opacityTerm(rule, opacity);
+	if (!(g > 0.0) || !std::isfinite(densityScale) || densityScale <= 0.0) return 0.0;
+	double scale = 0.0;
+	switch (level) {
+	case CalibrationLevel::None:
+		scale = baseK;
+		break;
+	case CalibrationLevel::ObjectZoom:
+		scale = baseK * pixelDensityScale(in.objectDepth, in.focalX, in.focalY,
+		                                  in.referencePixelLength, in.nearZ);
+		break;
+	case CalibrationLevel::PerSplatDepth:
+		scale = baseK * pixelDensityScale(in.splatDepth, in.focalX, in.focalY,
+		                                  in.referencePixelLength, in.nearZ);
+		break;
+	case CalibrationLevel::PerSplatFootprint:
+		scale = in.spp * in.footprintArea;
+		break;
+	}
+	const double n = densityScale * g * scale;
+	return (std::isfinite(n) && n > 0.0) ? n : 0.0;
+}
+
+double radialKeepProbability(double opacity, double r2)
+{
+	if (!std::isfinite(opacity) || opacity <= 0.0) return 1.0;
+	if (std::isnan(r2) || r2 < 0.0) r2 = 0.0;
+	const double o = std::min(opacity, kMaxOpacity);
+	const double y = o * std::exp(-0.5 * r2);
+	// p = [-log(1-y)/y] / [-log(1-o)/o]. Both brackets are >= 1 and increasing, and
+	// y <= o, so p is in (0, 1].
+	const double p = extinctionOverLinear(y) / extinctionOverLinear(o);
+	return std::clamp(p, 0.0, 1.0);
+}
+
+double footprintPointCount(double expectedCount, int footprintSubpixels)
+{
+	if (!std::isfinite(expectedCount) || expectedCount <= 0.0) return 0.0;
+	const double s = static_cast<double>(std::max(1, footprintSubpixels));
+	return expectedCount / (s * s);
+}
+
+int adaptiveFootprint(double sigmaMinSubpixels, double kappa, int sMax)
+{
+	if (!(kappa > 0.0) || !std::isfinite(sigmaMinSubpixels) || sigmaMinSubpixels <= 0.0) return 1;
+	const int hi = std::max(1, sMax);
+	const double s = std::floor(kappa * sigmaMinSubpixels);
+	if (!(s >= 1.0)) return 1;
+	return s >= static_cast<double>(hi) ? hi : static_cast<int>(s);
+}
+
+// ===========================================================================
 // Sampling
 // ===========================================================================
 

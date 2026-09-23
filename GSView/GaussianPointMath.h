@@ -119,6 +119,70 @@ double pixelDensityScale(double depth, double focalX, double focalY,
                          double referencePixelLength, double nearZ);
 
 // ---------------------------------------------------------------------------
+// Footprint-aware density calibration
+// (docs/todo/PLAN_footprint_aware_density_calibration.md Phase 1; derivation in
+//  docs/paper/NOTE_footprint_density_calibration.md)
+//
+// Unified count for splat i under view v, with points that each cover `a`
+// subpixels:
+//   N_i(v) = densityScale * spp * A_i(v) * g(o_i) / a,   A_i = 2*pi*sqrt(det Sigma2d)
+// Every existing particle-count rule is a special case (calibration level):
+//   C0 None              A ~ const          (Proportional / Extinction as shipped)
+//   C1 ObjectZoom        A ~ fx fy / z_c^2  (rendererVersion=3 zoom recalibration, KVS PixelLength)
+//   C2 PerSplatDepth     A ~ fx fy / z_i^2  (per-splat isotropic)
+//   C3 PerSplatFootprint A = 2*pi*sqrt(det Sigma2d)  (ViewConditioned / GaussianPoint)
+// ---------------------------------------------------------------------------
+
+// Projected footprint area 2*pi*sqrt(det cov2d) in pixels^2; 0 for a degenerate
+// or non-finite covariance.
+double projectedFootprintArea(const glm::dmat2& cov2d);
+
+// The opacity term g(o) of the unified count.
+enum class OpacityRule {
+    Proportional,   // g = o
+    Extinction,     // g = -log(1 - o)
+    Dilog           // g = Li2(o), the exact screen-space (GPS) integral
+};
+double opacityTerm(OpacityRule rule, double opacity);
+
+enum class CalibrationLevel { None = 0, ObjectZoom = 1, PerSplatDepth = 2, PerSplatFootprint = 3 };
+
+struct CalibrationInputs {
+    double objectDepth = 0.0;           // camera-space depth of the object centre (C1)
+    double splatDepth = 0.0;            // camera-space depth of this splat's centre (C2)
+    double focalX = 1.0, focalY = 1.0;  // pixels
+    double nearZ = 0.0;
+    double referencePixelLength = 0.01; // l0 of the relative levels C1/C2
+    double footprintArea = 0.0;         // projectedFootprintArea() of this splat (C3)
+    double spp = 1.0;                   // subpixels per pixel (C3)
+};
+
+// Expected particle count for one splat. C0-C2 are relative calibrations of the
+// shipped base count: densityScale * g * baseK * {1, k(z_c), k(z_i)} with
+// k = pixelDensityScale(). C3 is absolute and ignores baseK:
+// densityScale * spp * footprintArea * g. Never negative; 0 for invalid input.
+double calibratedCount(CalibrationLevel level, OpacityRule rule, double opacity,
+                       double baseK, double densityScale, const CalibrationInputs& in);
+
+// Radial correction (C3+R). Candidates drawn from the 3D Gaussian project to a
+// 2D Gaussian with intensity -log(1-o) * exp(-r^2/2) (whitened radius r) when the
+// count is calibrated with OpacityRule::Extinction at C3. Keeping each with
+//   p(r) = -log(1 - o e^{-r^2/2}) / ( -log(1-o) e^{-r^2/2} )  in (0, 1]
+// leaves exactly the GPS intensity -log(1 - o e^{-r^2/2}), i.e. expected count
+// 2*pi*sqrt(det) * Li2(o) and the corrected radial law of sampleCorrectedRadius().
+// p(0) = 1 and p(inf) = o / -log(1-o) (the Proportional/Extinction ratio).
+double radialKeepProbability(double opacity, double r2);
+
+// Variable-footprint points (level F): each point covers an s x s block of
+// subpixels, so the expected count is divided by s^2 (s >= 1).
+double footprintPointCount(double expectedCount, int footprintSubpixels);
+
+// Per-splat adaptive footprint s_i = clamp(floor(kappa * sigmaMin), 1, sMax), with
+// sigmaMin the projected minor-axis std-dev in subpixels. Bounds the relative blur
+// s_i / sigmaMin by kappa. kappa <= 0 disables it (returns 1).
+int adaptiveFootprint(double sigmaMinSubpixels, double kappa, int sMax);
+
+// ---------------------------------------------------------------------------
 // Sampling
 // ---------------------------------------------------------------------------
 
