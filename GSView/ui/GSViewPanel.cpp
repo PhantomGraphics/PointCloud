@@ -185,6 +185,16 @@ void GSViewPanel::onImGui()
 				gpChanged = true;
 			}
 		}
+		// Variable-footprint points (PLAN_footprint_aware_density_calibration.md Phase 4).
+		gpChanged |= ImGui::SliderInt("Point Footprint (subpx)", &gp_.gpPointFootprint, 1, 8);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Each point covers an s x s subpixel block; the point count drops by s^2.\n"
+				"1 = the GPS point. Larger s trades a small blur (and more per-frame noise)\n"
+				"for fewer, cheaper-to-sample points.");
+		gpChanged |= ImGui::SliderFloat("Adaptive Footprint kappa", &gp_.gpAdaptiveFootprintKappa, 0.0f, 1.0f, "%.2f");
+		if (gp_.gpAdaptiveFootprintKappa > 0.0f)
+			gpChanged |= ImGui::SliderInt("Adaptive Footprint max", &gp_.gpFootprintMax, 1, 8);
+		gpChanged |= ImGui::Checkbox("Footprint blur compensation", &gp_.gpFootprintCompensate);
 		if (gpChanged && onGpParamsChanged_)
 			onGpParamsChanged_(gp_);
 		ImGui::Spacing();

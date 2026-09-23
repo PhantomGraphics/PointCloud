@@ -171,6 +171,41 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
         renderer_->setGaussianPointParams(p);
         return "OK";
     }
+    // Variable-footprint GPS points (PLAN_footprint_aware_density_calibration.md Phase 4).
+    if (name == "GetGpPointFootprint") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().gpPointFootprint) : "Error:renderer not available";
+    if (name == "GetGpAdaptiveFootprint") return renderer_ ? "Kappa:" + fmtF(renderer_->getGaussianPointParams().gpAdaptiveFootprintKappa) + ",Max:" + std::to_string(renderer_->getGaussianPointParams().gpFootprintMax) : "Error:renderer not available";
+    if (name == "GetGpFootprintCompensation") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointParams().gpFootprintCompensate) : "Error:renderer not available";
+    if (name == "SetGpPointFootprint") {
+        if (!renderer_) return "Error:renderer not available";
+        int s = 0;
+        if (!tryInt(rest, s) || s < 1 || s > 8) return "Error:expected a footprint of 1..8 subpixels";
+        auto p = renderer_->getGaussianPointParams();
+        p.gpPointFootprint = s;
+        renderer_->setGaussianPointParams(p);
+        return "OK";
+    }
+    if (name == "SetGpAdaptiveFootprint") {
+        if (!renderer_) return "Error:renderer not available";
+        const size_t comma = rest.find(',');
+        float kappa = 0.0f;
+        int sMax = 0;
+        if (comma == std::string::npos || !tryFloat(rest.substr(0, comma), kappa) || !std::isfinite(kappa)
+            || kappa < 0.0f || !tryInt(rest.substr(comma + 1), sMax) || sMax < 1 || sMax > 8)
+            return "Error:expected kappa,max (kappa >= 0, 0 = off; max 1..8)";
+        auto p = renderer_->getGaussianPointParams();
+        p.gpAdaptiveFootprintKappa = kappa;
+        p.gpFootprintMax = sMax;
+        renderer_->setGaussianPointParams(p);
+        return "OK";
+    }
+    if (name == "SetGpFootprintCompensation") {
+        if (!renderer_) return "Error:renderer not available";
+        if (rest != "0" && rest != "1") return "Error:expected 0 or 1";
+        auto p = renderer_->getGaussianPointParams();
+        p.gpFootprintCompensate = rest == "1";
+        renderer_->setGaussianPointParams(p);
+        return "OK";
+    }
     if (name == "GetCameraFlipY") return renderer_ ? "Val:" + std::to_string(renderer_->getCameraFlipY()) : "Error:renderer not available";
     if (name == "SetCameraFlipY") {
         if (!renderer_) return "Error:renderer not available";
@@ -533,6 +568,10 @@ std::string GSViewCommandDispatcher::buildProfile() const
         ";pbvrCalibration=" + std::to_string(GaussianPointRenderer::effectiveCalibrationLevel(p)) +
         ";pbvrRadial=" + std::to_string(p.pbvrRadialCorrection) +
         ";pbvrCentreDepth=" + std::to_string(p.pbvrCentreDepth) +
+        ";gpFootprint=" + std::to_string(p.gpPointFootprint) +
+        ";gpFootprintKappa=" + fmtF(p.gpAdaptiveFootprintKappa) +
+        ";gpFootprintMax=" + std::to_string(p.gpFootprintMax) +
+        ";gpFootprintCompensate=" + std::to_string(p.gpFootprintCompensate) +
         ";referencePixelLength=" + fmtF(p.pbvrReferencePixelLength) +
         ";lodMode=" + std::to_string(p.lodMode) +
         ";ensemblesPerFrame=" + std::to_string(p.ensemblesPerFrame) +

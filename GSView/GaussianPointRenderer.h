@@ -161,6 +161,17 @@ public:
         // Give every Pbvr3d particle its splat-centre depth (the GPS depth rule) instead
         // of its own; isolates the depth-rule residual (NOTE Sec. 5.2).
         bool pbvrCentreDepth = false;
+        // Variable-footprint GPS points (level F, PLAN_footprint_aware_density_calibration.md
+        // Phase 4): every point covers an s x s block of subpixels and the expected count is
+        // divided by s^2. 1 = the GPS point (bit-identical). gpAdaptiveFootprintKappa > 0
+        // instead picks s per splat as clamp(floor(kappa * sigmaMin), 1, gpFootprintMax)
+        // with sigmaMin the projected minor-axis std-dev in subpixels. gpFootprintCompensate
+        // shrinks the sampling covariance by the block variance (s/side)^2/12. Applies to
+        // gps_splat.comp (GaussianPoint and ViewConditioned 2D).
+        int   gpPointFootprint = 1;
+        float gpAdaptiveFootprintKappa = 0.0f;
+        int   gpFootprintMax = 4;
+        bool  gpFootprintCompensate = false;
     };
 
     // The calibration level actually applied: pbvrFootprintCalibration, or C1 when
@@ -292,8 +303,8 @@ private:
         glm::vec4  camPos; // world-space camera position, 0
         glm::uvec4 ctrl2; // resetAccum, shDegree, tonemapMode, pbvr3dMethod
         glm::vec4  p3;    // gamma, basePointsPerSplat, budgetThin, SH storage stride/channel
-        glm::uvec4 ctrl3; // footprint calibration level, radial correction, centre depth, 0
-        glm::vec4  p4;    // referencePixelLength, 0, 0, 0
+        glm::uvec4 ctrl3; // footprint calibration level, radial correction, centre depth, footprint compensation
+        glm::vec4  p4;    // referencePixelLength, footprint s, adaptive kappa, adaptive s max
     };
     struct PushConstants { uint32_t pass; };  // gps_compact.comp (pass only, unchanged layout)
     // gps_splat.comp / gps_pbvr3d.comp: ensembleSeed identifies one independent

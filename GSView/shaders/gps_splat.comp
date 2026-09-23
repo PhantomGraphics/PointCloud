@@ -37,6 +37,8 @@ layout(std140, binding = 5) uniform Params {
     vec4  camPos;  // world-space camera position, w = measurement-only profile variant
     uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, unused
     vec4  p3;      // gamma, unused, budgetThin, SH storage stride/channel
+    uvec4 ctrl3;   // PBVR3D calibration x/y/z, w = footprint blur compensation
+    vec4  p4;      // referencePixelLength, footprint s, adaptive kappa, adaptive s max
 } u;
 
 // pass: 0 = depth, 1 = colour, 2 = prepare. ensembleSeed identifies one
@@ -149,6 +151,29 @@ vec3 evalSH(uint id, vec3 dc, vec3 dir) {
     return max(result + 0.5, vec3(0.0));
 }
 
+// Variable-footprint points (docs/todo/PLAN_footprint_aware_density_calibration.md Phase 4):
+// write the s x s block of subpixels centred on `pixel` -- the cells whose centres lie in
+// [c - s/2, c + s/2) with c = pixel * sppSide, clipped to the image (GaussianPointOracle's
+// writeBlock). pass 0 = depth atomicMin, otherwise the colour tie-break. Returns whether any
+// cell was inside the image. Only used for s > 1; s == 1 keeps the original single write.
+bool writeFootprintBlock(vec2 pixel, int s, uint key, uint color, uint pass) {
+    int side = int(u.dims.w);
+    int gx0 = int(floor(pixel.x * float(side) - 0.5 * float(s) + 0.5));
+    int gy0 = int(floor(pixel.y * float(side) - 0.5 * float(s) + 0.5));
+    int gw = int(u.dims.x) * side, gh = int(u.dims.y) * side;
+    bool any = false;
+    for (int gy = max(gy0, 0); gy < min(gy0 + s, gh); ++gy) {
+        for (int gx = max(gx0, 0); gx < min(gx0 + s, gw); ++gx) {
+            uint idx = (uint(gy / side) * u.dims.x + uint(gx / side)) * u.dims.z
+                     + uint((gy % side) * side + (gx % side));
+            if (pass == 0u) atomicMin(depthBuf[idx], key);
+            else if (depthBuf[idx] == key) atomicMin(colorBuf[idx], color);
+            any = true;
+        }
+    }
+    return any;
+}
+
 void addExpected(uint value) {
     uint previous = atomicAdd(stats[0], value);
     if (previous > 0xffffffffu-value) atomicAdd(stats[6], 1u);
@@ -198,16 +223,27 @@ void splatOne(uint id) {
     float mu =  fx * (cam.x / tz) + u.p0.z;
     float mv = -fy * (cam.y / tz) + u.p0.w;
 
+    // Point footprint s (level F): fixed, or per splat from the projected minor axis
+    // (GaussianPointMath::adaptiveFootprint), in subpixels.
+    int fp = max(int(u.p4.y), 1);
+    if (u.p4.z > 0.0) {
+        float lambdaMin = max(0.5 * (ca + cd - sqrt(max((ca - cd) * (ca - cd) + 4.0 * cb * cb, 0.0))), 0.0);
+        float s = floor(u.p4.z * sqrt(lambdaMin) * float(u.dims.w));
+        fp = int(clamp(s, 1.0, max(u.p4.w, 1.0)));
+    }
+
     // Frustum cull using the full bounded sampling footprint.
     // sampleRadius() is bounded by 12 sigma, so this is conservative for every
-    // point the shader can generate, including rotated anisotropic footprints.
-    float ext = 12.0 * sqrt(lambdaMax);
+    // point the shader can generate, including rotated anisotropic footprints
+    // (plus half a footprint block for s > 1).
+    float ext = 12.0 * sqrt(lambdaMax) + 0.5 * float(fp - 1) / float(u.dims.w);
     if (mu + ext < 0.0 || mu - ext >= float(u.dims.x) ||
         mv + ext < 0.0 || mv - ext >= float(u.dims.y)) return;
 
     float bthin = (u.p3.z > 0.0) ? u.p3.z : 1.0;   // point-budget stochastic thinning
     float spp = float(u.dims.z);
     float EN  = spp * TWO_PI * sqrt(det) * dilog(op) * u.p2.z * bthin;
+    if (fp > 1) EN /= float(fp * fp);   // each point covers fp^2 subpixels
     EN = min(EN, u.p2.x);
 
     uint seed = pcg(id * 747796405u + 1u);
@@ -236,6 +272,14 @@ void splatOne(uint id) {
         return;
     }
 
+    // Blur compensation: sample positions from the covariance shrunk by the block's
+    // variance (s/side)^2/12 while it stays comfortably SPD; the count above keeps the
+    // unshrunk footprint's optical mass.
+    if (fp > 1 && u.ctrl3.w != 0u) {
+        float v = (float(fp) / float(u.dims.w)) * (float(fp) / float(u.dims.w)) / 12.0;
+        float lambdaMin = 0.5 * (ca + cd - sqrt(max((ca - cd) * (ca - cd) + 4.0 * cb * cb, 0.0)));
+        if (lambdaMin >= 2.0 * v) { ca -= v; cd -= v; }
+    }
     float l00 = sqrt(max(ca, 1e-12));
     float l10 = cb / l00;
     float l11 = sqrt(max(cd - l10 * l10, 1e-12));
@@ -247,7 +291,7 @@ void splatOne(uint id) {
 
     if (pc.pass == 2u) {
         Prepared q;
-        q.a = vec4(mu, mv, l00, l10); q.b = vec4(l11, 0, 0, 0);
+        q.a = vec4(mu, mv, l00, l10); q.b = vec4(l11, float(fp), 0, 0);   // b.y = footprint s
         q.c = vec4(0); q.d = vec4(0);
         q.info = vec4(op, 1, 0, 0);
         q.meta = uvec4(rs.s, packed, dkey, 0);
@@ -272,6 +316,10 @@ void splatOne(uint id) {
         float oy = l10 * wx + l11 * wy;
         float fxp = mu + ox;
         float fyp = mv + oy;
+        if (fp > 1) {
+            if (writeFootprintBlock(vec2(fxp, fyp), fp, dkey, packed, pc.pass)) drawn++;
+            continue;
+        }
         if (fxp < 0.0 || fxp >= float(W_) || fyp < 0.0 || fyp >= float(H_)) continue;
         uint px = uint(fxp), py = uint(fyp);
         uint sx = min(uint(fract(fxp) * float(side)), side - 1u);

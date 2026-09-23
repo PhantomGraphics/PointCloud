@@ -189,6 +189,9 @@ void GaussianPointRenderer::setParams(const Params& p)
     params_.tonemapMode = std::clamp(params_.tonemapMode, 0, 2);
     params_.pbvr3dMethod = std::clamp(params_.pbvr3dMethod, 0, 4);
     params_.pbvrFootprintCalibration = std::clamp(params_.pbvrFootprintCalibration, 0, 3);
+    params_.gpPointFootprint = std::clamp(params_.gpPointFootprint, 1, 8);
+    params_.gpFootprintMax = std::clamp(params_.gpFootprintMax, 1, 8);
+    if (!(params_.gpAdaptiveFootprintKappa > 0.0f)) params_.gpAdaptiveFootprintKappa = 0.0f;
     params_.compactPipeline = std::clamp(params_.compactPipeline, 0, 2);
     // Metropolis (Phase 5) runs a sequential Markov chain per splat in
     // GaussianPointRenderer's own per-splat loop (gps_pbvr3d.comp), never through
@@ -506,6 +509,9 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     mix(params_.pbvrDensityClamp);
     mix(static_cast<std::uint64_t>(params_.pbvrFootprintCalibration) * 5
         + (params_.pbvrRadialCorrection ? 2u : 0u) + (params_.pbvrCentreDepth ? 1u : 0u));
+    mix(static_cast<std::uint64_t>(params_.gpPointFootprint) * 17 + params_.gpFootprintMax * 2
+        + (params_.gpFootprintCompensate ? 1u : 0u));
+    mixFloat(params_.gpAdaptiveFootprintKappa);
     mix(params_.compactPipeline);
     mixFloat(params_.pbvrReferencePixelLength);
     mix(static_cast<std::uint64_t>(shDeg) * 7 + params_.tonemapMode);
@@ -575,8 +581,10 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
                        static_cast<float>(Phantom::PointCloud::GSPointCloud::coeffsPerChannel(shDegreeData_)));
     ubo.ctrl3 = glm::uvec4(static_cast<uint32_t>(effectiveCalibrationLevel(params_)),
                            params_.pbvrRadialCorrection ? 1u : 0u,
-                           params_.pbvrCentreDepth ? 1u : 0u, 0u);
-    ubo.p4 = glm::vec4(params_.pbvrReferencePixelLength, 0.0f, 0.0f, 0.0f);
+                           params_.pbvrCentreDepth ? 1u : 0u,
+                           params_.gpFootprintCompensate ? 1u : 0u);
+    ubo.p4 = glm::vec4(params_.pbvrReferencePixelLength, static_cast<float>(params_.gpPointFootprint),
+                       params_.gpAdaptiveFootprintKappa, static_cast<float>(params_.gpFootprintMax));
     paramsUbo_[frameIndex].write(&ubo, sizeof(ubo));
 
     lastFrameIndex_ = frameIndex;

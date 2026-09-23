@@ -23,6 +23,29 @@ layout(std140, binding = 5) uniform Params {
 
 layout(push_constant) uniform PC { uint pass; } pc;
 #include "gps_sampling.glsl"
+// Variable-footprint points (docs/todo/PLAN_footprint_aware_density_calibration.md Phase 4):
+// write the s x s block of subpixels centred on `pixel` -- the cells whose centres lie in
+// [c - s/2, c + s/2) with c = pixel * sppSide, clipped to the image (GaussianPointOracle's
+// writeBlock). pass 0 = depth atomicMin, otherwise the colour tie-break. Returns whether any
+// cell was inside the image. Only used for s > 1; s == 1 keeps the original single write.
+bool writeFootprintBlock(vec2 pixel, int s, uint key, uint color, uint pass) {
+    int side = int(u.dims.w);
+    int gx0 = int(floor(pixel.x * float(side) - 0.5 * float(s) + 0.5));
+    int gy0 = int(floor(pixel.y * float(side) - 0.5 * float(s) + 0.5));
+    int gw = int(u.dims.x) * side, gh = int(u.dims.y) * side;
+    bool any = false;
+    for (int gy = max(gy0, 0); gy < min(gy0 + s, gh); ++gy) {
+        for (int gx = max(gx0, 0); gx < min(gx0 + s, gw); ++gx) {
+            uint idx = (uint(gy / side) * u.dims.x + uint(gx / side)) * u.dims.z
+                     + uint((gy % side) * side + (gx % side));
+            if (pass == 0u) atomicMin(depthBuf[idx], key);
+            else if (depthBuf[idx] == key) atomicMin(colorBuf[idx], color);
+            any = true;
+        }
+    }
+    return any;
+}
+
 vec2 normalPair(inout RS rs) {
     float r = sqrt(-2.0 * log(max(rnd(rs), 1e-7)));
     float t = TWO_PI * rnd(rs);
@@ -40,6 +63,16 @@ void main() {
     for (uint index = gl_GlobalInvocationID.x; index < work[3]; index += gl_NumWorkGroups.x * 64u) {
         if (pc.pass == 1u && work[4] == 0u) {
             uvec4 v = particles[index];
+            uint cachedFp = v.w >> 8u;
+            if (cachedFp > 1u) {
+                // Footprint block cached as its subpixel origin (+16384 bias, 16 bits each).
+                int side = int(u.dims.w);
+                vec2 origin = vec2(float(int(v.x & 0xFFFFu) - 16384), float(int(v.x >> 16u) - 16384));
+                // Re-derive the same block from its origin: centre = origin + s/2 subpixels.
+                vec2 pixel = (origin + 0.5 * float(cachedFp)) / float(side);
+                if (!skipAtomics) writeFootprintBlock(pixel, int(cachedFp), v.y, v.z, 1u);
+                continue;
+            }
             if (!skipAtomics && v.w != 0u && depthBuf[v.x] == v.y) atomicMin(colorBuf[v.x], v.z);
             continue;
         }
@@ -97,6 +130,21 @@ void main() {
             key = (u.ctrl3.z != 0u) ? q.meta.z : orderedDepthKey(-cam.z);
         }
         if (q.meta.w == 0u && pc.pass == 0u) counts.x++;
+        int fp = (q.meta.w == 0u) ? max(int(q.b.y), 1) : 1;
+        if (fp > 1) {
+            if (any(isnan(pixel)) || any(isinf(pixel))) continue;
+            int side = int(u.dims.w);
+            int gx0 = int(floor(pixel.x * float(side) - 0.5 * float(fp) + 0.5));
+            int gy0 = int(floor(pixel.y * float(side) - 0.5 * float(fp) + 0.5));
+            // Cache the block origin exactly (the colour pass rebuilds the block from it).
+            vec2 centre = (vec2(gx0, gy0) + 0.5 * float(fp)) / float(side);
+            bool inside = skipAtomics ? true : writeFootprintBlock(centre, fp, key, q.meta.y, pc.pass);
+            if (work[4] == 0u && inside)
+                particles[index] = uvec4(uint(gx0 + 16384) | (uint(gy0 + 16384) << 16u), key, q.meta.y,
+                                         1u | (uint(fp) << 8u));
+            if (pc.pass == 0u && inside) counts.y++;
+            continue;
+        }
         if (any(isnan(pixel)) || any(isinf(pixel)) || any(lessThan(pixel, vec2(0))) ||
             any(greaterThanEqual(pixel, vec2(u.dims.xy)))) continue;
         uvec2 sub = min(uvec2(fract(pixel)*float(u.dims.w)), uvec2(u.dims.w-1u));
