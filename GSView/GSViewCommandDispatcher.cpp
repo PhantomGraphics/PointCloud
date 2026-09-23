@@ -357,8 +357,9 @@ std::string GSViewCommandDispatcher::cmdSetPbvr3dMethod(const std::string& arg)
     else if (arg == "extinction")       m = 1;
     else if (arg == "view_conditioned") m = 2;
     else if (arg == "metropolis")       m = 3;
-    else if (!tryInt(arg, m) || m < 0 || m > 3)
-        return "Error:method must be proportional|extinction|view_conditioned|metropolis";
+    else if (arg == "view_conditioned_2d" || arg == "gps_2d") m = 4;
+    else if (!tryInt(arg, m) || m < 0 || m > 4)
+        return "Error:method must be proportional|extinction|view_conditioned|metropolis|view_conditioned_2d";
     renderer_->setPbvr3dMethod(m);
     return "OK";
 }
@@ -370,6 +371,7 @@ std::string GSViewCommandDispatcher::cmdGetPbvr3dMethod()
         case 1:  return "Val:extinction";
         case 2:  return "Val:view_conditioned";
         case 3:  return "Val:metropolis";
+        case 4:  return "Val:view_conditioned_2d";
         default: return "Val:proportional";
     }
 }
@@ -437,8 +439,9 @@ std::string GSViewCommandDispatcher::buildProfile() const
     std::string method = "-";
     switch (renderer_->getRenderMode()) {
         case RenderMode::PBVR3DExperimental:
-            path = "PBVR3D";
-            method = renderer_->getPbvr3dMethod() == 1 ? "extinction"
+            path = renderer_->getPbvr3dMethod() == 4 ? "GaussianPoint2D" : "PBVR3D";
+            method = renderer_->getPbvr3dMethod() == 4 ? "view_conditioned_2d"
+                   : renderer_->getPbvr3dMethod() == 1 ? "extinction"
                    : renderer_->getPbvr3dMethod() == 2 ? "view_conditioned"
                    : renderer_->getPbvr3dMethod() == 3 ? "metropolis" : "proportional";
             break;

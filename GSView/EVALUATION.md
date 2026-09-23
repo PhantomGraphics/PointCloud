@@ -26,6 +26,12 @@ Artifacts:
 of all frames. `Frames` counts scenario polling steps; use recorded `accumFrames`
 for the actual accumulation count. Timings require an otherwise idle GPU.
 Two seeds are suitable only for a smoke test; use more for reported results.
+
+`view_conditioned_2d` is an exact GPS sampling control exposed in the PBVR method
+selector. It routes to the same GaussianPoint shader and therefore uses the same
+projected covariance, dilogarithm radius sampler, point-count rule, subpixel
+mapping, and RNG stream. It is useful as a parity control; it is not an independent
+2D implementation or a PBVR speed comparison.
 Zero timings may indicate unsupported GPU timestamps.
 
 `rendererBufferBytes` is the current requested size of this renderer's buffers,

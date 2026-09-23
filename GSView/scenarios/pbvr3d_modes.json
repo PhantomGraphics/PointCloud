@@ -48,6 +48,18 @@
       "store_as": "vc_gen", "strip_prefix": "Count:" },
     { "label": "view-conditioned stats", "command": "GetGpStats", "expect_prefix": "Expected:" },
 
+    { "label": "Method: 2D ViewConditioned using GPS sampling",
+      "command": "SetPbvr3dMethod:view_conditioned_2d",
+      "expect": "OK" },
+    { "label": "2D ViewConditioned reads back",
+      "command": "GetPbvr3dMethod",
+      "expect": "Val:view_conditioned_2d" },
+    { "label": "settle", "command": "GetStatus", "expect": "OK", "repeat": 8 },
+    { "label": "2D ViewConditioned uses GPS and produces particles",
+      "command": "GetGpGeneratedCount",
+      "expect_prefix": "Count:", "expect_not": "Count:0",
+      "store_as": "vc2d_gen", "strip_prefix": "Count:" },
+
     { "label": "Reference: GaussianPoint (GPS) on the same scene",
       "command": "SetRenderMode:GaussianPoint",
       "expect": "OK" },

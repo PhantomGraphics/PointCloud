@@ -187,7 +187,7 @@ void GaussianPointRenderer::setParams(const Params& p)
     params_.sppSide = std::clamp(params_.sppSide, 1, 4);
     params_.shDegree = std::clamp(params_.shDegree, 0, 3);
     params_.tonemapMode = std::clamp(params_.tonemapMode, 0, 2);
-    params_.pbvr3dMethod = std::clamp(params_.pbvr3dMethod, 0, 3);
+    params_.pbvr3dMethod = std::clamp(params_.pbvr3dMethod, 0, 4);
     params_.compactPipeline = std::clamp(params_.compactPipeline, 0, 2);
     // Metropolis (Phase 5) runs a sequential Markov chain per splat in
     // GaussianPointRenderer's own per-splat loop (gps_pbvr3d.comp), never through

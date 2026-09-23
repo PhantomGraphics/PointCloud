@@ -47,7 +47,7 @@ private:
 	float densityScale_ = 1.0f;
 	int maxParticlesPerSplat_ = 2048;   // per-splat particle cap (PBVR3D)
 	float pbvrParticleSize_ = 8.0f;     // "Base Points x64" -> 512 base points/splat
-	int pbvr3dMethod_ = 0;   // 0 proportional, 1 extinction, 2 view-conditioned, 3 metropolis
+	int pbvr3dMethod_ = 0;   // 0 proportional, 1 extinction, 2 view-conditioned, 3 metropolis, 4 GPS 2D
 	size_t splatCount_ = 0;
 	size_t particleCount_ = 0;
 	size_t particleCapacity_ = 0;

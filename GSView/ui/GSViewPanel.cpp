@@ -109,11 +109,17 @@ void GSViewPanel::onImGui()
 	} else if (currentMode_ == RenderMode::PBVR3DExperimental) {
 		bool pbvrChanged = false;
 		if (ImGui::Combo("Method", &pbvr3dMethod_,
-				"Proportional\0" "Extinction -log(1-o)\0" "View-conditioned\0" "Metropolis (research)\0"))
+				"Proportional\0" "Extinction -log(1-o)\0" "View-conditioned\0" "Metropolis (research)\0"
+				"View-conditioned 2D (GPS sampling)\0"))
 			pbvrChanged = true;
-		pbvrChanged |= ImGui::SliderFloat("Density Scale", &densityScale_, 0.1f, 10.0f);
-		pbvrChanged |= ImGui::SliderInt("Max Particles/Splat", &maxParticlesPerSplat_, 1, 4096);
-		pbvrChanged |= ImGui::SliderFloat("Base Points x64", &pbvrParticleSize_, 1.0f, 64.0f);
+		const bool gps2d = pbvr3dMethod_ == 4;
+		if (!gps2d) {
+			pbvrChanged |= ImGui::SliderFloat("Density Scale", &densityScale_, 0.1f, 10.0f);
+			pbvrChanged |= ImGui::SliderInt("Max Particles/Splat", &maxParticlesPerSplat_, 1, 4096);
+			pbvrChanged |= ImGui::SliderFloat("Base Points x64", &pbvrParticleSize_, 1.0f, 64.0f);
+		} else {
+			ImGui::TextWrapped("Uses GPS screen-space sampling, count rule, and RNG exactly.");
+		}
 		if (pbvrChanged && onPBVRParamsChanged_)
 			onPBVRParamsChanged_(densityScale_, maxParticlesPerSplat_, pbvrParticleSize_, pbvr3dMethod_);
 		ImGui::Spacing();

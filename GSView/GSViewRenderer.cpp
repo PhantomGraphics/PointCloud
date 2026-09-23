@@ -322,7 +322,7 @@ void GSViewRenderer::setPbvrParticleSize(float s)
 
 void GSViewRenderer::setPbvr3dMethod(int method)
 {
-	gpParams_.pbvr3dMethod = std::clamp(method, 0, 3);
+	gpParams_.pbvr3dMethod = std::clamp(method, 0, 4);
 	gaussianPoint_.setParams(gpParams_);
 }
 
@@ -396,7 +396,10 @@ void GSViewRenderer::onUpdate(uint32_t frameIndex)
 	}
 
 	// GaussianPoint / PBVR3D pipeline: (re)create extent-dependent buffers, then push camera + params.
-	gaussianPoint_.setPath(mode_ == RenderMode::PBVR3DExperimental
+	// This method is the exact screen-space GPS parity control, so route the whole
+	// point-generation path through gps_splat.comp instead of approximating it again.
+	const bool gps2d = gpParams_.pbvr3dMethod == 4;
+	gaussianPoint_.setPath(mode_ == RenderMode::PBVR3DExperimental && !gps2d
 	                           ? GaussianPointRenderer::Path::Pbvr3d
 	                           : GaussianPointRenderer::Path::GaussianPoint);
 	if (gpExtentDirty_ && extent_.width > 0 && extent_.height > 0) {

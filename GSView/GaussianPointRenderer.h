@@ -72,7 +72,7 @@ public:
     //                     always runs through GaussianPointRenderer's own per-splat loop in
     //                     gps_pbvr3d.comp instead (the one compactPipeline value -- 0 -- that reaches
     //                     it, via gps_scan.comp's mode==3 setting work[4]=2).
-    enum class Pbvr3dMethod { Proportional = 0, Extinction = 1, ViewConditioned = 2, Metropolis = 3 };
+    enum class Pbvr3dMethod { Proportional = 0, Extinction = 1, ViewConditioned = 2, Metropolis = 3, ViewConditionedGps2D = 4 };
 
     // Ensemble LOD mode (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 1).
     // An "ensemble" is one complete independent clear -> splat -> resolve pass,
