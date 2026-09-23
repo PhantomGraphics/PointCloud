@@ -428,6 +428,8 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
             t.splatColorMs = static_cast<float>((marks[3] - marks[2]) * toMs);
             t.resolveMs    = static_cast<float>((marks[4] - marks[3]) * toMs);
             t.computeMs    = static_cast<float>((marks[4] - marks[0]) * toMs);
+            t.prepareMs    = static_cast<float>((marks[5] - marks[1]) * toMs);
+            t.scanMs       = static_cast<float>((marks[6] - marks[5]) * toMs);
         }
     }
 
@@ -556,7 +558,9 @@ void GaussianPointRenderer::update(const Phantom::VKG::VulkanContext& ctx,
     // bg.w is otherwise unused (composite/resolve only read bg.rgb) -- reused to
     // carry the density-clamp flag into gps_pbvr3d.comp without growing the UBO.
     ubo.bg = glm::vec4(params_.background, params_.pbvrDensityClamp ? 1.0f : 0.0f);
-    ubo.camPos = glm::vec4(camera_.camPos, 0.0f);
+    // camPos.w is otherwise unused -- carries the measurement-only profile variant
+    // (setProfileVariant(); 0 = normal rendering) into gps_splat/gps_compact.comp.
+    ubo.camPos = glm::vec4(camera_.camPos, static_cast<float>(profileVariant_));
     ubo.ctrl2 = glm::uvec4(resetAccum, static_cast<uint32_t>(shDeg),
                            static_cast<uint32_t>(params_.tonemapMode),
                            static_cast<uint32_t>(params_.pbvr3dMethod));
@@ -716,6 +720,9 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
             const uint32_t bankCount = workMapped ? workMapped[3] : 0u;
             const uint32_t reprojectGroups = std::min<uint32_t>((bankCount + 63u) / 64u, 65535u);
 
+            // No prepare/scan on this path; still write marks 5/6 (zero-width) so the
+            // query results for this slot are complete and readable.
+            if (first) { ts(5, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT); ts(6, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT); }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pbvr3dPipe_.getPipeline());
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pbvr3dPipe_.getLayout(),
                                     0, 1, &computeSets_[frameIndex], 0, nullptr);
@@ -756,6 +763,7 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
             vkCmdPushConstants(cmd, splat.getLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(prepare), &prepare);
             vkCmdDispatch(cmd, groups, 1, 1);
             computeBarrier();
+            if (first) ts(5, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, scanPipe_.getPipeline());
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, scanPipe_.getLayout(),
                 0, 1, &computeSets_[frameIndex], 0, nullptr);
@@ -774,6 +782,7 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
             vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 0, 0, nullptr, 1, &indirect, 0, nullptr);
+            if (first) ts(6, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
             auto compactPass = [&](uint32_t pass) {
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, compactPipe_.getPipeline());
                 vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, compactPipe_.getLayout(),
@@ -824,6 +833,8 @@ void GaussianPointRenderer::recordCompute(VkCommandBuffer cmd, uint32_t frameInd
                                  0, 0, nullptr, 2, toResolve, 0, nullptr);
             if (first) ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
         } else if (first) {
+            ts(5, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+            ts(6, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
             ts(2, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
             ts(3, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
         }
@@ -946,6 +957,7 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.activeSamples  = p[2];
     s.drawnPoints    = p[3];
     s.candidateCount = p[4];
+    s.keepSaturated  = p[7];
     s.accumFrames    = p[5];
     s.shDegreeData   = shDegreeData_;
     const auto* work = static_cast<const uint32_t*>(workBuf_[f].getMapped());
@@ -957,6 +969,8 @@ GaussianPointRenderer::Stats GaussianPointRenderer::getStats() const
     s.splatColorMs = t.splatColorMs;
     s.resolveMs = t.resolveMs;
     s.computeMs = t.computeMs;
+    s.prepareMs = t.prepareMs;
+    s.scanMs = t.scanMs;
 
     s.ensemblesThisFrame = lastEffectiveR_[f];
     s.displayedEnsembles = ensembleHistory_[f];

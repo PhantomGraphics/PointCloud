@@ -135,6 +135,8 @@ void GSViewPanel::onImGui()
 		if ((zoomChanged || densityClampChanged) && onGpParamsChanged_) onGpParamsChanged_(gp_);
 		ImGui::Text("expected/generated: %u / %u", gpStats_.expectedCount, gpStats_.generatedCount);
 		ImGui::Text("candidates / drawn: %u / %u", gpStats_.candidateCount, gpStats_.drawnPoints);
+		if (gp_.pbvr3dMethod == 2)
+			ImGui::Text("keep-saturated splats: %u", gpStats_.keepSaturated);
 		ImGui::Text("active / accum frames: %u / %u", gpStats_.activeSamples, gpStats_.accumFrames);
 		ImGui::Text("GPU: %.2f ms", gpStats_.computeMs);
 		drawEnsembleLodControls();

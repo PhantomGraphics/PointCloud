@@ -166,6 +166,13 @@ bool GSViewRenderer::setEvaluationCamera(float theta, float phi, float distance)
 	return true;
 }
 
+bool GSViewRenderer::setEvaluationCameraTarget(const glm::vec3& target)
+{
+	if (!std::isfinite(target.x) || !std::isfinite(target.y) || !std::isfinite(target.z)) return false;
+	camTarget_ = target;   // update() sees the view change and resets as for any camera move
+	return true;
+}
+
 bool GSViewRenderer::exportLinearPfm(const std::string& path, uint32_t& sampleSets)
 {
 	sampleSets = 0;

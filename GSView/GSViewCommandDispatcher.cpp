@@ -143,6 +143,18 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
         renderer_->setGaussianPointParams(p);
         return "OK";
     }
+    // Measurement-only splat-cost breakdown (PLAN_footprint_aware_density_calibration.md
+    // Phase 0). 0 = normal; 1 = skip atomics; 2 = cheap radius; 3 = both. Renders a
+    // deliberately wrong image -- never use in a correctness scenario.
+    if (name == "GetGpKeepSaturated") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().keepSaturated) : "Error:renderer not available";
+    if (name == "GetGpActiveSamples") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointStats().activeSamples) : "Error:renderer not available";
+    if (name == "GetGpProfileVariant") return renderer_ ? "Val:" + std::to_string(renderer_->getGaussianPointProfileVariant()) : "Error:renderer not available";
+    if (name == "SetGpProfileVariant") {
+        if (!renderer_) return "Error:renderer not available";
+        if (rest.size() != 1 || rest[0] < '0' || rest[0] > '3') return "Error:expected 0..3";
+        renderer_->setGaussianPointProfileVariant(static_cast<uint32_t>(rest[0] - '0'));
+        return "OK";
+    }
     if (name == "SetPbvrReferencePixelLength") {
         if (!renderer_) return "Error:renderer not available";
         float length;
@@ -166,6 +178,19 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
             || !tryFloat(rest.substr(b + 1), distance)
             || !renderer_->setEvaluationCamera(theta, phi, distance))
             return "Error:camera requires theta,phi,distance (radians, positive distance)";
+        return "OK";
+    }
+    if (name == "SetGpCameraTarget") {
+        if (!renderer_) return "Error:renderer not available";
+        const size_t a = rest.find(',');
+        const size_t b = a == std::string::npos ? a : rest.find(',', a + 1);
+        float x, y, z;
+        if (a == std::string::npos || b == std::string::npos
+            || !tryFloat(rest.substr(0, a), x)
+            || !tryFloat(rest.substr(a + 1, b - a - 1), y)
+            || !tryFloat(rest.substr(b + 1), z)
+            || !renderer_->setEvaluationCameraTarget(glm::vec3(x, y, z)))
+            return "Error:camera target requires finite x,y,z";
         return "OK";
     }
     if (name == "ExportGpLinear") {
@@ -418,6 +443,7 @@ std::string GSViewCommandDispatcher::cmdGetGpStats()
            ",Active:" + std::to_string(s.activeSamples) +
            ",Drawn:" + std::to_string(s.drawnPoints) +
            ",Candidates:" + std::to_string(s.candidateCount) +
+           ",KeepSaturated:" + std::to_string(s.keepSaturated) +
            ",Accum:" + std::to_string(s.accumFrames) +
            ",ShDeg:" + std::to_string(s.shDegreeData);
 }
@@ -467,6 +493,9 @@ std::string GSViewCommandDispatcher::buildProfile() const
         ";seedValue=" + std::to_string(p.seed) +
         ";compact=" + std::to_string(p.compactPipeline) +
         ";compactFallback=" + std::to_string(s.compactFallback) +
+        ";keepSaturated=" + std::to_string(s.keepSaturated) +
+        ";prepareMs=" + fmtF(s.prepareMs) + ";scanMs=" + fmtF(s.scanMs) +
+        ";profileVariant=" + std::to_string(renderer_->getGaussianPointProfileVariant()) +
         ";pbvrZoom=" + std::to_string(p.pbvrZoomRecalibration) +
         ";referencePixelLength=" + fmtF(p.pbvrReferencePixelLength) +
         ";lodMode=" + std::to_string(p.lodMode) +
@@ -494,10 +523,10 @@ std::string GSViewCommandDispatcher::cmdGetGpTimings()
 {
     if (!renderer_) return "Error:renderer not available";
     const auto s = renderer_->getGaussianPointStats();
-    char buf[192];
+    char buf[256];
     std::snprintf(buf, sizeof(buf),
-        "Compute:%.3f,Clear:%.3f,Depth:%.3f,Color:%.3f,Resolve:%.3f",
-        s.computeMs, s.clearMs, s.splatDepthMs, s.splatColorMs, s.resolveMs);
+        "Compute:%.3f,Clear:%.3f,Depth:%.3f,Color:%.3f,Resolve:%.3f,Prepare:%.3f,Scan:%.3f",
+        s.computeMs, s.clearMs, s.splatDepthMs, s.splatColorMs, s.resolveMs, s.prepareMs, s.scanMs);
     return buf;
 }
 

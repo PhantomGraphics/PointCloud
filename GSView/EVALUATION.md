@@ -134,3 +134,48 @@ of the exe's link state. This affects every Vulkan app built with that macro
 (PhysicsView, PointCloudView, GSView, ...), not just this measurement -- a
 GLSL-only change anywhere in this codebase could previously ship stale shaders
 without a full/clean rebuild.
+
+## GaussianPoint splat cost breakdown (PLAN_footprint_aware_density_calibration.md Phase 0)
+
+```powershell
+python docs\paper\gps_pbvr_2026\footprint_phase0_cost_breakdown.py `
+    --exe Phantom\build\windows-release\PointCloud\GSView.exe `
+    --output docs\paper\gps_pbvr_2026\results_footprint_phase0_<gpu>_<date>
+```
+
+Renders one fixed view per scene under the measurement-only `SetGpProfileVariant`
+shader variants (0 normal, 1 skip depth/colour atomics, 2 replace the corrected-radius
+inverse `invDilog` with a plain Gaussian radius, 3 both) and attributes the splat
+interval (`depthMs + colorMs`; `prepareMs`/`scanMs` are the new timestamp subdivisions
+of the depth interval). Variants 1-3 render deliberately wrong images; they exist only
+for this attribution and are not reachable from the UI or `Params`.
+
+Measured on Intel Iris Xe, Release, SH degree 3, LOD off, frame seed 1, medians of 12
+frames (`docs/paper/gps_pbvr_2026/results_footprint_phase0_irisxe_20260923/`):
+
+| Scene | Condition | splat ms | prepare+scan ms | atomics ms (share) | invDilog ms (share) | compact path |
+|---|---|---:|---:|---:|---:|---|
+| train (559K) | 400x300 spp1 | 80.6 | 9.1 | -0.2 (0%) | 48.7 (60%) | replay (9.8M pts > 8M cache) |
+| train | 800x600 spp4 | 573.2 | 10.2 | 28.6 (5%) | 450.3 (79%) | replay |
+| bonsai (1.16M) | 400x300 spp1 | 27.1 | 15.4 | -0.6 (-2%) | 5.3 (20%) | cached |
+| bonsai | 800x600 spp4 | 250.5 | 17.6 | 2.1 (1%) | 178.9 (71%) | replay |
+| gs_large_scene (15K) | 400x300 spp1 | 1.1 | 0.2 | 0.0 (0%) | 0.6 (54%) | cached |
+| gs_large_scene | 800x600 spp4 | 8.0 | 0.3 | -1.1 (-14%) | 4.5 (57%) | cached |
+
+Atomics are within noise (at most 5% of the splat interval); the per-point corrected-radius
+inverse (`sampleRadius` -> `invDilog`, 12 safeguarded Newton steps each evaluating `dilog`,
+plus a per-call `dilog(o)` that does not depend on the point) is the dominant cost whenever
+the point count is large. Only bonsai at 400x300 spp1 is prepare-bound. Consequences:
+
+- The Phase 4 Go/No-Go gate passes: fewer, larger footprint points cut the dominant
+  per-point sampling cost by ~s^2 while the atomic writes they keep are cheap.
+- Independently of footprint calibration, a cheaper radius inverse (per-splat `dilog(o)`
+  hoisting, a tabulated inverse CDF over (o, u)) could remove most of this cost with no
+  change in distribution. Not done here; it is a separate optimization.
+
+The same run records `keepSaturated` (ViewConditioned splats whose extinction candidate
+set is smaller than the GPS target, so they are under-covered) at default settings
+(basePointsPerSplat 512): train 5,112 (0.9%) / 32,006 (5.7%), bonsai 24,053 (2.1%) /
+115,152 (10.0%), gs_large_scene 163 (1.1%) / 626 (4.2%) at 400x300 spp1 / 800x600 spp4.
+ViewConditioned is therefore not a GPS-count match on real data at the higher sample
+density, even though its candidate sets are already 17-120x larger than GPS's point count.

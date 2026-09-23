@@ -76,8 +76,15 @@ public:
 	void setGaussianPointParams(const GaussianPointRenderer::Params& p);
 	const GaussianPointRenderer::Params& getGaussianPointParams() const { return gpParams_; }
 	bool setEvaluationCamera(float theta, float phi, float distance);
+	// Orbit target (default origin). Lets evaluation scripts express an eye-fixed
+	// yaw (the eye stays put, the target swings around it) that the orbit angles
+	// alone cannot (docs/todo/PLAN_footprint_aware_density_calibration.md Phase 0).
+	bool setEvaluationCameraTarget(const glm::vec3& target);
 	bool exportLinearPfm(const std::string& path, uint32_t& sampleSets);
 	void resetGaussianPointAccumulation() { gaussianPoint_.resetAccumulation(); }
+	// Measurement-only shader variant (GaussianPointRenderer::setProfileVariant).
+	void setGaussianPointProfileVariant(uint32_t v) { gaussianPoint_.setProfileVariant(v); }
+	uint32_t getGaussianPointProfileVariant() const { return gaussianPoint_.getProfileVariant(); }
 	// Records the GaussianPoint compute passes; call from the app's onPreRender.
 	void recordGaussianPointCompute(VkCommandBuffer cmd, uint32_t frameIndex);
 	bool validateGaussianPointOracle(double& psnrAll, double& psnrForeground,

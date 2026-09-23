@@ -14,7 +14,7 @@ layout(std140, binding = 5) uniform Params {
     uvec4 ctrl;    // numSplats, frameIndex, seedMode, countMode
     vec4  p2;      // maxPointsPerGaussian, footprintCullPx, densityScale, unused
     vec4  bg;      // background rgb, unused
-    vec4  camPos;  // world-space camera position, unused
+    vec4  camPos;  // world-space camera position, w = measurement-only profile variant
     uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, unused
     vec4  p3;      // gamma, unused, budgetThin, SH storage stride/channel
 } u;
@@ -28,11 +28,17 @@ vec2 normalPair(inout RS rs) {
 }
 shared uvec2 totals[64];
 void main() {
+    // Measurement-only profile variant (GaussianPointRenderer::setProfileVariant, 0 = normal):
+    // bit 1 skips the depth/colour atomics, bit 2 swaps the corrected-radius inverse for a
+    // plain Gaussian radius. Uniform branch; bit-identical output when 0.
+    uint variant = uint(u.camPos.w);
+    bool skipAtomics = (variant & 1u) != 0u;
+    bool cheapRadius = (variant & 2u) != 0u;
     uvec2 counts = uvec2(0);
     for (uint index = gl_GlobalInvocationID.x; index < work[3]; index += gl_NumWorkGroups.x * 64u) {
         if (pc.pass == 1u && work[4] == 0u) {
             uvec4 v = particles[index];
-            if (v.w != 0u && depthBuf[v.x] == v.y) atomicMin(colorBuf[v.x], v.z);
+            if (!skipAtomics && v.w != 0u && depthBuf[v.x] == v.y) atomicMin(colorBuf[v.x], v.z);
             continue;
         }
         // Upper bound of exclusive offsets handles zero-count primitives.
@@ -48,7 +54,7 @@ void main() {
         vec2 pixel;
         uint key = q.meta.z;
         if (q.meta.w == 0u) {
-            float r = sampleRadius(q.info.x, rnd(rs));
+            float r = cheapRadius ? sqrt(-2.0 * log(max(rnd(rs), 1e-7))) : sampleRadius(q.info.x, rnd(rs));
             float t = TWO_PI * rnd(rs);
             vec2 v = r * vec2(cos(t), sin(t));
             pixel = q.a.xy + vec2(q.a.z*v.x, q.a.w*v.x + q.b.x*v.y);
@@ -84,9 +90,9 @@ void main() {
         uint sampleIndex = (uint(pixel.y)*u.dims.x + uint(pixel.x))*u.dims.z + sub.y*u.dims.w + sub.x;
         if (work[4] == 0u) particles[index] = uvec4(sampleIndex, key, q.meta.y, 1u);
         if (pc.pass == 0u) {
-            atomicMin(depthBuf[sampleIndex], key);
+            if (!skipAtomics) atomicMin(depthBuf[sampleIndex], key);
             counts.y++;
-        } else if (depthBuf[sampleIndex] == key) atomicMin(colorBuf[sampleIndex], q.meta.y);
+        } else if (!skipAtomics && depthBuf[sampleIndex] == key) atomicMin(colorBuf[sampleIndex], q.meta.y);
     }
     totals[gl_LocalInvocationID.x] = counts;
     barrier();

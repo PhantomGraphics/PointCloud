@@ -23,7 +23,7 @@ struct GsPoint {
 layout(std430, binding = 0) readonly buffer InBuf   { GsPoint splats[]; };
 layout(std430, binding = 1)          buffer DepthB  { uint  depthBuf[]; };
 layout(std430, binding = 2)          buffer ColorB  { uint colorBuf[]; };  // deterministic logarithmic 11/11/10-bit HDR
-layout(std430, binding = 4)          buffer StatsB  { uint  stats[]; };     // 0:expected*256 1:generated 2:active 3:drawn 4:candidates 5:accum sets
+layout(std430, binding = 4)          buffer StatsB  { uint  stats[]; };     // 0:expected*256 1:generated 2:active 3:drawn 4:candidates 5:accum sets 6:expected overflow 7:ViewConditioned keep-saturated
 layout(std430, binding = 6) readonly buffer ShRestB { float shRest[]; };
 
 layout(std140, binding = 5) uniform Params {
@@ -34,7 +34,7 @@ layout(std140, binding = 5) uniform Params {
     uvec4 ctrl;    // numSplats, frameIndex, seedMode, countMode
     vec4  p2;      // maxPointsPerGaussian, footprintCullPx, densityScale, unused
     vec4  bg;      // background rgb, unused
-    vec4  camPos;  // world-space camera position, unused
+    vec4  camPos;  // world-space camera position, w = measurement-only profile variant
     uvec4 ctrl2;   // resetAccum, shDegree, tonemapMode, unused
     vec4  p3;      // gamma, unused, budgetThin, SH storage stride/channel
 } u;
@@ -264,7 +264,8 @@ void splatOne(uint id) {
     uint pointSeed = rs.s;
     for (int i = 0; i < Ni; ++i) {
         rs.s = pcg(pointSeed ^ (uint(i) * 2891336453u + 1u));
-        float r  = sampleRadius(op, rnd(rs));
+        float r  = ((uint(u.camPos.w) & 2u) != 0u) ? sqrt(-2.0 * log(max(rnd(rs), 1e-7)))
+                                                   : sampleRadius(op, rnd(rs));   // profile variant bit 2
         float th = TWO_PI * rnd(rs);
         float wx = r * cos(th), wy = r * sin(th);
         float ox = l00 * wx;
@@ -276,7 +277,9 @@ void splatOne(uint id) {
         uint sx = min(uint(fract(fxp) * float(side)), side - 1u);
         uint sy = min(uint(fract(fyp) * float(side)), side - 1u);
         uint sidx = ((py * W_ + px) * sppI) + (sy * side + sx);
-        if (pc.pass == 0u) {
+        if ((uint(u.camPos.w) & 1u) != 0u) {
+            // measurement-only profile variant bit 1: skip the atomics
+        } else if (pc.pass == 0u) {
             atomicMin(depthBuf[sidx], dkey);
         } else if (depthBuf[sidx] == dkey) {
             // Atomic colour tie-break makes equal-depth splats deterministic and

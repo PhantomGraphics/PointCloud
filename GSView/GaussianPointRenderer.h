@@ -160,11 +160,20 @@ public:
         uint32_t activeSamples  = 0;   // covered subpixels after resolve
         uint32_t drawnPoints    = 0;   // points that landed on screen
         uint32_t candidateCount = 0;   // PBVR candidate points before view-conditioned thinning
+        // ViewConditioned only: splats whose candidate count fell below the GPS target, so
+        // keepProb saturated at 1 and the splat is under-covered (summed over the frame's
+        // ensembles; 0 on bank-reused ensembles, which skip the prepare pass).
+        // docs/todo/PLAN_footprint_aware_density_calibration.md Phase 0.
+        uint32_t keepSaturated  = 0;
         uint32_t accumFrames    = 0;   // sample sets in the displayed frame-slot accumulator
         uint32_t compactFallback = 0; // 0 cached compact, 1 bounded-memory replay, 2 primitive fallback
         int      shDegreeData   = 0;   // SH degree present in the loaded data
         // GPU pass times in ms (0 when timestamps are unsupported), lagged one frame.
         float    clearMs = 0.f, splatDepthMs = 0.f, splatColorMs = 0.f, resolveMs = 0.f, computeMs = 0.f;
+        // Subdivision of splatDepthMs (first ensemble only; docs/todo/PLAN_footprint_aware_density_calibration.md
+        // Phase 0): prepare (per-Gaussian count/projection), scan (exclusive scan), and the
+        // remainder = compact depth pass (per-point sampling + depth atomics). 0 on bank-reuse frames.
+        float    prepareMs = 0.f, scanMs = 0.f;
 
         // Ensemble LOD (Phase 1). displayedEnsembles is the CPU-tracked cumulative
         // independent-sample count of the displayed slot's current history --
@@ -212,6 +221,14 @@ public:
                   VkExtent2D extent);
 
     void setGSCloud(const Phantom::PointCloud::GSPointCloud* cloud) { cloud_ = cloud; }
+
+    // Measurement-only shader variant (docs/todo/PLAN_footprint_aware_density_calibration.md
+    // Phase 0 cost breakdown). Bit flags: 1 = skip depth/colour atomics, 2 = replace the
+    // GPS corrected-radius inverse (invDilog Newton) with a plain Gaussian radius. Renders a
+    // WRONG image by design, so it is deliberately not a Params field (no UI, no hash, not
+    // saved); 0 = normal rendering. Only reachable via the SetGpProfileVariant command.
+    void setProfileVariant(uint32_t v) { profileVariant_ = v & 3u; }
+    uint32_t getProfileVariant() const { return profileVariant_; }
     void setParams(const Params& p);
     void setCamera(const Camera& c) { camera_ = c; }
     void setPath(Path p) { if (p != path_) { path_ = p; resetAccumulation(); } }
@@ -385,9 +402,11 @@ private:
     std::array<VkDescriptorSet, kMaxFrames>      computeSets_{};
     std::array<VkDescriptorSet, kMaxFrames>      compositeSets_{};
 
-    // GPU timestamps: kMarks per frame (start, +clear, +depth, +color, +resolve).
-    static constexpr uint32_t kMarks = 5;
+    // GPU timestamps: kMarks per frame (start, +clear, +depth, +color, +resolve,
+    // then +prepare and +scan, which subdivide the depth interval; always all written).
+    static constexpr uint32_t kMarks = 7;
     VkQueryPool queryPool_ = VK_NULL_HANDLE;
+    uint32_t profileVariant_ = 0;
     float       tsPeriodNs_ = 0.0f;
     std::array<bool, kMaxFrames>  tsWritten_{};     // frame slot has been recorded at least once
     std::array<Stats, kMaxFrames> lastTimings_{};   // per-frame readback of the pass times

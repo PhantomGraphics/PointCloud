@@ -234,6 +234,11 @@ void splatOne(uint id) {
         float spp   = float(u.dims.z);
         float gpsTarget = spp * TWO_PI * sqrt(det2d) * dilog(op) * dS * bthin;
         keepProb = (lambda > 0.5) ? clamp(gpsTarget / lambda, 0.0, 1.0) : 0.0;
+        // Footprint-calibration Phase 0 (docs/todo/PLAN_footprint_aware_density_calibration.md):
+        // count splats whose candidate set is too small to reach the GPS target (keepProb
+        // saturates at 1 and the splat is silently under-covered). Counted once per splat per
+        // ensemble in the prepare pass, which every compactPipeline setting runs.
+        if (pc.pass == 2u && gpsTarget > lambda && gpsTarget > 0.0) atomicAdd(stats[7], 1u);
     }
 
     uint seed = pcg(id * 747796405u + 1u);
