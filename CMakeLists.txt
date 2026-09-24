@@ -92,10 +92,8 @@ if(PHANTOM_GTEST_FOUND)
         # CPU renderers + image metrics for GPU-vs-oracle verification (Phase 6).
         # Pinned by GaussianPointOracleTest.cpp.
         ${POINTCLOUD_ROOT}/GSView/GaussianPointOracle.cpp
-        # Adaptive ensemble-count state machine for LodMode::Adaptive
-        # (docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 2). Pure CPU, no Vulkan --
-        # pinned by EnsembleLodControllerTest.cpp.
-        ${POINTCLOUD_ROOT}/GSView/EnsembleLodController.cpp
+        # (EnsembleLodController, pinned by EnsembleLodControllerTest.cpp, is
+        # header-only in CGLib/Graphics/ since 2026-09-24 -- nothing to compile.)
     )
 
     target_include_directories(PointCloudTest PRIVATE
@@ -215,7 +213,6 @@ add_executable(GSView
     ${POINTCLOUD_ROOT}/GSView/GaussianPointRenderer.cpp
     ${POINTCLOUD_ROOT}/GSView/GaussianPointMath.cpp
     ${POINTCLOUD_ROOT}/GSView/GaussianPointOracle.cpp
-    ${POINTCLOUD_ROOT}/GSView/EnsembleLodController.cpp
     ${POINTCLOUD_ROOT}/GSView/ui/GSViewPanel.cpp
     ${POINTCLOUD_ROOT}/GSView/ui/GSViewMenuBar.cpp
 )
