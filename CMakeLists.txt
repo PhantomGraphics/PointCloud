@@ -257,3 +257,12 @@ if(TARGET GSViewShaders)
                     "${POINTCLOUD_ROOT}/GSView/shaders/gps_sampling.glsl")
     endforeach()
 endif()
+
+# Precompiled headers (cmake/PhantomPch.cmake). PointCloud/pch.h pulls in framework.h
+# for a single file, so the core library gets the plain STL list instead; the test
+# suite gets gtest + STL for every TU (its pch.h holds only gtest).
+include(PhantomPch)
+phantom_use_pch_headers(PointCloudTest ${PHANTOM_PCH_GTEST})
+foreach(_t PointCloudCore PointCloudView GSView)
+    phantom_use_pch_headers(${_t} ${PHANTOM_PCH_STL})
+endforeach()
