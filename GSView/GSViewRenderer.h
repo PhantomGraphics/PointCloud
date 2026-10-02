@@ -3,7 +3,7 @@
 #include "GaussianPointRenderer.h"
 
 #include "../PointRenderer/include/VkPointRenderer.h"
-#include "../PointRenderer/include/VkPointScene.h"
+#include "../PointRenderer/include/PointScene.h"
 #include "../../CGLib/VkAppBase/IVkSubRenderer.h"
 
 #define GLM_FORCE_RADIANS
@@ -116,7 +116,7 @@ public:
 
 private:
 	SortShaders sortShaders_;
-	VKR::VkPointScene vkScene_;
+	VKR::PointScene vkScene_;
 	VKR::VkPointRenderer sortRenderer_;
 	bool sceneDirty_ = true;
 

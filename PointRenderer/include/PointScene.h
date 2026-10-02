@@ -11,7 +11,7 @@
 
 namespace VKR {
 
-class VkPointScene {
+class PointScene {
 public:
     struct SceneData {
         int id = -1;

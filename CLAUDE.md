@@ -85,7 +85,7 @@ cmake --build --preset windows-debug
 
 ### PointRenderer（`PointRenderer/`）— 点群/GS 描画共有ライブラリ
 
-`Phantom::VKR`（`include/`/`src/` 構成、他プロジェクトと異なり `include`/`src` 分離）。`VkPointRenderer`/`VkPointCloudPipeline`/`VkPointScene` が通常点群の描画を、`VkGSPointRenderer`/`GSSplat` が GS スプラットの描画を担当。`PointCloudView` と `GSView` の両方から参照される。
+`Phantom::VKR`（`include/`/`src/` 構成、他プロジェクトと異なり `include`/`src` 分離）。`VkPointRenderer`/`VkPointCloudPipeline`/`PointScene` が通常点群の描画を、`VkGSPointRenderer`/`GSSplat` が GS スプラットの描画を担当。`PointCloudView` と `GSView` の両方から参照される。
 
 ### PointCloudView（`PointCloudView/`）— 点群処理スタンドアロン ImGui + Vulkan アプリ
 

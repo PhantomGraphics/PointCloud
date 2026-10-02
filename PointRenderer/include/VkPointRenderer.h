@@ -6,7 +6,7 @@
 
 #include "VkPointCloudPipeline.h"
 #include "VkGSPointRenderer.h"
-#include "VkPointScene.h"
+#include "PointScene.h"
 
 #include "../../../CGLib/VulkanGraphics/VulkanBuffer.h"
 #include "../../../CGLib/Renderer/VkRenderer/VkLineRenderer.h"
@@ -56,7 +56,7 @@ public:
     void onRender(VkCommandBuffer cmd, uint32_t frameIndex);
     void onCleanup(VkDevice device);
 
-    void setScene(VkPointScene* scene) { scene_ = scene; }
+    void setScene(PointScene* scene) { scene_ = scene; }
     void setActiveScene(int id);
     void notifySceneChanged();
     void notifyActiveChanged();
@@ -74,7 +74,7 @@ public:
 private:
     const Phantom::VKG::VulkanContext* ctx_ = nullptr;
     const Phantom::VKG::VulkanCommandPool* pool_ = nullptr;
-    VkPointScene* scene_ = nullptr;
+    PointScene* scene_ = nullptr;
     int activeSceneId_ = -1;
 
     std::vector<Vertex> pendingPoints_;

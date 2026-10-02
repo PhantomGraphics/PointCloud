@@ -141,7 +141,7 @@ add_library(PointRendererCore STATIC
     ${POINTCLOUD_ROOT}/PointRenderer/src/VkGSPointRenderer.cpp
     ${POINTCLOUD_ROOT}/PointRenderer/src/VkPointCloudPipeline.cpp
     ${POINTCLOUD_ROOT}/PointRenderer/src/VkPointRenderer.cpp
-    ${POINTCLOUD_ROOT}/PointRenderer/src/VkPointScene.cpp
+    ${POINTCLOUD_ROOT}/PointRenderer/src/PointScene.cpp
 )
 target_include_directories(PointRendererCore PRIVATE
     ${CGLIB_ROOT}/ThirdParty/glm-0.9.9.8
