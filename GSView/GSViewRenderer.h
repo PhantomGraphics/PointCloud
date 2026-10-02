@@ -116,7 +116,7 @@ public:
 
 private:
 	SortShaders sortShaders_;
-	VKR::PointScene vkScene_;
+	Phantom::PointCloud::PointScene vkScene_;
 	VKR::VkPointRenderer sortRenderer_;
 	bool sceneDirty_ = true;
 

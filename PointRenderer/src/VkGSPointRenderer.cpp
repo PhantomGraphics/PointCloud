@@ -39,16 +39,16 @@ bool VkGSPointRenderer::create(const Phantom::VKG::VulkanContext& ctx,
 
     VkVertexInputBindingDescription bd{};
     bd.binding = 0;
-    bd.stride = sizeof(GSSplat);
+    bd.stride = sizeof(Phantom::PointCloud::GSSplat);
     bd.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
     pCfg.bindingDescs = { bd };
 
     pCfg.attrDescs = {
-        VkVertexInputAttributeDescription{ 0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(GSSplat, centerSize)) },
-        VkVertexInputAttributeDescription{ 1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(GSSplat, covRow0)) },
-        VkVertexInputAttributeDescription{ 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(GSSplat, covRow1)) },
-        VkVertexInputAttributeDescription{ 3, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(GSSplat, covRow2)) },
-        VkVertexInputAttributeDescription{ 4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(GSSplat, color)) }
+        VkVertexInputAttributeDescription{ 0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(Phantom::PointCloud::GSSplat, centerSize)) },
+        VkVertexInputAttributeDescription{ 1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(Phantom::PointCloud::GSSplat, covRow0)) },
+        VkVertexInputAttributeDescription{ 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(Phantom::PointCloud::GSSplat, covRow1)) },
+        VkVertexInputAttributeDescription{ 3, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(Phantom::PointCloud::GSSplat, covRow2)) },
+        VkVertexInputAttributeDescription{ 4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<uint32_t>(offsetof(Phantom::PointCloud::GSSplat, color)) }
     };
     pCfg.descriptorSetLayout = gfxSetLayout_.get();
     if (!gfxPipeline_.create(ctx, renderPass, pCfg)) {
@@ -149,7 +149,7 @@ void VkGSPointRenderer::destroy(VkDevice device) {
 }
 
 void VkGSPointRenderer::upload(const Phantom::VKG::VulkanContext& ctx,
-                               const std::vector<GSSplat>& splats) {
+                               const std::vector<Phantom::PointCloud::GSSplat>& splats) {
     VkDevice dev = ctx.getDevice();
 
     count_ = static_cast<uint32_t>(splats.size());
@@ -158,7 +158,7 @@ void VkGSPointRenderer::upload(const Phantom::VKG::VulkanContext& ctx,
         return;
     }
 
-    const VkDeviceSize bytes = sizeof(GSSplat) * count_;
+    const VkDeviceSize bytes = sizeof(Phantom::PointCloud::GSSplat) * count_;
     if (!splatBuffer_.isValid() || splatBuffer_.getSize() < bytes) {
         splatBuffer_.destroy(dev);
         splatBuffer_.createMapped(ctx,

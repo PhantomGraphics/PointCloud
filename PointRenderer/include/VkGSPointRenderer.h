@@ -38,7 +38,7 @@ public:
     void destroy(VkDevice device);
 
     void upload(const Phantom::VKG::VulkanContext& ctx,
-                const std::vector<GSSplat>& splats);
+                const std::vector<Phantom::PointCloud::GSSplat>& splats);
 
     void updateMVP(uint32_t frame, const glm::mat4& mvp);
     void sortByView(const glm::vec3& eye);

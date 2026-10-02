@@ -36,13 +36,13 @@ static float shDcToColor(float sh) {
 	return std::clamp(sh * 0.28209479177387814f + 0.5f, 0.0f, 1.0f);
 }
 
-static std::vector<VKR::GSSplat> buildSplats(
+static std::vector<Phantom::PointCloud::GSSplat> buildSplats(
 	const Phantom::PointCloud::GSPointCloud& cloud,
 	GSView::DebugSplatInfo& dbg,
 	float splatSizeScale)
 {
 	dbg = {};
-	std::vector<VKR::GSSplat> out;
+	std::vector<Phantom::PointCloud::GSSplat> out;
 	out.reserve(cloud.points.size());
 
 	constexpr int kPrintCount = 3;
@@ -65,7 +65,7 @@ static std::vector<VKR::GSSplat> buildSplats(
 		const float msy = maxScale / sy;
 		const float msz = maxScale / sz;
 
-		VKR::GSSplat s{};
+		Phantom::PointCloud::GSSplat s{};
 		s.centerSize = { p.x, p.y, p.z, maxScale * splatSizeScale };
 		s.covRow0 = { r0.x * msx, r0.y * msy, r0.z * msz, 0.0f };
 		s.covRow1 = { r1.x * msx, r1.y * msy, r1.z * msz, 0.0f };

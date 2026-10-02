@@ -238,11 +238,11 @@ void PointCloudRenderer::syncScene() {
         scene_.addPoints(id, positions, colors);
         scene_.setNormals(id, srcScene->getNormals());
 
-        std::vector<VKR::GSSplat> splats;
+        std::vector<Phantom::PointCloud::GSSplat> splats;
         const auto& srcSplats = srcScene->getGSSplats();
         splats.reserve(srcSplats.size());
         for (const auto& s : srcSplats) {
-            VKR::GSSplat d{};
+            Phantom::PointCloud::GSSplat d{};
             d.centerSize = s.centerSize;
             d.covRow0 = s.covRow0;
             d.covRow1 = s.covRow1;

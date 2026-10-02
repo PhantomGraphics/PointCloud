@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace VKR {
+namespace Phantom::PointCloud {
 
 struct GSSplat {
     glm::vec4 centerSize;
@@ -17,6 +17,10 @@ struct GSSplat {
 };
 
 static_assert(sizeof(GSSplat) == 80, "GSSplat layout must remain binary-compatible");
+
+} // namespace Phantom::PointCloud
+
+namespace VKR {
 
 struct GSSortPushConstants {
     uint32_t count = 0;

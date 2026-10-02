@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace VKR {
+namespace Phantom::PointCloud {
 
 int PointScene::add(const std::string& name) {
     SceneData data;
@@ -80,4 +80,4 @@ std::vector<int> PointScene::allIds() const {
     return ids;
 }
 
-} // namespace VKR
+} // namespace Phantom::PointCloud

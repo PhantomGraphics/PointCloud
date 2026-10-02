@@ -114,7 +114,7 @@ private:
     const Phantom::VKG::VulkanContext*     ctx_   = nullptr;
     const Phantom::VKG::VulkanCommandPool* pool_  = nullptr;
     Shaders                       shaders_;
-    VKR::PointScene             scene_;
+    Phantom::PointCloud::PointScene             scene_;
     VKR::VkPointRenderer          rendererCore_;
     RenderMode renderMode_ = RenderMode::Point;
     bool gsAvailable_ = false;

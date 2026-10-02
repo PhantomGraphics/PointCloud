@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace VKR {
+namespace Phantom::PointCloud {
 
 class PointScene {
 public:
@@ -44,4 +44,4 @@ private:
     std::vector<SceneData> scenes_;
 };
 
-} // namespace VKR
+} // namespace Phantom::PointCloud

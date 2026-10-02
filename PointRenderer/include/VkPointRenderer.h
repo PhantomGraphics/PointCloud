@@ -56,7 +56,7 @@ public:
     void onRender(VkCommandBuffer cmd, uint32_t frameIndex);
     void onCleanup(VkDevice device);
 
-    void setScene(PointScene* scene) { scene_ = scene; }
+    void setScene(Phantom::PointCloud::PointScene* scene) { scene_ = scene; }
     void setActiveScene(int id);
     void notifySceneChanged();
     void notifyActiveChanged();
@@ -74,7 +74,7 @@ public:
 private:
     const Phantom::VKG::VulkanContext* ctx_ = nullptr;
     const Phantom::VKG::VulkanCommandPool* pool_ = nullptr;
-    PointScene* scene_ = nullptr;
+    Phantom::PointCloud::PointScene* scene_ = nullptr;
     int activeSceneId_ = -1;
 
     std::vector<Vertex> pendingPoints_;
@@ -86,7 +86,7 @@ private:
     Phantom::VKG::VulkanBuffer vertexBuffer_;
 
     std::unique_ptr<VkGSPointRenderer> gsRenderer_;
-    std::vector<GSSplat> pendingSplats_;
+    std::vector<Phantom::PointCloud::GSSplat> pendingSplats_;
     bool gsAvailable_ = false;
     bool gsDirty_ = false;
 
