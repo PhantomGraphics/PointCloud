@@ -159,3 +159,50 @@ TEST(CommandConsoleModel, CommonPrefixOfCandidates)
     EXPECT_EQ(Model::commonPrefix({"GetStatus"}), "GetStatus");
     EXPECT_EQ(Model::commonPrefix({}), "");
 }
+
+TEST(CommandConsoleModel, ScenarioCommandRunsThroughTheSameSubmitPathAndItsResponseGoesBackToTheScenario)
+{
+    Model m;
+    std::string cmd;
+    ASSERT_EQ(m.submit("GetStatus", kCatalog, cmd, true), Model::SubmitResult::Dispatch);
+    EXPECT_EQ(cmd, "GetStatus");
+    EXPECT_EQ(m.pending(), 1u);
+    EXPECT_EQ(m.lines()[0].text, "> GetStatus");   // echoed exactly like a typed line
+
+    std::vector<std::string> responses = {"OK"};
+    m.consumeResponses(responses);
+    EXPECT_EQ(m.lines().back().text, "OK");          // shown in the window ...
+    ASSERT_EQ(responses.size(), 1u);                 // ... and still delivered to the scenario
+    EXPECT_EQ(responses[0], "OK");
+    EXPECT_EQ(m.pending(), 0u);
+}
+
+TEST(CommandConsoleModel, ScenarioAndTypedResponsesAreSeparatedByOrigin)
+{
+    Model m;
+    std::string cmd;
+    m.submit("GetSplatCount", kCatalog, cmd);        // typed
+    m.submit("GetStatus", kCatalog, cmd, true);      // scenario
+    std::vector<std::string> responses = {"Val:5", "OK"};
+    m.consumeResponses(responses);
+    ASSERT_EQ(responses.size(), 1u);
+    EXPECT_EQ(responses[0], "OK");                   // only the scenario's answer is passed on
+}
+
+TEST(CommandConsoleModel, ScenarioLineIsNeverTreatedAsAConsoleLocalCommand)
+{
+    Model m;
+    std::string cmd;
+    EXPECT_EQ(m.submit("help", kCatalog, cmd, true), Model::SubmitResult::Dispatch);
+    EXPECT_EQ(cmd, "help");
+    EXPECT_EQ(m.submit("clear", kCatalog, cmd, true), Model::SubmitResult::Dispatch);
+}
+
+TEST(CommandConsoleModel, LogStaysBoundedUnderLongScenarios)
+{
+    Model m;
+    std::string cmd;
+    for (int i = 0; i < 5000; ++i) m.submit("Step" + std::to_string(i), kCatalog, cmd, true);
+    EXPECT_LE(m.lines().size(), 2000u);
+    EXPECT_EQ(m.lines().back().text, "> Step4999");
+}

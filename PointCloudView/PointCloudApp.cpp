@@ -233,7 +233,7 @@ void PointCloudApp::onUpdate(uint32_t frameIndex) {
     scenarioBrowser_.pumpQueue();
 
     if (runner_.isActive()) {
-        if (runner_.tick(dispatcher_, responses)) {
+        if (runner_.tick(shell_.scenarioDispatcher(), responses)) {
             if (runner_.hasFailed()) {
                 fprintf(stderr, "[Scenario] FAILED: %s\n", runner_.failMessage().c_str());
                 exitCode_ = 1;

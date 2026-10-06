@@ -150,7 +150,7 @@ void GSViewApp::onUpdate(uint32_t frameIndex)
 	panel_.setLocked(scenarioRunning);
 
 	if (scenarioRunning) {
-		if (runner_.tick(dispatcher_, responses)) {
+		if (runner_.tick(shell_.scenarioDispatcher(), responses)) {
 			if (runner_.hasFailed()) {
 				std::fprintf(stderr, "[Scenario] FAILED: %s\n", runner_.failMessage().c_str());
 				exitCode_ = 1;
