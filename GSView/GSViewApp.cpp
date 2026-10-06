@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace GSView {
 
@@ -15,6 +16,42 @@ std::string fmtArg(float v)
 	char buf[32];
 	std::snprintf(buf, sizeof(buf), "%.9g", v);
 	return buf;
+}
+
+// Commands equivalent to the GUI having changed GP params `from` -> `to`; every
+// field the GUI edits has a command, so no lambda path is needed.
+std::vector<std::string> gpParamCommands(const GaussianPointRenderer::Params& from,
+                                         const GaussianPointRenderer::Params& to)
+{
+	std::vector<std::string> c;
+	const auto flag = [](bool b) { return std::string(b ? "1" : "0"); };
+	if (to.lodMode != from.lodMode)
+		c.push_back(std::string("SetGpLodMode:") + (to.lodMode == 1 ? "manual" : to.lodMode == 2 ? "adaptive" : "off"));
+	if (to.ensemblesPerFrame != from.ensemblesPerFrame) c.push_back("SetGpEnsemblesPerFrame:" + std::to_string(to.ensemblesPerFrame));
+	if (to.targetEnsembles != from.targetEnsembles) c.push_back("SetGpTargetEnsembles:" + std::to_string(to.targetEnsembles));
+	if (to.lodFrameBudgetLowMs != from.lodFrameBudgetLowMs || to.lodFrameBudgetHighMs != from.lodFrameBudgetHighMs)
+		c.push_back("SetGpLodFrameBudget:" + fmtArg(to.lodFrameBudgetLowMs) + "," + fmtArg(to.lodFrameBudgetHighMs));
+	if (to.pbvrZoomRecalibration != from.pbvrZoomRecalibration) c.push_back("SetPbvrZoom:" + flag(to.pbvrZoomRecalibration));
+	if (to.pbvrReferencePixelLength != from.pbvrReferencePixelLength)
+		c.push_back("SetPbvrReferencePixelLength:" + fmtArg(to.pbvrReferencePixelLength));
+	if (to.pbvrFootprintCalibration != from.pbvrFootprintCalibration)
+		c.push_back("SetPbvrFootprintCalibration:" + std::to_string(to.pbvrFootprintCalibration));
+	if (to.pbvrRadialCorrection != from.pbvrRadialCorrection) c.push_back("SetPbvrRadialCorrection:" + flag(to.pbvrRadialCorrection));
+	if (to.pbvrCentreDepth != from.pbvrCentreDepth) c.push_back("SetPbvrCentreDepth:" + flag(to.pbvrCentreDepth));
+	if (to.pbvrDensityClamp != from.pbvrDensityClamp) c.push_back("SetPbvrDensityClamp:" + flag(to.pbvrDensityClamp));
+	if (to.sppSide != from.sppSide) c.push_back("SetGpSpp:" + std::to_string(to.sppSide * to.sppSide));
+	if (to.seedMode != from.seedMode) c.push_back(std::string("SetGpSeedMode:") + (to.seedMode == 0 ? "deterministic" : "frame"));
+	if (to.densityScale != from.densityScale) c.push_back("SetGpDensityScale:" + fmtArg(to.densityScale));
+	if (to.shDegree != from.shDegree) c.push_back("SetGpShDegree:" + std::to_string(to.shDegree));
+	if (to.tonemapMode != from.tonemapMode)
+		c.push_back(std::string("SetGpTonemap:") + (to.tonemapMode == 1 ? "reinhard" : to.tonemapMode == 2 ? "aces" : "none"));
+	if (to.gamma != from.gamma) c.push_back("SetGpGamma:" + fmtArg(to.gamma));
+	if (to.pointBudget != from.pointBudget) c.push_back("SetGpPointBudget:" + fmtArg(to.pointBudget));
+	if (to.gpPointFootprint != from.gpPointFootprint) c.push_back("SetGpPointFootprint:" + std::to_string(to.gpPointFootprint));
+	if (to.gpAdaptiveFootprintKappa != from.gpAdaptiveFootprintKappa || to.gpFootprintMax != from.gpFootprintMax)
+		c.push_back("SetGpAdaptiveFootprint:" + fmtArg(to.gpAdaptiveFootprintKappa) + "," + std::to_string(to.gpFootprintMax));
+	if (to.gpFootprintCompensate != from.gpFootprintCompensate) c.push_back("SetGpFootprintCompensation:" + flag(to.gpFootprintCompensate));
+	return c;
 }
 } // namespace
 
@@ -45,8 +82,9 @@ GSViewApp::GSViewApp(int width, int height, const std::string& title)
 			dispatcher_.submitUi("SetSplatSizeScale:" + fmtArg(scale));
 		},
 		[this](const GaussianPointRenderer::Params& p) {
-			// Whole-struct edit: no command form, but still ordered through the queue.
-			dispatcher_.submitUi([this, p] { renderer_.setGaussianPointParams(p); });
+			// One command per changed field, same handlers as typed input.
+			for (const auto& cmd : gpParamCommands(renderer_.getGaussianPointParams(), p))
+				dispatcher_.submitUi(cmd);
 		});
 
 	menuBar_.init(
