@@ -2,6 +2,7 @@
 
 #include "../../CGLib/VkAppBase/ScenarioRunner/IScenarioDispatcher.h"
 
+#include <functional>
 #include <mutex>
 #include <queue>
 #include <string>
@@ -20,6 +21,20 @@ public:
     // Thread-safe: may be called from any thread.
     void enqueue(const std::string& cmd);
 
+    // GUI operations go through the same queue as typed/scenario commands, so
+    // they run on the render thread in order. Their response is discarded (a
+    // GUI has no reader for it); the command text is exactly what could be typed.
+    void submitUi(const std::string& cmd);
+    // For GUI edits that have no command form (whole-struct parameter edits).
+    void submitUi(std::function<void()> fn);
+
+    // Values the renderer exposes no getter for; the panel mirrors them so
+    // commands and GUI show the same state.
+    float lastSortPointSize()    const { return lastSortPointSize_; }
+    float lastDensityScale()     const { return lastDensityScale_; }
+    int   lastMaxParticles()     const { return lastMaxParticles_; }
+    float lastPbvrParticleSize() const { return lastPbvrParticleSize_; }
+
     // Call from the render thread (onUpdate) every frame.
     void processQueue();
 
@@ -29,9 +44,13 @@ public:
     // IScenarioDispatcher
     void dispatch(const std::string& cmd) override { enqueue(cmd); }
     std::vector<std::string> collectResponses() override { return drainResponses(); }
+    std::vector<CommandInfo> commandCatalog() const override;
 
 private:
     std::string route(const std::string& cmd);
+    // Runs every catalog name through route() and reports any that is unrouted
+    // (keeps the help/completion list in step with the dispatcher; scenario-testable).
+    std::string cmdCheckCommandCatalog();
 
     // Query commands
     std::string cmdGetStatus();
@@ -119,7 +138,12 @@ private:
     GSViewRenderer* renderer_ = nullptr;
 
     std::mutex              mutex_;
-    std::queue<std::string> inputQueue_;
+    struct Item {
+        std::string           cmd;
+        std::function<void()> fn;      // set => GUI-only operation, no response
+        bool                  silent = false;
+    };
+    std::queue<Item>        inputQueue_;
     std::queue<std::string> outputQueue_;
 };
 

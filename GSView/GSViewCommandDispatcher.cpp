@@ -43,19 +43,34 @@ static std::string fmtF(float v)
 void GSViewCommandDispatcher::enqueue(const std::string& cmd)
 {
     std::lock_guard<std::mutex> lk(mutex_);
-    inputQueue_.push(cmd);
+    inputQueue_.push({cmd, nullptr, false});
+}
+
+void GSViewCommandDispatcher::submitUi(const std::string& cmd)
+{
+    std::lock_guard<std::mutex> lk(mutex_);
+    inputQueue_.push({cmd, nullptr, true});
+}
+
+void GSViewCommandDispatcher::submitUi(std::function<void()> fn)
+{
+    std::lock_guard<std::mutex> lk(mutex_);
+    inputQueue_.push({{}, std::move(fn), true});
 }
 
 void GSViewCommandDispatcher::processQueue()
 {
-    std::queue<std::string> local;
+    std::queue<Item> local;
     {
         std::lock_guard<std::mutex> lk(mutex_);
         std::swap(local, inputQueue_);
     }
     while (!local.empty()) {
-        const std::string resp = route(local.front());
+        Item item = std::move(local.front());
         local.pop();
+        if (item.fn) { item.fn(); continue; }
+        const std::string resp = route(item.cmd);
+        if (item.silent) continue;
         {
             std::lock_guard<std::mutex> lk(mutex_);
             outputQueue_.push(resp);
@@ -74,6 +89,118 @@ std::vector<std::string> GSViewCommandDispatcher::drainResponses()
     return out;
 }
 
+// ---- command catalog (help / completion) -------------------------------------
+// Every name here must be routed by route(); CheckCommandCatalog verifies that.
+
+std::vector<CommandInfo> GSViewCommandDispatcher::commandCatalog() const
+{
+    return {
+        {"GetStatus", "", "Returns OK when the app is responsive"},
+        {"GetSplatCount", "", "Loaded splat count"},
+        {"GetParticleCount", "", "PBVR particle count"},
+        {"GetParticleCapacity", "", "PBVR particle capacity"},
+        {"GetDataGeneration", "", "Counter that increments on every PLY load"},
+        {"GetRenderMode", "", "Current render mode"},
+        {"SetRenderMode", "SortBased|PBVR3DExperimental|GaussianPoint", "Switch render mode"},
+        {"GetGSAvailable", "", "Whether the splat pipeline initialised"},
+        {"GetGaussianPointAvailable", "", "Whether the GaussianPoint renderer initialised"},
+        {"GetSplatSizeScale", "", ""},
+        {"SetSplatSizeScale", "float", "Sort-based splat size scale"},
+        {"GetSortPointSize", "", ""},
+        {"SetSortPointSize", "float", "Point size for sort-based rendering"},
+        {"GetDensityScale", "", ""},
+        {"SetDensityScale", "float", "PBVR density scale"},
+        {"GetMaxParticlesPerSplat", "", ""},
+        {"SetMaxParticlesPerSplat", "int", "PBVR per-splat particle cap"},
+        {"GetPbvrParticleSize", "", ""},
+        {"SetPbvrParticleSize", "float", "PBVR base-point size"},
+        {"GetPbvr3dMethod", "", ""},
+        {"SetPbvr3dMethod", "proportional|extinction|view_conditioned|...", "PBVR3D sampling method"},
+        {"GetCameraFlipY", "", ""},
+        {"SetCameraFlipY", "0|1", "Flip camera up for Y-down data"},
+        {"LoadPLY", "path", "Load a Gaussian-splat PLY (the whole rest of the line is the path)"},
+        {"Screenshot", "path", "Save the swapchain image as PNG"},
+        {"GetGpSpp", "", ""},
+        {"SetGpSpp", "int", "GaussianPoint samples per pixel"},
+        {"GetGpSeed", "", ""},
+        {"SetGpSeed", "uint", "GaussianPoint random seed"},
+        {"GetGpSeedMode", "", ""},
+        {"SetGpSeedMode", "deterministic|frame", ""},
+        {"ResetGpAccumulation", "", "Restart progressive accumulation"},
+        {"GetGpDensityScale", "", ""},
+        {"SetGpDensityScale", "float", ""},
+        {"GetGpGeneratedCount", "", ""},
+        {"GetGpStats", "", "Renderer statistics"},
+        {"GetGpAccumFrames", "", ""},
+        {"GetGpProfile", "", "key=value profile of the current GP frame"},
+        {"GetGpTimings", "", "Per-pass GPU timings"},
+        {"GetGpPointBudget", "", ""},
+        {"SetGpPointBudget", "float", ""},
+        {"ValidateGpOracle", "", "Compare GPU output with the CPU oracle"},
+        {"GetGpShDegree", "", ""},
+        {"SetGpShDegree", "0..3", "Spherical-harmonics degree"},
+        {"GetGpTonemap", "", ""},
+        {"SetGpTonemap", "none|reinhard|aces", ""},
+        {"GetGpGamma", "", ""},
+        {"SetGpGamma", "0.1..4.0", ""},
+        {"GetGpLodMode", "", ""},
+        {"SetGpLodMode", "off|manual|adaptive", "Ensemble LOD mode"},
+        {"GetGpEnsemblesPerFrame", "", ""},
+        {"SetGpEnsemblesPerFrame", "int", ""},
+        {"GetGpTargetEnsembles", "", ""},
+        {"SetGpTargetEnsembles", "int>=1", ""},
+        {"GetGpEnsembleStats", "", ""},
+        {"GetGpEnsemblesThisFrame", "", ""},
+        {"GetGpDisplayedEnsembles", "", ""},
+        {"GetGpLodFrameBudget", "", ""},
+        {"SetGpLodFrameBudget", "low,high", "Adaptive LOD frame budget in ms"},
+        {"GetGpBankReuseStats", "", "BankReused, ThisFrame and Displayed in one read"},
+        {"GetGpBankReused", "", ""},
+        {"GetPbvrBankReuse", "", ""},
+        {"SetPbvrBankReuse", "0|1", ""},
+        {"GetPbvrZoom", "", ""},
+        {"SetPbvrZoom", "0|1", ""},
+        {"GetPbvrDensityClamp", "", ""},
+        {"SetPbvrDensityClamp", "0|1", ""},
+        {"GetGpCompactFallback", "", ""},
+        {"SetGpCompact", "0|1|2", "Compact pipeline (2 = point replay)"},
+        {"GetPbvrFootprintCalibration", "", ""},
+        {"SetPbvrFootprintCalibration", "0..3|none|object_zoom|per_splat_depth|per_splat_footprint", ""},
+        {"GetPbvrRadialCorrection", "", ""},
+        {"SetPbvrRadialCorrection", "0|1", ""},
+        {"GetPbvrCentreDepth", "", ""},
+        {"SetPbvrCentreDepth", "0|1", ""},
+        {"SetPbvrReferencePixelLength", "float>0", ""},
+        {"GetGpPointFootprint", "", ""},
+        {"SetGpPointFootprint", "1..8", "GPS point footprint in subpixels"},
+        {"GetGpAdaptiveFootprint", "", ""},
+        {"SetGpAdaptiveFootprint", "kappa,max", ""},
+        {"GetGpFootprintCompensation", "", ""},
+        {"SetGpFootprintCompensation", "0|1", ""},
+        {"GetGpKeepSaturated", "", ""},
+        {"GetGpActiveSamples", "", ""},
+        {"GetGpProfileVariant", "", ""},
+        {"SetGpProfileVariant", "0..3", "Measurement only"},
+        {"SetGpCamera", "theta,phi,distance", "Evaluation camera (radians)"},
+        {"SetGpCameraTarget", "x,y,z", ""},
+        {"ExportGpLinear", "path", "Write the linear-HDR frame as PFM"},
+    };
+}
+
+std::string GSViewCommandDispatcher::cmdCheckCommandCatalog()
+{
+    // Probe with a junk argument: every routed name answers with its own
+    // validation error (or a harmless value), only an unrouted one says
+    // "unknown command". Commands whose argument is a file path are skipped
+    // (a junk path would write a file); scenarios cover those.
+    std::string missing;
+    for (const auto& c : commandCatalog()) {
+        if (c.name == "LoadPLY" || c.name == "Screenshot" || c.name == "ExportGpLinear") continue;
+        if (route(c.name + ":x").rfind("Error:unknown command", 0) == 0) missing += (missing.empty() ? "" : ",") + c.name;
+    }
+    return missing.empty() ? "OK" : "Error:unrouted catalog entries: " + missing;
+}
+
 // ---- route ------------------------------------------------------------------
 
 std::string GSViewCommandDispatcher::route(const std::string& cmd)
@@ -83,6 +210,7 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
     const auto rest = (c0 != std::string::npos) ? cmd.substr(c0 + 1) : std::string{};
 
     // --- no-arg commands ---
+    if (name == "CheckCommandCatalog")    return cmdCheckCommandCatalog();
     if (name == "GetStatus")              return cmdGetStatus();
     if (name == "GetSplatCount")          return cmdGetSplatCount();
     if (name == "GetParticleCount")       return cmdGetParticleCount();
@@ -233,7 +361,12 @@ std::string GSViewCommandDispatcher::route(const std::string& cmd)
         return "OK";
     }
 
-    if (rest.empty()) return "Error:missing argument for " + name;
+    if (rest.empty()) {
+        // Only a real command can be "missing" its argument; a typo is unknown.
+        for (const auto& c : commandCatalog())
+            if (c.name == name) return "Error:missing argument for " + name;
+        return "Error:unknown command " + name;
+    }
     if (name == "SetGpCamera") {
         if (!renderer_) return "Error:renderer not available";
         const size_t a = rest.find(',');

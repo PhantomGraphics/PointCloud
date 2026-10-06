@@ -1,0 +1,11 @@
+{
+  "name": "command_catalog",
+  "steps": [
+    { "label": "Every catalog entry is routed",        "command": "CheckCommandCatalog", "expect": "OK" },
+    { "label": "Unknown command reports an error",     "command": "NoSuchCommand",       "expect_prefix": "Error:unknown command" },
+    { "label": "Unknown command with argument",        "command": "NoSuchCommand:1",     "expect_prefix": "Error:unknown command" },
+    { "label": "Known command without argument",       "command": "SetGpSpp",            "expect_prefix": "Error:missing argument" },
+    { "label": "Path with spaces/backslashes survives", "command": "LoadPLY:C:\no such dir\a b.ply", "expect_prefix": "Error" },
+    { "label": "App still responsive",                 "command": "GetStatus",           "expect": "OK" }
+  ]
+}

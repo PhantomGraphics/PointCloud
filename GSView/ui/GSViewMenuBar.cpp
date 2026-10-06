@@ -37,6 +37,7 @@ void GSViewMenuBar::onImGui()
 			}
 			ImGui::EndMenu();
 		}
+		if (extraMenus_) extraMenus_();
 		ImGui::EndMainMenuBar();
 	}
 

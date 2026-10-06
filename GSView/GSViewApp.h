@@ -9,6 +9,7 @@
 #include "../../CGLib/VkAppBase/ScenarioRunner/ScenarioRunner.h"
 #include "../../CGLib/VkAppBase/ScenarioRunner/IScenarioHost.h"
 #include "../../CGLib/VkAppBase/ScenarioRunner/ScenarioBrowserPanel.h"
+#include "../../CGLib/VkAppBase/ScenarioRunner/ViewShell.h"
 #include "../PointCloud/GSPointCloud.h"
 
 #include <cstddef>
@@ -62,6 +63,7 @@ protected:
 	void onPreRender(VkCommandBuffer cmd, uint32_t frameIndex) override;
 	void onSwapChainCreated() override;
 	void onImGui() override;
+	void onImGuiReady() override;
 	void onCleanup() override;
 
 private:
@@ -69,6 +71,7 @@ private:
 	GSViewRenderer renderer_;
 	GSViewPanel panel_;
 	GSViewMenuBar menuBar_;
+	ViewShell     shell_;   // Command / Outliner windows + panel visibility
 
 	GSViewCommandDispatcher dispatcher_;
 	ScenarioRunner          runner_;

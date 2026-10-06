@@ -4,32 +4,49 @@
 
 #include <GLFW/glfw3.h>
 #include <cstdio>
+#include <string>
 
 namespace GSView {
+
+namespace {
+// Shortest text that reads back as the same float (commands parse with from_chars).
+std::string fmtArg(float v)
+{
+	char buf[32];
+	std::snprintf(buf, sizeof(buf), "%.9g", v);
+	return buf;
+}
+} // namespace
 
 GSViewApp::GSViewApp(int width, int height, const std::string& title)
 	: ::VKG::VkAppBase(width, height, title)
 {
 	renderer_.setGSCloud(&gsCloud_);
 
+	// GUI edits take the same queue/handlers as typed commands (see
+	// GSViewCommandDispatcher::submitUi), so GUI and Command window cannot diverge.
+	panel_.setShell(&shell_);
 	panel_.init(
 		[this](RenderMode mode) {
-			renderer_.setRenderMode(mode);
+			const char* name = mode == RenderMode::GaussianPoint ? "GaussianPoint"
+				: mode == RenderMode::PBVR3DExperimental ? "PBVR3DExperimental" : "SortBased";
+			dispatcher_.submitUi(std::string("SetRenderMode:") + name);
 		},
 		[this](float pointSize) {
-			renderer_.setSortPointSize(pointSize);
+			dispatcher_.submitUi("SetSortPointSize:" + fmtArg(pointSize));
 		},
 		[this](float density, int maxP, float pSize, int method) {
-			renderer_.setDensityScale(density);
-			renderer_.setMaxParticlesPerSplat(maxP);
-			renderer_.setPbvrParticleSize(pSize);
-			renderer_.setPbvr3dMethod(method);
+			dispatcher_.submitUi("SetDensityScale:" + fmtArg(density));
+			dispatcher_.submitUi("SetMaxParticlesPerSplat:" + std::to_string(maxP));
+			dispatcher_.submitUi("SetPbvrParticleSize:" + fmtArg(pSize));
+			dispatcher_.submitUi("SetPbvr3dMethod:" + std::to_string(method));
 		},
 		[this](float scale) {
-			renderer_.setSplatSizeScale(scale);
+			dispatcher_.submitUi("SetSplatSizeScale:" + fmtArg(scale));
 		},
 		[this](const GaussianPointRenderer::Params& p) {
-			renderer_.setGaussianPointParams(p);
+			// Whole-struct edit: no command form, but still ordered through the queue.
+			dispatcher_.submitUi([this, p] { renderer_.setGaussianPointParams(p); });
 		});
 
 	menuBar_.init(
@@ -46,7 +63,24 @@ GSViewApp::GSViewApp(int width, int height, const std::string& title)
 	dispatcher_.setRenderer(&renderer_);
 	scenarioBrowser_.setHost(this);
 	scenarioBrowser_.setDefaultFolder("scenarios");
-	add(&scenarioBrowser_);
+
+	// Standard screen: render area + menu + Command + Outliner. Everything
+	// else starts hidden and is opened from the View menu / outliner.
+	shell_.setDispatcher(&dispatcher_);
+	shell_.registerPanel("GSView Control", {0.70f, 0.00f, 0.30f, 0.66f});
+	shell_.registerPanel("GS Debug (splat #0)", {0.70f, 0.00f, 0.30f, 0.45f});
+	shell_.registerPanel("Scenario Browser", {0.30f, 0.05f, 0.40f, 0.55f});
+	shell_.setOutlinerProvider([this] {
+		std::vector<ViewShell::OutlinerItem> items;
+		if (const size_t n = gsCloud_.points.size())
+			items.push_back({0x100000000ull + renderer_.getDataGeneration(),
+				"Splat Cloud (" + std::to_string(n) + " splats)", "GS Debug (splat #0)"});
+		const RenderMode m = renderer_.getRenderMode();
+		items.push_back({1, std::string("Renderer: ") + (m == RenderMode::GaussianPoint ? "Gaussian Point"
+			: m == RenderMode::PBVR3DExperimental ? "PBVR 3D (exp.)" : "Sort-Based"), "GSView Control"});
+		return items;
+	});
+	menuBar_.setExtraMenus([this] { shell_.drawViewMenu(); });
 }
 
 void GSViewApp::onInit()
@@ -70,7 +104,6 @@ void GSViewApp::onInit()
 	::VKG::VkAppBase::onInit();
 
 	renderer_.setExtent(getExtent());
-	panel_.setGaussianPointParams(renderer_.getGaussianPointParams());
 	setupCallbacks();
 
 	if (!initialPLYPath_.empty()) {
@@ -98,12 +131,25 @@ void GSViewApp::onInit()
 	}
 }
 
+void GSViewApp::onImGuiReady()
+{
+	// Context exists, imgui.ini is not read until the first frame.
+	shell_.installSettings();
+}
+
 void GSViewApp::onUpdate(uint32_t frameIndex)
 {
 	dispatcher_.processQueue();
 
-	if (runner_.isActive()) {
-		auto responses = dispatcher_.drainResponses();
+	// Single place that collects responses: first the ones for commands typed
+	// into the Command window, the rest belong to the running scenario.
+	auto responses = dispatcher_.drainResponses();
+	shell_.consumeResponses(responses);
+	const bool scenarioRunning = runner_.isActive();
+	shell_.setScenarioActive(scenarioRunning);
+	panel_.setLocked(scenarioRunning);
+
+	if (scenarioRunning) {
 		if (runner_.tick(dispatcher_, responses)) {
 			if (runner_.hasFailed()) {
 				std::fprintf(stderr, "[Scenario] FAILED: %s\n", runner_.failMessage().c_str());
@@ -130,6 +176,11 @@ void GSViewApp::onUpdate(uint32_t frameIndex)
 	panel_.setCameraFlipY(renderer_.getCameraFlipY());
 	panel_.setGaussianPointAvailable(renderer_.isGaussianPointAvailable());
 	panel_.setGaussianPointStats(renderer_.getGaussianPointStats());
+	// Mirror renderer state every frame (also while panels are hidden) so
+	// command-driven changes are visible when a panel is opened.
+	panel_.setGaussianPointParams(renderer_.getGaussianPointParams());
+	panel_.syncPbvrParams(dispatcher_.lastSortPointSize(), dispatcher_.lastDensityScale(),
+		dispatcher_.lastMaxParticles(), dispatcher_.lastPbvrParticleSize(), renderer_.getPbvr3dMethod());
 }
 
 void GSViewApp::onPreRender(VkCommandBuffer cmd, uint32_t frameIndex)
@@ -146,7 +197,13 @@ void GSViewApp::onImGui()
 {
 	if (hideUI_) return; // rendering-only mode: draw nothing so the scene alone is captured
 	menuBar_.onImGui();
+	shell_.drawWindows();
 	panel_.onImGui();
+	scenarioBrowser_.pumpQueue();
+	if (shell_.beginPanel("Scenario Browser")) {
+		scenarioBrowser_.drawEmbedded();
+		shell_.endPanel();
+	}
 	::VKG::VkAppBase::onImGui();
 }
 
@@ -182,16 +239,24 @@ bool GSViewApp::publicLoadPLY(const std::string& path, std::string& err, size_t&
 void GSViewApp::setupCallbacks()
 {
 	auto& win = getWindow();
+	// Camera input is ignored while ImGui owns the mouse (typing/selecting in the
+	// Command window, dragging sliders) and while a scenario runs, so it cannot
+	// disturb a scenario's expectations. A release is always forwarded.
 	win.onMouseButton = [this](int button, int action, int) {
-		if (button == 0) renderer_.handleMouseButton(action == 1);
+		if (button != 0) return;
+		if (action == 1 && (ImGui::GetIO().WantCaptureMouse || runner_.isActive())) return;
+		renderer_.handleMouseButton(action == 1);
 	};
 	win.onCursorPos = [this](double x, double y) {
 		renderer_.handleMouseMove(x, y);
 	};
 	win.onScroll = [this](double, double dy) {
+		if (ImGui::GetIO().WantCaptureMouse || runner_.isActive()) return;
 		renderer_.handleScroll(dy);
 	};
-	panel_.setOnCameraFlipYChanged([this](bool flip) { renderer_.setCameraFlipY(flip); });
+	panel_.setOnCameraFlipYChanged([this](bool flip) {
+		dispatcher_.submitUi(std::string("SetCameraFlipY:") + (flip ? "1" : "0"));
+	});
 }
 
 } // namespace GSView

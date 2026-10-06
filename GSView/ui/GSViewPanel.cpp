@@ -2,6 +2,8 @@
 
 #include "imgui.h"
 
+#include "../../../CGLib/VkAppBase/ScenarioRunner/ViewShell.h"
+
 namespace GSView {
 
 void GSViewPanel::init(
@@ -61,16 +63,14 @@ void GSViewPanel::drawEnsembleLodControls()
 
 void GSViewPanel::onImGui()
 {
-	ImGui::SetNextWindowPos(ImVec2(10.f, 35.f), ImGuiCond_Once);
-	// Tall enough for the GaussianPoint/PBVR3D panel plus the common part of the
-	// Phase 3 Ensemble LOD block (mode combo + Manual's two sliders); Adaptive's
-	// extra budget sliders and state/warning text may need the scrollbar ImGui
-	// adds automatically once content exceeds this.
-	ImGui::SetNextWindowSize(ImVec2(330.f, 400.f), ImGuiCond_Once);
-	if (!ImGui::Begin("GSView Control")) {
-		ImGui::End();
-		return;
-	}
+	drawControl();
+	drawDebug();
+}
+
+void GSViewPanel::drawControl()
+{
+	if (!shell_ || !shell_->beginPanel("GSView Control")) return;
+	ImGui::BeginDisabled(locked_);
 
 	ImGui::Text("Render Mode:");
 	auto radio = [&](const char* label, RenderMode m) {
@@ -211,12 +211,14 @@ void GSViewPanel::onImGui()
 	ImGui::Text("Particles (PBVR): %zu / %zu cap", particleCount_, particleCapacity_);
 	ImGui::Text("FPS: %.1f", fps_);
 
-	ImGui::End();
+	ImGui::EndDisabled();
+	shell_->endPanel();
+}
 
+void GSViewPanel::drawDebug()
+{
 	// ---- Debug window (splat #0) ----------------------------------------
-	ImGui::SetNextWindowPos(ImVec2(10.f, 445.f), ImGuiCond_Once);
-	ImGui::SetNextWindowSize(ImVec2(330.f, 265.f), ImGuiCond_Once);
-	if (ImGui::Begin("GS Debug (splat #0)")) {
+	if (shell_ && shell_->beginPanel("GS Debug (splat #0)")) {
 		ImGui::TextColored(
 			gsAvailable_ ? ImVec4(0.2f,1.f,0.2f,1.f) : ImVec4(1.f,0.3f,0.3f,1.f),
 			gsAvailable_ ? "GS Pipeline: OK" : "GS Pipeline: UNAVAILABLE (fallback to Point)");
@@ -256,8 +258,8 @@ void GSViewPanel::onImGui()
 					? "OK (max axis fills sprite)"
 					: "WARN: col length < 1");
 		}
+		shell_->endPanel();
 	}
-	ImGui::End();
 }
 
 } // namespace GSView

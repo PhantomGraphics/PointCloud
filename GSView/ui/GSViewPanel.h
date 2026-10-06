@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <functional>
 
+class ViewShell;
+
 namespace GSView {
 
 class GSViewPanel {
@@ -37,6 +39,19 @@ public:
 	int getMaxParticlesPerSplat() const { return maxParticlesPerSplat_; }
 	float getPbvrParticleSize() const { return pbvrParticleSize_; }
 
+	// Panels are drawn through the shell (hidden until opened from the View menu).
+	// While `locked` (scenario running) the controls are shown but disabled.
+	void setShell(ViewShell* s) { shell_ = s; }
+	void setLocked(bool v) { locked_ = v; }
+
+	// Mirrors renderer state so values changed by commands show up in the sliders.
+	void syncPbvrParams(float sortPointSize, float densityScale, int maxParticles,
+						float particleSize, int method) {
+		sortPointSize_ = sortPointSize; densityScale_ = densityScale;
+		maxParticlesPerSplat_ = maxParticles; pbvrParticleSize_ = particleSize;
+		pbvr3dMethod_ = method;
+	}
+
 	void onImGui();
 
 private:
@@ -44,6 +59,10 @@ private:
 	// branches (both drive the same GaussianPointRenderer::Params/Stats;
 	// docs/todo/PLAN_pbvr_gps_ensemble_lod.md Phase 3).
 	void drawEnsembleLodControls();
+	void drawControl();
+	void drawDebug();
+	ViewShell* shell_ = nullptr;
+	bool locked_ = false;
 	RenderMode currentMode_ = RenderMode::SortBased;
 	float sortPointSize_ = 2.0f;
 	float densityScale_ = 1.0f;
