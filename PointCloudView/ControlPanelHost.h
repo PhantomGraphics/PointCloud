@@ -64,7 +64,7 @@ private:
 
     std::array<IEmbeddedPanel*, kControlPageCount> panels_{};
     ControlPage activePage_ = ControlPage::Scenes;
-    bool visible_ = true;
+    bool visible_ = false;   // hidden on first run; opened from the menus / outliner
     bool fixedLayout_ = false;
     std::function<void()> statusDrawer_;
     std::function<int()>  processGetter_;
@@ -73,7 +73,7 @@ private:
     std::string layoutPath_;
     bool        layoutLoaded_ = false;
     ControlPage lastSavedPage_ = ControlPage::Scenes;
-    bool        lastSavedVisible_ = true;
+    bool        lastSavedVisible_ = false;
     int         lastSavedProcess_ = -1;
 };
 

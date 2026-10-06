@@ -1,0 +1,9 @@
+{
+  "name": "command_catalog",
+  "steps": [
+    { "label": "Start empty",                        "command": "Clear",               "expect": "OK" },
+    { "label": "Every catalog entry is routed",      "command": "CheckCommandCatalog", "expect": "OK" },
+    { "label": "Catalog probe left the real world untouched", "command": "GetSceneCount", "expect": "Count:0" },
+    { "label": "Unknown command reports an error",   "command": "NoSuchCommand",       "expect_prefix": "Error:unknown command" }
+  ]
+}

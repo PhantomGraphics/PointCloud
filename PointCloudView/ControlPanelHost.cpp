@@ -2,6 +2,7 @@
 
 #include "imgui.h"
 
+#include <algorithm>
 #include <fstream>
 #include <string>
 
@@ -28,7 +29,7 @@ bool ControlPanelHost::isPageRegistered(ControlPage page) const
 void ControlPanelHost::resetLayout()
 {
     activePage_ = ControlPage::Scenes;
-    visible_    = true;
+    visible_    = false;
     if (processSetter_) processSetter_(-1);  // ProcessId::None
 }
 
@@ -87,7 +88,9 @@ void ControlPanelHost::onImGui()
     }
 
     const ImGuiCond cond = fixedLayout_ ? ImGuiCond_Always : ImGuiCond_Once;
-    ImGui::SetNextWindowPos(ImVec2(10.f, 35.f), cond);
+    // Right side by default: the left/bottom of the screen is the Outliner/Command window.
+    const float x = std::max(10.f, ImGui::GetIO().DisplaySize.x - 440.f);
+    ImGui::SetNextWindowPos(ImVec2(x, 35.f), cond);
     ImGui::SetNextWindowSize(ImVec2(430.f, 620.f), cond);
     if (!ImGui::Begin("Control", &visible_)) {
         ImGui::End();

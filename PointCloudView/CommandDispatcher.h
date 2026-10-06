@@ -28,9 +28,13 @@ public:
     // IScenarioDispatcher
     void dispatch(const std::string& command) override;
     std::vector<std::string> collectResponses() override;
+    std::vector<CommandInfo> commandCatalog() const override;
 
 private:
     std::string route(const std::string& cmd);
+    // Runs every catalog name through route() against a scratch world and
+    // reports names that are not routed (scenario-testable catalog check).
+    std::string cmdCheckCommandCatalog();
 
     // The active scene id, shared with the renderer/GUI when setActiveSceneIdRef()
     // was called (always is, in PointCloudApp); a private fallback otherwise

@@ -34,6 +34,78 @@ std::vector<std::string> CommandDispatcher::collectResponses() {
     return out;
 }
 
+// ---- command catalog (help / completion) ---------------------------------
+// Every name here must be routed by route(); CheckCommandCatalog verifies it.
+
+std::vector<CommandInfo> CommandDispatcher::commandCatalog() const {
+    return {
+        {"Clear", "", "Remove every scene"},
+        {"GetSceneCount", "", ""},
+        {"GetLastSceneId", "", ""},
+        {"GetScenePointCount", "", "Point count of the active scene"},
+        {"GetSceneHasNormals", "", ""},
+        {"GetSceneNormalCount", "", ""},
+        {"GetLastMetric", "name", "Scalar result of the last processing command (hullArea, sphereRadius, ...)"},
+        {"SetActiveScene", "id", "Select the scene every processing command acts on"},
+        {"GenerateSphere", "count", "Synthetic sphere scene"},
+        {"GenerateCylinder", "count", "Synthetic cylinder scene"},
+        {"GenerateRect", "u,v", "Synthetic rectangle grid"},
+        {"GenerateCone", "count", "Synthetic cone scene"},
+        {"GenerateGroundScene", "count", "Flat ground plus a block (Z-up)"},
+        {"DuplicateSceneTransformed", "tx,ty,tz,rotDegY", "Copy the active scene with a transform"},
+        {"LoadPly", "path", "Load a point cloud file (the rest of the line is the path)"},
+        {"DownSample", "cellSize", ""},
+        {"EstimateNormals", "radius", ""},
+        {"OrientNormals", "radius,vx,vy,vz", ""},
+        {"FilterDensity", "...", "Density-based outlier filter"},
+        {"FilterCurvature", "radius,threshold", ""},
+        {"RansacPlane", "threshold", ""},
+        {"RansacCylinder", "threshold", ""},
+        {"RansacSphere", "threshold", ""},
+        {"RansacCone", "threshold", ""},
+        {"ClusterDbscan", "eps,minPts", ""},
+        {"ClusterRegionGrowing", "radius", "Distance-based clustering"},
+        {"SegmentRegionGrowing", "radius,kNeighbors,smoothnessDeg,curvatureThreshold", "Normal/curvature region growing"},
+        {"EstimatePrincipalCurvature", "radius", ""},
+        {"EstimateFPFH", "kNeighbors", ""},
+        {"DetectBoundary", "radius,angleThresholdDeg", ""},
+        {"ExtractGround", "cellSize,slope", ""},
+        {"MLSSmooth", "radius", ""},
+        {"MLSUpsample", "radius,upsampleRadius,stepSize", ""},
+        {"ConvexHull2D", "", ""},
+        {"ConcaveHull2D", "k[,maxK]", ""},
+        {"ICPAlign", "targetId,maxIterations", "Point-to-point ICP"},
+        {"ICPAlignPointToPlane", "targetId,maxIterations", ""},
+        {"GlobalRegister", "targetId,k,iterations", "FPFH + RANSAC"},
+    };
+}
+
+std::string CommandDispatcher::cmdCheckCommandCatalog() {
+    // Probe on a scratch world so Generate*/Clear/... cannot touch real data.
+    VPC::World scratch;
+    int scratchActive = -1;
+    VPC::World* const savedWorld = world_;
+    int* const savedActive = pActiveSceneId_;
+    auto savedCallback = std::move(onWorldChanged_);
+    const auto savedMetrics = lastMetrics_;
+    world_ = &scratch;
+    pActiveSceneId_ = &scratchActive;
+    onWorldChanged_ = nullptr;
+
+    std::string missing;
+    for (const auto& c : commandCatalog()) {
+        if (c.name == "LoadPly") continue;  // a junk path is just an error, but keep it file-free
+        if (route(c.name + ":x").rfind("Error:unknown command", 0) == 0)
+            missing += (missing.empty() ? "" : ",") + c.name;
+    }
+
+    world_ = savedWorld;
+    pActiveSceneId_ = savedActive;
+    onWorldChanged_ = std::move(savedCallback);
+    lastMetrics_ = savedMetrics;
+    return missing.empty() ? "OK" : "Error:unrouted catalog entries: " + missing;
+}
+
 // ---- processQueue (render thread) ---------------------------------------
 
 void CommandDispatcher::processQueue() {
@@ -93,6 +165,8 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
     const std::string name = cmdName(cmd);
     const std::string arg  = cmdArg(cmd);
+
+    if (name == "CheckCommandCatalog") return cmdCheckCommandCatalog();
 
     // --- Scene management ---
 

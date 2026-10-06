@@ -5,6 +5,7 @@
 #include "../../CGLib/VkAppBase/ScenarioRunner/ScenarioRunner.h"
 #include "../../CGLib/VkAppBase/ScenarioRunner/IScenarioHost.h"
 #include "../../CGLib/VkAppBase/ScenarioRunner/ScenarioBrowserPanel.h"
+#include "../../CGLib/VkAppBase/ScenarioRunner/ViewShell.h"
 
 #include "PointCloudRenderer.h"
 #include "SceneListPanel.h"
@@ -83,6 +84,7 @@ private:
     FnEmbeddedPanel   renderingEmbed_;
     FnEmbeddedPanel   scenarioBrowserEmbed_;
 
+    ViewShell                     shell_;   // Command / Outliner windows
     CommandDispatcher             dispatcher_;
     ScenarioRunner                runner_;
     ScenarioBrowserPanel          scenarioBrowser_;

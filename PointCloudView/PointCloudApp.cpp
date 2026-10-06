@@ -72,6 +72,29 @@ PointCloudApp::PointCloudApp(int width, int height, const std::string& title)
     scenarioBrowser_.setHost(this);
     scenarioBrowser_.setDefaultFolder("scenarios");
 
+    // Standard screen: render area + menu + Command + Outliner. The tabbed
+    // Control window stays hidden until opened from the menus / outliner.
+    shell_.setDispatcher(&dispatcher_);
+    shell_.setOutlinerProvider([this] {
+        std::vector<ViewShell::OutlinerItem> items;
+        const int active = renderer_.getActiveSceneId();
+        for (const auto& s : world_.getScenes()) {
+            const int id = s->getId();
+            items.push_back({static_cast<uint64_t>(id),
+                s->getName() + " (" + std::to_string(s->getSize()) + " pts" +
+                    (s->isVisible() ? ")" : ", hidden)"),
+                "Scenes", id == active ? 1 : 0});
+        }
+        return items;
+    });
+    shell_.setSelectionHandler([this](uint64_t id) { selectScene(static_cast<int>(id)); });
+    shell_.setOpenHandler([this](const std::string& panel) {
+        if (panel == "Scenes") {
+            controlHost_.setPage(ControlPage::Scenes);
+            controlHost_.setVisible(true);
+        }
+    });
+
     registerControlPages();
     controlHost_.setStatusDrawer([this]() { drawStatusArea(); });
     controlHost_.setProcessAccessors(
@@ -199,12 +222,17 @@ void PointCloudApp::onSwapChainCreated() {
 void PointCloudApp::onUpdate(uint32_t frameIndex) {
     dispatcher_.processQueue();
 
+    // Single place that collects responses: first the ones for commands typed
+    // into the Command window, the rest belong to the running scenario.
+    auto responses = dispatcher_.collectResponses();
+    shell_.consumeResponses(responses);
+    shell_.setScenarioActive(runner_.isActive());
+
     // Keep the Scenario Browser's GUI run-queue advancing every frame, even
     // when its page is not the one currently shown in the Control window.
     scenarioBrowser_.pumpQueue();
 
     if (runner_.isActive()) {
-        auto responses = dispatcher_.collectResponses();
         if (runner_.tick(dispatcher_, responses)) {
             if (runner_.hasFailed()) {
                 fprintf(stderr, "[Scenario] FAILED: %s\n", runner_.failMessage().c_str());
@@ -226,6 +254,8 @@ void PointCloudApp::onCleanup() {
 }
 
 void PointCloudApp::onImGuiReady() {
+    // Context exists, imgui.ini is not read until the first frame.
+    shell_.installSettings();
     if (captureMode_) {
         // No imgui.ini read/write: the captured frame must not depend on a
         // stray file from a previous interactive session.
@@ -247,6 +277,7 @@ void PointCloudApp::onImGuiReady() {
 
 void PointCloudApp::onImGui() {
     drawMenuBar();
+    shell_.drawWindows();
     ::VKG::VkAppBase::onImGui();
 }
 
@@ -273,8 +304,12 @@ void PointCloudApp::drawMenuBar() {
     if (ImGui::BeginMenu("View")) {
         if (ImGui::MenuItem("Control Window", nullptr, controlHost_.isVisible()))
             controlHost_.setVisible(!controlHost_.isVisible());
-        if (ImGui::MenuItem("Reset Layout"))
+        ImGui::Separator();
+        shell_.drawViewMenuItems();
+        if (ImGui::MenuItem("Reset Layout")) {
             controlHost_.resetLayout();
+            shell_.resetLayout();
+        }
         ImGui::EndMenu();
     }
 
@@ -342,13 +377,18 @@ void PointCloudApp::syncRenderer() {
 
 void PointCloudApp::setupCallbacks() {
     auto& win = getWindow();
+    // Camera input is ignored while ImGui owns the mouse and while a scenario
+    // runs; a release is always forwarded so a drag can end.
     win.onMouseButton = [this](int button, int action, int) {
-        if (button == 0) renderer_.handleMouseButton(action == 1);
+        if (button != 0) return;
+        if (action == 1 && (ImGui::GetIO().WantCaptureMouse || runner_.isActive())) return;
+        renderer_.handleMouseButton(action == 1);
     };
     win.onCursorPos = [this](double x, double y) {
         renderer_.handleMouseMove(x, y);
     };
     win.onScroll = [this](double, double dy) {
+        if (ImGui::GetIO().WantCaptureMouse || runner_.isActive()) return;
         renderer_.handleScroll(dy);
     };
 }
