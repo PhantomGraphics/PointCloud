@@ -206,3 +206,11 @@ TEST(CommandConsoleModel, LogStaysBoundedUnderLongScenarios)
     EXPECT_LE(m.lines().size(), 2000u);
     EXPECT_EQ(m.lines().back().text, "> Step4999");
 }
+
+TEST(CommandConsoleModel, ErrorClassificationIgnoresCase)
+{
+    EXPECT_TRUE(Model::isError("Error:x"));
+    EXPECT_TRUE(Model::isError("ERROR:UnknownCommand:Foo"));
+    EXPECT_FALSE(Model::isError("OK:Play"));
+    EXPECT_FALSE(Model::isError("Err"));
+}
