@@ -20,18 +20,11 @@
 // ---- IScenarioDispatcher ------------------------------------------------
 
 void CommandDispatcher::dispatch(const std::string& command) {
-    std::lock_guard<std::mutex> lk(mutex_);
-    inputQueue_.push(command);
+    queue_.submit(command);
 }
 
 std::vector<std::string> CommandDispatcher::collectResponses() {
-    std::vector<std::string> out;
-    std::lock_guard<std::mutex> lk(mutex_);
-    while (!outputQueue_.empty()) {
-        out.push_back(std::move(outputQueue_.front()));
-        outputQueue_.pop();
-    }
-    return out;
+    return queue_.collectResponses();
 }
 
 // ---- command catalog (help / completion) ---------------------------------
@@ -109,16 +102,11 @@ std::string CommandDispatcher::cmdCheckCommandCatalog() {
 // ---- processQueue (render thread) ---------------------------------------
 
 void CommandDispatcher::processQueue() {
-    std::queue<std::string> local;
-    {
-        std::lock_guard<std::mutex> lk(mutex_);
-        std::swap(local, inputQueue_);
-    }
+    std::queue<std::string> local = queue_.takeAll();
     while (!local.empty()) {
         std::string resp = route(local.front());
         local.pop();
-        std::lock_guard<std::mutex> lk(mutex_);
-        outputQueue_.push(std::move(resp));
+        queue_.respond(std::move(resp));
     }
 }
 

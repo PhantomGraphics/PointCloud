@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "../../CGLib/VkAppBase/ScenarioRunner/IScenarioDispatcher.h"
+#include "../../CGLib/VkAppBase/ScenarioRunner/CommandQueue.h"
 #include <functional>
 #include <map>
 #include <mutex>
@@ -51,7 +52,5 @@ private:
     // Read back via "GetLastMetric:<name>".
     std::map<std::string, std::string> lastMetrics_;
 
-    std::mutex              mutex_;
-    std::queue<std::string> inputQueue_;
-    std::queue<std::string> outputQueue_;
+    CommandQueue queue_;
 };
