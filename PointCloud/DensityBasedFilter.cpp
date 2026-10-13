@@ -22,8 +22,16 @@ void DensityBasedFilter::execute(const double searchRadius)
 	const auto densities = estimator.getDensities();
 
 	Statistics<double> stat(densities);
-	const auto average = stat.getAverage();
-	const auto sd = stat.getStandardDeviation();
+	double average = 0.0;
+	double sd = 0.0;
+	if (!stat.tryGetAverage(average) || !stat.tryGetStandardDeviation(sd)) {
+		// Empty or non-finite densities: no statistics, so nothing can be classified
+		// as an inlier (same outcome as the former NaN comparison).
+		for (size_t i = 0; i < pointCloud.size(); ++i) {
+			outlierIndices.push_back(static_cast<int>(i));
+		}
+		return;
+	}
 	const auto threshold = (sd > 0.0) ? 2.0 * sd : std::numeric_limits<double>::max();
 
 	// See SORFilter::execute for why classification goes through a mask (char, not
