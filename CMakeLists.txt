@@ -101,7 +101,7 @@ if(PHANTOM_GTEST_FOUND)
         ${POINTCLOUD_ROOT}/PointCloudTest
         ${POINTCLOUD_ROOT}/GSView
         ${POINTCLOUD_ROOT}/GSView/reference
-        ${CGLIB_ROOT}/ThirdParty/glm-0.9.9.8
+        ${CGLIB_ROOT}/ThirdParty/glm
     )
 
     target_link_libraries(PointCloudTest PRIVATE
@@ -144,7 +144,7 @@ add_library(PointRendererCore STATIC
     ${POINTCLOUD_ROOT}/PointRenderer/src/PointScene.cpp
 )
 target_include_directories(PointRendererCore PRIVATE
-    ${CGLIB_ROOT}/ThirdParty/glm-0.9.9.8
+    ${CGLIB_ROOT}/ThirdParty/glm
 )
 # VkPointRenderer.cpp (PointRenderer/src/VkPointRenderer.cpp) uses
 # Phantom::VKG::VkLineRenderer for normal-line overlays (via
