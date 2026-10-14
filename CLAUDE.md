@@ -37,11 +37,11 @@ cmake --build --preset windows-debug
 .\build\windows-debug\PointCloud\PointCloudTest.exe
 
 # フィルター例
-.\build\windows-debug\PointCloud\PointCloudTest.exe --gtest_filter=RansacPlaneDetectorTest.*
+.\build\windows-debug\PointCloud\PointCloudTest.exe --gtest_filter=RANSACPlaneDetectorTest.*
 .\build\windows-debug\PointCloud\PointCloudTest.exe --gtest_filter=DBSCANTest.*
 ```
 
-183 テストケース（約 31 ファイル）。フィルタ/クラスタリング（`DensityBasedFilterTest`/`DBSCANTest`/`DistanceBasedClusteringTest`/`GroundExtractorTest`/`RegionGrowingTest`）、推定（`NormalEstimatorTest`/`CurvatureEstimatorTest`/`DensityEstimatorTest`/`FPFHEstimatorTest`/`BoundaryDetectorTest`）、検出（`RansacPlaneDetectorTest`/`RansacCylinderDetectorTest`/`RansacSphereDetectorTest`/`RansacConeDetectorTest`）、レジストレーション（`ICPRegistrationTest`/`GlobalRegistrationTest`）、メッシュ化/サーフェス（`GreedyProjectionMeshGeneratorTest`/`PoissonSurfaceTest`/`MLSSurfaceTest`/`ConvexHull2DTest`/`ConcaveHull2DTest`）、ファイル I/O（`PLYFileReaderTest`/`PLYFileWriterTest`/`PCDFileReaderTest`/`PCDFileWriterTest`/`TXTFileReaderTest`/`TXTFileWriterTest`/`PointCloudFileLoaderTest`）、GS（`GSPointCloudTest`）で構成される。近傍探索（k-NN/最近傍）は `Phantom::Space::KDTree` を各アルゴリズムが直接使用し、そのテストは `CGLib/Space/SpaceTest/KDTreeTest.cpp` 側にある。
+183 テストケース（約 31 ファイル）。フィルタ/クラスタリング（`DensityBasedFilterTest`/`DBSCANTest`/`DistanceBasedClusteringTest`/`GroundExtractorTest`/`RegionGrowingTest`）、推定（`NormalEstimatorTest`/`CurvatureEstimatorTest`/`DensityEstimatorTest`/`FPFHEstimatorTest`/`BoundaryDetectorTest`）、検出（`RANSACPlaneDetectorTest`/`RANSACCylinderDetectorTest`/`RANSACSphereDetectorTest`/`RANSACConeDetectorTest`）、レジストレーション（`ICPRegistrationTest`/`GlobalRegistrationTest`）、メッシュ化/サーフェス（`GreedyProjectionMeshGeneratorTest`/`PoissonSurfaceTest`/`MLSSurfaceTest`/`ConvexHull2dTest`/`ConcaveHull2dTest`）、ファイル I/O（`PLYFileReaderTest`/`PLYFileWriterTest`/`PCDFileReaderTest`/`PCDFileWriterTest`/`TXTFileReaderTest`/`TXTFileWriterTest`/`PointCloudFileLoaderTest`）、GS（`GSPointCloudTest`）で構成される。近傍探索（k-NN/最近傍）は `Phantom::Space::KDTree` を各アルゴリズムが直接使用し、そのテストは `CGLib/Space/SpaceTest/KDTreeTest.cpp` 側にある。
 
 ### シナリオテスト（PointCloudView）
 
@@ -76,10 +76,10 @@ cmake --build --preset windows-debug
 - 近傍探索: 専用ラッパーは持たず、`ICPRegistration`/`NormalEstimator`/`RegionGrowing`/`FPFHEstimator`/`BoundaryDetector`/`CurvatureEstimator`/`DensityEstimator`/`DownSampler`/`MLSSurface` の KNN 系メソッドが `Phantom::Space::KDTree` を直接使用する（旧 `PointCloudKdTree` ラッパーは `Space::KDTree` が `Vector3dfVector` を直接扱うようになり実質的な差分がなくなったため削除済み）。既存の `CompactSpaceHash` ベース実装は未移行。
 - フィルタ/クラスタリング: `DensityBasedFilter`、`DBSCAN`、`DistanceBasedClustering`、`DownSampler`、`RegionGrowing`(法線・曲率ベースのリージョングロウイング。曲率が低い点から成長を開始し、`Space::KDTree` のk-NN近傍のうち法線角度が閾値内のものを吸収。DBSCAN/距離ベースクラスタリングでは分離できない「同一平面上だが密度的には連続」なケースや、逆に法線が大きく折れ曲がる箇所での過剰結合を防ぐ)。
 - 推定: `NormalEstimator`(PCA 法線推定。`orientTowardsViewpoint()` で視点ベースの向き統一が可能)、`CurvatureEstimator`(`estimate()`: PCA固有値比によるスカラー曲率。`estimatePrincipal()`: PCA接平面での局所二次曲面フィッティングにより主曲率 k1/k2 と主方向を推定)、`DensityEstimator`、`FPFHEstimator`(Fast Point Feature Histogram、33次元記述子。法線が既知の点群に対し `Space::KDTree` の k-NN で SPFH を計算し近傍で重み付き合成。大域レジストレーション向けの特徴量基盤)、`BoundaryDetector`(法線既知の点群に対し、接平面に投影した近傍点の角度分布の最大ギャップで境界点を判定)。
-- 検出/フィッティング: `RansacPlaneDetector`、`RansacCylinderDetector`、`RansacSphereDetector`(4点から閉形式で球を解く)、`RansacConeDetector`(サンプルのPCA主方向を軸候補とし、軸からの半径が頂点からの距離に比例するというコーン特有の性質を最小二乗直線回帰で利用して頂点・軸・半頂角を推定。半頂角が小さすぎる/大きすぎる劣化フィットは棄却)。
+- 検出/フィッティング: `RANSACPlaneDetector`、`RANSACCylinderDetector`、`RANSACSphereDetector`(4点から閉形式で球を解く)、`RANSACConeDetector`(サンプルのPCA主方向を軸候補とし、軸からの半径が頂点からの距離に比例するというコーン特有の性質を最小二乗直線回帰で利用して頂点・軸・半頂角を推定。半頂角が小さすぎる/大きすぎる劣化フィットは棄却)。
 - 地面抽出: `GroundExtractor`(簡易 Progressive Morphological Filter。XYグリッドの最小標高マップに対しウィンドウを段階的に拡大しながらグレースケール開処理を繰り返し、開処理前後の標高差が閾値を超えたセルを非地面と判定)。
 - レジストレーション: `ICPRegistration`（`align()`: point-to-point ICP、重み付き Kabsch/Umeyama によるスケール推定オプション付き。`alignPointToPlane()`: 法線ベースの point-to-plane ICP、6元1次方程式を毎反復 Gauss-Jordan 消去で解く Gauss-Newton 線形化。両方とも `RobustKernel`（Huber/Tukey）による対応点の重み付けと `Space::KDTree` による最近傍探索に対応。`computeRigidTransform`（重み付き Kabsch/Umeyama フィット）は `GlobalRegistration` からも使う汎用ユーティリティとして `public static` 公開）、`GlobalRegistration`（FPFH+RANSAC による大域レジストレーション。初期姿勢なしで粗い剛体変換を推定し、`ICPRegistration` による仕上げの前段として使う想定。`FPFHEstimator` の記述子空間での片方向最近傍対応付け→RANSAC で辺長比較による幾何整合性チェック→インライア数最大のモデルをインライア全体で再フィット、という流れ。スケール推定は行わない剛体限定）。
-- メッシュ化/サーフェス: `GreedyProjectionMeshGenerator`、`PoissonSurface`、`MLSSurface`(Moving Least Squares。PCA接平面上で重み付き最小二乗フィットした局所二次曲面/平面に点を投影する `smooth()` と、その曲面上をタンジェント平面グリッドでリサンプルして新規点を生成する `upsample()`)、`ConvexHull2D`(XY投影の2D凸包、Andrew's monotone chain)、`ConcaveHull2D`(XY投影の2D凹包。k近傍法(Moreira & Santos 2007)によるアルファシェイプの簡易代替。境界上で最も時計回りに曲がる近傍点を辿り、自己交差または全点包含に失敗したらkを増やして再試行)。
+- メッシュ化/サーフェス: `GreedyProjectionMeshGenerator`、`PoissonSurface`、`MLSSurface`(Moving Least Squares。PCA接平面上で重み付き最小二乗フィットした局所二次曲面/平面に点を投影する `smooth()` と、その曲面上をタンジェント平面グリッドでリサンプルして新規点を生成する `upsample()`)、`ConvexHull2d`(XY投影の2D凸包、Andrew's monotone chain)、`ConcaveHull2d`(XY投影の2D凹包。k近傍法(Moreira & Santos 2007)によるアルファシェイプの簡易代替。境界上で最も時計回りに曲がる近傍点を辿り、自己交差または全点包含に失敗したらkを増やして再試行)。
 - ファイル I/O: `PLYFileReader`/`PLYFileWriter`（ASCII/バイナリ PLY）、`PCDFileReader`/`PCDFileWriter`、`TXTFileReader`/`TXTFileWriter`、`PointCloudFileLoader::loadPointCloud()`（拡張子から自動判別する統合ローダー）。
 - Gaussian Splatting: `GSPoint`（位置・スケール・回転・DC 色 `f_dc[3]`・opacity を持つ GS 点、レイアウト固定 68B）、`GSPointCloud`（`readFromFile()` で GS 用 PLY（標準／SuperSplat 圧縮）または `.splat`（32バイト/スプラットのフラットバイナリ）を拡張子から自動判別。`.ksplat` 未対応。標準 PLY のみ `f_rest_*` SH（`shDegree` 0..3 + `shRest`、channel-major、`GSPointCloudSHTest`）と `generation`（ロード毎の世代番号）を持つ）。
 
@@ -127,10 +127,10 @@ cmake --build --preset windows-debug
 - 各処理パネルは `IProcessView`（`getName()`/`onImGui(World&, activeSceneId, onRebuild)`）を実装する:
   - フィルタ/ダウンサンプル: `DensityBasedFilterView`/`CurvatureBasedFilterView`/`DownSamplerView`
   - 推定: `DensityEstimatorView`/`NormalEstimatorView`（`orientTowardsViewpoint` 対応）/`CurvatureEstimatorView`（スカラー曲率＋主曲率 k1/k2 モード）/`FPFHEstimatorView`/`BoundaryDetectorView`
-  - 検出/フィッティング: `RansacPlaneDetectorView`/`RansacCylinderDetectorView`/`RansacSphereDetectorView`/`RansacConeDetectorView`
+  - 検出/フィッティング: `RANSACPlaneDetectorView`/`RANSACCylinderDetectorView`/`RANSACSphereDetectorView`/`RANSACConeDetectorView`
   - クラスタリング/セグメンテーション: `DBSCANClusteringView`/`DistanceBasedClusteringView`（メニュー表記 "Region Growing (Distance)"）/`RegionGrowingView`（法線・曲率ベース、メニュー表記 "Region Growing (Normal/Curvature)"。既存の距離ベースとクラス・コマンド名（`SegmentRegionGrowing`）を明確に分離）/`GroundExtractorView`
   - レジストレーション: `ICPRegistrationView`（point-to-point / point-to-plane 切替、target シーンを Combo で選択する2点群UI）/`GlobalRegistrationView`（FPFH+RANSAC）
-  - メッシュ化/サーフェス: `GreedyProjectionMeshGeneratorView`/`PoissonSurfaceView`/`MLSSurfaceView`（Smooth/Upsample の2ボタン）/`ConvexHull2DView`/`ConcaveHull2DView`
+  - メッシュ化/サーフェス: `GreedyProjectionMeshGeneratorView`/`PoissonSurfaceView`/`MLSSurfaceView`（Smooth/Upsample の2ボタン）/`ConvexHull2dView`/`ConcaveHull2dView`
 - `SceneListPanel` — シーン一覧 UI。
 - `CommandDispatcher : IScenarioDispatcher` — シナリオ用コマンド文字列ディスパッチャ。点群以外のスカラー結果（ICP fitness・hull 面積・inlier 数等）は `lastMetrics_` に格納し `GetLastMetric:<name>` で読み出す。
 - 描画: `PointCloudRenderer`/`VulkanPointCloudPipeline`（通常点群）、`VkGSPointRenderer`/`GSPointPresenter`（GS プレビュー、`PointRenderer` を利用）。

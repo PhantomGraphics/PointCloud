@@ -15,11 +15,11 @@ namespace Phantom {
 		/// resulting polygon fails to contain every input point. As k grows large enough this
 		/// degenerates to the ordinary convex hull. z is ignored for the computation; returned
 		/// hull points use z=0.
-		class ConcaveHull2D
+		class ConcaveHull2d
 		{
 		public:
-			ConcaveHull2D() = default;
-			~ConcaveHull2D() = default;
+			ConcaveHull2d() = default;
+			~ConcaveHull2d() = default;
 
 			/// @brief Adds a point to be processed (only its x,y are used).
 			void add(const Math::Vector3df& position) { pointCloud.push_back(position); }

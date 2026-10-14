@@ -5,19 +5,19 @@
 
 namespace Phantom::VPC {
 
-class RansacSphereDetectorView : public IProcessView {
+class RANSACPlaneDetectorView : public IProcessView {
 public:
-    const char* getName() const override { return "RANSAC Sphere Detector"; }
+    const char* getName() const override { return "RANSAC Plane Detector"; }
     void onImGui(World& world, int activeSceneId,
                  const std::function<void(int)>& onResult) override;
 
 private:
-    float threshold_  = 0.02f;
-    int   iterations_ = 200;
+    float threshold_  = 0.01f;
+    int   iterations_ = 100;
     int   minInliers_ = 50;
 
-    bool                   hasResult_ = false;
-    ops::RansacSphereResult result_;
+    bool                  hasResult_ = false;
+    ops::RANSACPlaneResult result_;
 };
 
 } // namespace VPC

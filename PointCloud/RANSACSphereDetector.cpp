@@ -1,4 +1,4 @@
-#include "RansacSphereDetector.h"
+#include "RANSACSphereDetector.h"
 
 #include <random>
 #include <algorithm>
@@ -7,7 +7,7 @@
 using namespace Phantom::PC;
 using namespace Phantom::Math;
 
-bool RansacSphereDetector::computeSphereFromFourPoints(
+bool RANSACSphereDetector::computeSphereFromFourPoints(
 	const Vector3df& p0, const Vector3df& p1,
 	const Vector3df& p2, const Vector3df& p3,
 	Vector3df& center, float& radius) const
@@ -37,7 +37,7 @@ bool RansacSphereDetector::computeSphereFromFourPoints(
 	return true;
 }
 
-bool RansacSphereDetector::detect(
+bool RANSACSphereDetector::detect(
 	const std::vector<Vector3df>& points,
 	SphereModel& bestModel,
 	int iterations,
@@ -49,7 +49,7 @@ bool RansacSphereDetector::detect(
 	const unsigned baseSeed = hasSeed ? rngSeed : std::random_device{}();
 	size_t bestInlierCount = 0;
 
-	// See RansacPlaneDetector::detect() for why each iteration gets its own RNG seeded from `it`.
+	// See RANSACPlaneDetector::detect() for why each iteration gets its own RNG seeded from `it`.
 #pragma omp parallel for
 	for (int it = 0; it < iterations; ++it) {
 		std::mt19937 rng(baseSeed + static_cast<unsigned>(it));

@@ -7,12 +7,12 @@ namespace Phantom {
 	namespace PC {
 
 		/// @brief Detects a plane from a point cloud using the RANSAC algorithm.
-		class RansacPlaneDetector
+		class RANSACPlaneDetector
 		{
 		public:
-			RansacPlaneDetector() = default;
-           explicit RansacPlaneDetector(unsigned seed) : hasSeed(true), rngSeed(seed) {}
-			~RansacPlaneDetector() = default;
+			RANSACPlaneDetector() = default;
+           explicit RANSACPlaneDetector(unsigned seed) : hasSeed(true), rngSeed(seed) {}
+			~RANSACPlaneDetector() = default;
 
 			/// @brief Holds the result of a plane detection.
 			struct PlaneModel {

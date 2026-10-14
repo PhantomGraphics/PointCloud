@@ -1,8 +1,8 @@
 #include "pch.h"
 #include "gtest/gtest.h"
 
-#include "../PointCloud/ConcaveHull2D.h"
-#include "../PointCloud/ConvexHull2D.h"
+#include "../PointCloud/ConcaveHull2d.h"
+#include "../PointCloud/ConvexHull2d.h"
 #include "../../CGLib/Math/Vector3d.h"
 #include <cmath>
 
@@ -42,9 +42,9 @@ std::vector<Vector3df> makeUShapeBoundary()
 
 } // namespace
 
-TEST(ConcaveHull2DTest, FewerThanThreePointsFails)
+TEST(ConcaveHull2dTest, FewerThanThreePointsFails)
 {
-	ConcaveHull2D hull;
+	ConcaveHull2d hull;
 	hull.add(Vector3df(0, 0, 0));
 	hull.add(Vector3df(1, 0, 0));
 	EXPECT_FALSE(hull.compute());
@@ -52,9 +52,9 @@ TEST(ConcaveHull2DTest, FewerThanThreePointsFails)
 	EXPECT_FLOAT_EQ(0.0f, hull.getArea());
 }
 
-TEST(ConcaveHull2DTest, ThreePointsFormTheirOwnTriangle)
+TEST(ConcaveHull2dTest, ThreePointsFormTheirOwnTriangle)
 {
-	ConcaveHull2D hull;
+	ConcaveHull2d hull;
 	hull.add(Vector3df(0, 0, 0));
 	hull.add(Vector3df(4, 0, 0));
 	hull.add(Vector3df(0, 3, 0));
@@ -63,9 +63,9 @@ TEST(ConcaveHull2DTest, ThreePointsFormTheirOwnTriangle)
 	EXPECT_NEAR(6.0f, hull.getArea(), 1.0e-4f);
 }
 
-TEST(ConcaveHull2DTest, DuplicatePointsAreDeduped)
+TEST(ConcaveHull2dTest, DuplicatePointsAreDeduped)
 {
-	ConcaveHull2D hull;
+	ConcaveHull2d hull;
 	hull.add(Vector3df(-2, -2, 0));
 	hull.add(Vector3df(-2, -2, 0)); // exact duplicate
 	hull.add(Vector3df(2, -2, 0));
@@ -75,9 +75,9 @@ TEST(ConcaveHull2DTest, DuplicatePointsAreDeduped)
 	EXPECT_EQ(4u, hull.getHullPoints().size());
 }
 
-TEST(ConcaveHull2DTest, ConvexSquareReducesToConvexHull)
+TEST(ConcaveHull2dTest, ConvexSquareReducesToConvexHull)
 {
-	ConcaveHull2D hull;
+	ConcaveHull2d hull;
 	hull.add(Vector3df(-2, -2, 0));
 	hull.add(Vector3df(2, -2, 0));
 	hull.add(Vector3df(2, 2, 0));
@@ -89,9 +89,9 @@ TEST(ConcaveHull2DTest, ConvexSquareReducesToConvexHull)
 	EXPECT_NEAR(16.0f, hull.getArea(), 1.0e-4f);
 }
 
-TEST(ConcaveHull2DTest, HullVerticesAreInCounterClockwiseOrder)
+TEST(ConcaveHull2dTest, HullVerticesAreInCounterClockwiseOrder)
 {
-	ConcaveHull2D hull;
+	ConcaveHull2d hull;
 	hull.add(Vector3df(-2, -2, 0));
 	hull.add(Vector3df(2, -2, 0));
 	hull.add(Vector3df(2, 2, 0));
@@ -110,7 +110,7 @@ TEST(ConcaveHull2DTest, HullVerticesAreInCounterClockwiseOrder)
 	EXPECT_GT(signedArea, 0.0);
 }
 
-TEST(ConcaveHull2DTest, UShapedBoundaryProducesTighterHullThanConvexHull)
+TEST(ConcaveHull2dTest, UShapedBoundaryProducesTighterHullThanConvexHull)
 {
 	// With few, widely-scattered points, a straight-line polygon between the extremal points
 	// already contains everything, so nothing forces the trace to detour through a concavity
@@ -119,11 +119,11 @@ TEST(ConcaveHull2DTest, UShapedBoundaryProducesTighterHullThanConvexHull)
 	// which is also how this algorithm is actually meant to be used against real scan data.
 	const auto points = makeUShapeBoundary();
 
-	ConcaveHull2D concave;
+	ConcaveHull2d concave;
 	for (const auto& p : points) concave.add(p);
 	ASSERT_TRUE(concave.compute(3));
 
-	ConvexHull2D convex;
+	ConvexHull2d convex;
 	for (const auto& p : points) convex.add(p);
 	ASSERT_TRUE(convex.compute());
 

@@ -1,15 +1,15 @@
 #include "pch.h"
 #include "gtest/gtest.h"
 
-#include "../PointCloud/ConvexHull2D.h"
+#include "../PointCloud/ConvexHull2d.h"
 #include "../../CGLib/Math/Vector3d.h"
 
 using namespace Phantom::PC;
 using namespace Phantom::Math;
 
-TEST(ConvexHull2DTest, FewerThanThreePointsFails)
+TEST(ConvexHull2dTest, FewerThanThreePointsFails)
 {
-	ConvexHull2D hull;
+	ConvexHull2d hull;
 	hull.add(Vector3df(0, 0, 0));
 	hull.add(Vector3df(1, 0, 0));
 	EXPECT_FALSE(hull.compute());
@@ -17,9 +17,9 @@ TEST(ConvexHull2DTest, FewerThanThreePointsFails)
 	EXPECT_FLOAT_EQ(0.0f, hull.getArea());
 }
 
-TEST(ConvexHull2DTest, AllCollinearPointsFails)
+TEST(ConvexHull2dTest, AllCollinearPointsFails)
 {
-	ConvexHull2D hull;
+	ConvexHull2d hull;
 	hull.add(Vector3df(0, 0, 0));
 	hull.add(Vector3df(1, 0, 0));
 	hull.add(Vector3df(2, 0, 0));
@@ -28,9 +28,9 @@ TEST(ConvexHull2DTest, AllCollinearPointsFails)
 	EXPECT_TRUE(hull.getHullPoints().empty());
 }
 
-TEST(ConvexHull2DTest, SquareWithInteriorAndEdgePointsProducesFourVertexHull)
+TEST(ConvexHull2dTest, SquareWithInteriorAndEdgePointsProducesFourVertexHull)
 {
-	ConvexHull2D hull;
+	ConvexHull2d hull;
 	// The 4 corners of a 4x4 square.
 	hull.add(Vector3df(-2, -2, 5.0f)); // z is arbitrary/ignored
 	hull.add(Vector3df(2, -2, 0.0f));
@@ -54,9 +54,9 @@ TEST(ConvexHull2DTest, SquareWithInteriorAndEdgePointsProducesFourVertexHull)
 	}
 }
 
-TEST(ConvexHull2DTest, HullVerticesAreInCounterClockwiseOrder)
+TEST(ConvexHull2dTest, HullVerticesAreInCounterClockwiseOrder)
 {
-	ConvexHull2D hull;
+	ConvexHull2d hull;
 	hull.add(Vector3df(-2, -2, 0));
 	hull.add(Vector3df(2, -2, 0));
 	hull.add(Vector3df(2, 2, 0));
@@ -76,9 +76,9 @@ TEST(ConvexHull2DTest, HullVerticesAreInCounterClockwiseOrder)
 	EXPECT_GT(signedArea, 0.0);
 }
 
-TEST(ConvexHull2DTest, TriangleProducesCorrectArea)
+TEST(ConvexHull2dTest, TriangleProducesCorrectArea)
 {
-	ConvexHull2D hull;
+	ConvexHull2d hull;
 	hull.add(Vector3df(0, 0, 0));
 	hull.add(Vector3df(4, 0, 0));
 	hull.add(Vector3df(0, 3, 0));

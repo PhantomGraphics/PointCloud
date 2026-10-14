@@ -15,17 +15,17 @@
 #include "DistanceBasedClusteringView.h"
 #include "RegionGrowingView.h"
 #include "GroundExtractorView.h"
-#include "RansacPlaneDetectorView.h"
-#include "RansacCylinderDetectorView.h"
-#include "RansacSphereDetectorView.h"
-#include "RansacConeDetectorView.h"
+#include "RANSACPlaneDetectorView.h"
+#include "RANSACCylinderDetectorView.h"
+#include "RANSACSphereDetectorView.h"
+#include "RANSACConeDetectorView.h"
 #include "ICPRegistrationView.h"
 #include "GlobalRegistrationView.h"
 #include "GreedyProjectionMeshGeneratorView.h"
 #include "PoissonSurfaceView.h"
 #include "MLSSurfaceView.h"
-#include "ConvexHull2DView.h"
-#include "ConcaveHull2DView.h"
+#include "ConvexHull2dView.h"
+#include "ConcaveHull2dView.h"
 
 namespace Phantom::VPC {
 
@@ -47,17 +47,17 @@ const char* processName(ProcessId id)
     case ProcessId::DistanceClustering:   return "Region Growing (Distance)";
     case ProcessId::RegionGrowing:        return "Region Growing (Normal/Curvature)";
     case ProcessId::GroundExtractor:      return "Ground Extractor";
-    case ProcessId::RansacPlane:          return "RANSAC Plane Detector";
-    case ProcessId::RansacCylinder:       return "RANSAC Cylinder Detector";
-    case ProcessId::RansacSphere:         return "RANSAC Sphere Detector";
-    case ProcessId::RansacCone:           return "RANSAC Cone Detector";
+    case ProcessId::RANSACPlane:          return "RANSAC Plane Detector";
+    case ProcessId::RANSACCylinder:       return "RANSAC Cylinder Detector";
+    case ProcessId::RANSACSphere:         return "RANSAC Sphere Detector";
+    case ProcessId::RANSACCone:           return "RANSAC Cone Detector";
     case ProcessId::ICPRegistration:      return "ICP Registration";
     case ProcessId::GlobalRegistration:   return "Global Registration (FPFH+RANSAC)";
     case ProcessId::GreedyProjectionMesh: return "Greedy Projection Mesh";
     case ProcessId::PoissonSurface:       return "Poisson Surface";
     case ProcessId::MLSSurface:           return "MLS Surface";
-    case ProcessId::ConvexHull2D:         return "Convex Hull 2D";
-    case ProcessId::ConcaveHull2D:        return "Concave Hull 2D";
+    case ProcessId::ConvexHull2d:         return "Convex Hull 2D";
+    case ProcessId::ConcaveHull2d:        return "Concave Hull 2D";
     default:                              return "";
     }
 }
@@ -120,10 +120,10 @@ const std::vector<ProcessMenuItem>& processesInCategory(ProcessCategory category
         { ProcessId::GroundExtractor,    "Ground" },
     };
     static const std::vector<ProcessMenuItem> kFitting = {
-        { ProcessId::RansacPlane,    "RANSAC Plane" },
-        { ProcessId::RansacCylinder, "RANSAC Cylinder" },
-        { ProcessId::RansacSphere,   "RANSAC Sphere" },
-        { ProcessId::RansacCone,     "RANSAC Cone" },
+        { ProcessId::RANSACPlane,    "RANSAC Plane" },
+        { ProcessId::RANSACCylinder, "RANSAC Cylinder" },
+        { ProcessId::RANSACSphere,   "RANSAC Sphere" },
+        { ProcessId::RANSACCone,     "RANSAC Cone" },
     };
     static const std::vector<ProcessMenuItem> kRegistration = {
         { ProcessId::ICPRegistration,    "ICP" },
@@ -133,8 +133,8 @@ const std::vector<ProcessMenuItem>& processesInCategory(ProcessCategory category
         { ProcessId::GreedyProjectionMesh, "Greedy" },
         { ProcessId::PoissonSurface,       "Poisson" },
         { ProcessId::MLSSurface,           "MLS" },
-        { ProcessId::ConvexHull2D,         "Convex Hull" },
-        { ProcessId::ConcaveHull2D,        "Concave Hull" },
+        { ProcessId::ConvexHull2d,         "Convex Hull" },
+        { ProcessId::ConcaveHull2d,        "Concave Hull" },
     };
     static const std::vector<ProcessMenuItem> kEmpty;
 
@@ -168,17 +168,17 @@ std::unique_ptr<IProcessView> makeProcessView(ProcessId id)
     case ProcessId::DistanceClustering:   return std::make_unique<DistanceBasedClusteringView>();
     case ProcessId::RegionGrowing:        return std::make_unique<RegionGrowingView>();
     case ProcessId::GroundExtractor:      return std::make_unique<GroundExtractorView>();
-    case ProcessId::RansacPlane:          return std::make_unique<RansacPlaneDetectorView>();
-    case ProcessId::RansacCylinder:       return std::make_unique<RansacCylinderDetectorView>();
-    case ProcessId::RansacSphere:         return std::make_unique<RansacSphereDetectorView>();
-    case ProcessId::RansacCone:           return std::make_unique<RansacConeDetectorView>();
+    case ProcessId::RANSACPlane:          return std::make_unique<RANSACPlaneDetectorView>();
+    case ProcessId::RANSACCylinder:       return std::make_unique<RANSACCylinderDetectorView>();
+    case ProcessId::RANSACSphere:         return std::make_unique<RANSACSphereDetectorView>();
+    case ProcessId::RANSACCone:           return std::make_unique<RANSACConeDetectorView>();
     case ProcessId::ICPRegistration:      return std::make_unique<ICPRegistrationView>();
     case ProcessId::GlobalRegistration:   return std::make_unique<GlobalRegistrationView>();
     case ProcessId::GreedyProjectionMesh: return std::make_unique<GreedyProjectionMeshGeneratorView>();
     case ProcessId::PoissonSurface:       return std::make_unique<PoissonSurfaceView>();
     case ProcessId::MLSSurface:           return std::make_unique<MLSSurfaceView>();
-    case ProcessId::ConvexHull2D:         return std::make_unique<ConvexHull2DView>();
-    case ProcessId::ConcaveHull2D:        return std::make_unique<ConcaveHull2DView>();
+    case ProcessId::ConvexHull2d:         return std::make_unique<ConvexHull2dView>();
+    case ProcessId::ConcaveHull2d:        return std::make_unique<ConcaveHull2dView>();
     default:                              return nullptr;
     }
 }

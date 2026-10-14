@@ -11,7 +11,7 @@ void DBSCANClusteringView::onImGui(World& world, int activeSceneId,
     ImGui::SliderInt  ("Min Pts", &minPts_, 1,      100);
 
     if (ImGui::Button("Run")) {
-        ops::DbscanParams p;
+        ops::DBSCANParams p;
         p.eps    = eps_;
         p.minPts = minPts_;
         result_    = ops::clusterDbscan(world, activeSceneId, p);

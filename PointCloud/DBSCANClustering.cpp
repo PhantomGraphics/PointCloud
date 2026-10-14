@@ -1,4 +1,4 @@
-#include "DBSCAN.h"
+#include "DBSCANClustering.h"
 
 #include <CGLib/Space/Space/CompactSpaceHash.h>
 

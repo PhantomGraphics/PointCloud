@@ -1,4 +1,4 @@
-#include "RansacCylinderDetector.h"
+#include "RANSACCylinderDetector.h"
 #include <limits>
 #include <algorithm>
 #include <numeric>
@@ -7,7 +7,7 @@
 using namespace Phantom::PC;
 using namespace Phantom::Math;
 
-bool RansacCylinderDetector::detect(
+bool RANSACCylinderDetector::detect(
 	const std::vector<Vector3df>& points,
 	CylinderModel& bestModel,
 	int iterations,
@@ -23,7 +23,7 @@ bool RansacCylinderDetector::detect(
 
 	size_t bestInlierCount = 0;
 
-	// See RansacPlaneDetector::detect() for why each iteration gets its own RNG seeded from `it`.
+	// See RANSACPlaneDetector::detect() for why each iteration gets its own RNG seeded from `it`.
 #pragma omp parallel for
 	for (int it = 0; it < iterations; ++it) {
 		std::mt19937 rng(baseSeed + static_cast<unsigned>(it));
@@ -83,7 +83,7 @@ bool RansacCylinderDetector::detect(
 	return bestInlierCount >= minInliers;
 }
 
-Vector3df RansacCylinderDetector::computeCentroid(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
+Vector3df RANSACCylinderDetector::computeCentroid(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
 {
 	Vector3df c(0.0f);
 	for (auto i : indices) {
@@ -93,7 +93,7 @@ Vector3df RansacCylinderDetector::computeCentroid(const std::vector<Vector3df>& 
 	return c;
 }
 
-Vector3df RansacCylinderDetector::estimatePrincipalDirection(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
+Vector3df RANSACCylinderDetector::estimatePrincipalDirection(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
 {
 	// Build the 3x3 covariance matrix.
 	float cov00 = 0, cov01 = 0, cov02 = 0;
@@ -146,7 +146,7 @@ Vector3df RansacCylinderDetector::estimatePrincipalDirection(const std::vector<V
 	return glm::normalize(glm::cross(v1, v2));
 }
 
-float RansacCylinderDetector::pointLineDistance(const Vector3df& p, const Vector3df& origin, const Vector3df& dir) const
+float RANSACCylinderDetector::pointLineDistance(const Vector3df& p, const Vector3df& origin, const Vector3df& dir) const
 {
 	const auto v = p - origin;
 	const float proj = glm::dot(v, dir);

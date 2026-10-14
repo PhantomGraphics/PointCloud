@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "../PointCloud/RansacSphereDetector.h"
+#include "../PointCloud/RANSACSphereDetector.h"
 
 #include <random>
 #include <vector>
@@ -48,7 +48,7 @@ namespace {
 
 } // namespace
 
-TEST(RansacSphereDetectorTest, DetectsSphereWithNoise)
+TEST(RANSACSphereDetectorTest, DetectsSphereWithNoise)
 {
 	const size_t inliers = 400;
 	const size_t outliers = 80;
@@ -56,8 +56,8 @@ TEST(RansacSphereDetectorTest, DetectsSphereWithNoise)
 	const float trueRadius = 1.5f;
 	auto points = createNoisySpherePoints(inliers, outliers, trueCenter, trueRadius, 0.005f, 12345u);
 
-	RansacSphereDetector detector(42u);
-	RansacSphereDetector::SphereModel model;
+	RANSACSphereDetector detector(42u);
+	RANSACSphereDetector::SphereModel model;
 	const bool ok = detector.detect(points, model, 300, 0.03f, 100);
 
 	EXPECT_TRUE(ok);
@@ -68,30 +68,30 @@ TEST(RansacSphereDetectorTest, DetectsSphereWithNoise)
 	EXPECT_NEAR(model.center.z, trueCenter.z, 0.05f);
 }
 
-TEST(RansacSphereDetectorTest, FailsWhenNotEnoughInliers)
+TEST(RANSACSphereDetectorTest, FailsWhenNotEnoughInliers)
 {
 	const size_t inliers = 30;
 	const size_t outliers = 20;
 	auto points = createNoisySpherePoints(inliers, outliers, Vector3df(0, 0, 0), 1.0f, 0.005f, 4242u);
 
-	RansacSphereDetector detector(42u);
-	RansacSphereDetector::SphereModel model;
+	RANSACSphereDetector detector(42u);
+	RANSACSphereDetector::SphereModel model;
 	const bool ok = detector.detect(points, model, 200, 0.03f, 100);
 
 	EXPECT_FALSE(ok);
 }
 
-TEST(RansacSphereDetectorTest, FailsWithLessThanFourPoints)
+TEST(RANSACSphereDetectorTest, FailsWithLessThanFourPoints)
 {
 	std::vector<Vector3df> points = {
 		Vector3df(0.0f, 0.0f, 0.0f), Vector3df(1.0f, 0.0f, 0.0f), Vector3df(0.0f, 1.0f, 0.0f)
 	};
-	RansacSphereDetector detector(42u);
-	RansacSphereDetector::SphereModel model;
+	RANSACSphereDetector detector(42u);
+	RANSACSphereDetector::SphereModel model;
 	EXPECT_FALSE(detector.detect(points, model));
 }
 
-TEST(RansacSphereDetectorTest, FailsWithCoplanarPoints)
+TEST(RANSACSphereDetectorTest, FailsWithCoplanarPoints)
 {
 	// All points lie on z=0: no unique sphere can be fit (degenerate 4-point systems).
 	std::vector<Vector3df> points = {
@@ -99,7 +99,7 @@ TEST(RansacSphereDetectorTest, FailsWithCoplanarPoints)
 		Vector3df(0.0f, 1.0f, 0.0f), Vector3df(1.0f, 1.0f, 0.0f),
 		Vector3df(0.5f, 0.5f, 0.0f), Vector3df(2.0f, 0.0f, 0.0f)
 	};
-	RansacSphereDetector detector(42u);
-	RansacSphereDetector::SphereModel model;
+	RANSACSphereDetector detector(42u);
+	RANSACSphereDetector::SphereModel model;
 	EXPECT_FALSE(detector.detect(points, model, 200, 0.02f, 4));
 }

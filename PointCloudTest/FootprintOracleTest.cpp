@@ -37,9 +37,9 @@ OracleCamera frontalCamera()
 	return c;
 }
 
-Gaussian3D splat(glm::dvec3 pos, glm::dvec3 sigma, double opacity, glm::dvec3 color)
+Gaussian3d splat(glm::dvec3 pos, glm::dvec3 sigma, double opacity, glm::dvec3 color)
 {
-	Gaussian3D g;
+	Gaussian3d g;
 	g.pos = pos;
 	g.logScale = glm::log(sigma);
 	g.opacity = opacity;
@@ -59,7 +59,7 @@ ParticleOptions exactC3R()
 	return o;
 }
 
-double gpsExpectedPerSet(const Gaussian3D& g, const OracleCamera& cam)
+double gpsExpectedPerSet(const Gaussian3d& g, const OracleCamera& cam)
 {
 	gpm::PinholeCamera pin;
 	pin.viewRot = cam.viewRot; pin.viewPos = cam.viewPos;
@@ -73,7 +73,7 @@ double gpsExpectedPerSet(const Gaussian3D& g, const OracleCamera& cam)
 
 TEST(FootprintOracle, DefaultOptionsAreBitIdenticalToGpsPort)
 {
-	const std::vector<Gaussian3D> scene = {
+	const std::vector<Gaussian3d> scene = {
 		splat({ 0.1, -0.05, 6.0 }, { 0.2, 0.1, 0.05 }, 0.7, { 0.9, 0.4, 0.2 }),
 		splat({ -0.2, 0.1, 8.0 }, { 0.3, 0.3, 0.3 }, 0.4, { 0.2, 0.6, 0.9 }) };
 	const Image a = renderMonteCarlo(scene, frontalCamera(), kW, kH, kSppSide, 20, kBg, 7u);
@@ -92,8 +92,8 @@ TEST(FootprintOracle, DefaultOptionsAreBitIdenticalToGpsPort)
 TEST(FootprintOracle, ParticlesC3RConvergeToAnalytic)
 {
 	for (double o : { 0.5, 0.9 }) {
-		const Gaussian3D g = splat({ 0.0, 0.0, 6.0 }, { 0.15, 0.15, 0.15 }, o, { 0.9, 0.4, 0.2 });
-		const std::vector<Gaussian3D> scene = { g };
+		const Gaussian3d g = splat({ 0.0, 0.0, 6.0 }, { 0.15, 0.15, 0.15 }, o, { 0.9, 0.4, 0.2 });
+		const std::vector<Gaussian3d> scene = { g };
 		const Image ref = renderAnalytic(scene, frontalCamera(), kW, kH, kBg);
 		RenderStats stats;
 		ParticleOptions opt = exactC3R();
@@ -114,7 +114,7 @@ TEST(FootprintOracle, ParticlesC3RConvergeToAnalytic)
 // the right count with a Gaussian profile) the image is biased at high opacity.
 TEST(FootprintOracle, RadialCorrectionRemovesHighOpacityBias)
 {
-	const std::vector<Gaussian3D> scene = {
+	const std::vector<Gaussian3d> scene = {
 		splat({ 0.0, 0.0, 6.0 }, { 0.15, 0.15, 0.15 }, 0.95, { 0.9, 0.4, 0.2 }) };
 	const Image ref = renderAnalytic(scene, frontalCamera(), kW, kH, kBg);
 
@@ -136,11 +136,11 @@ TEST(FootprintOracle, PerspectiveResidualGrowsWithApparentSize)
 {
 	// Half-resolution image and focal length (same field of view) keep the large splat's
 	// point count affordable in Debug.
-	auto residual = [](const Gaussian3D& g) {
+	auto residual = [](const Gaussian3d& g) {
 		const int w = kW / 2, h = kH / 2;
 		OracleCamera cam = frontalCamera();
 		cam.focalX = cam.focalY = 100.0;
-		const std::vector<Gaussian3D> scene = { g };
+		const std::vector<Gaussian3d> scene = { g };
 		const Image ref = renderAnalytic(scene, cam, w, h, kBg);
 		ParticleOptions lin = exactC3R();
 		ParticleOptions exact = exactC3R();
@@ -163,7 +163,7 @@ TEST(FootprintOracle, PerspectiveResidualGrowsWithApparentSize)
 // interpenetrate in depth composite differently.
 TEST(FootprintOracle, DepthRuleResidualForInterpenetratingSplats)
 {
-	const std::vector<Gaussian3D> scene = {
+	const std::vector<Gaussian3d> scene = {
 		splat({ -0.05, 0.0, 5.9 }, { 0.15, 0.15, 0.8 }, 0.8, { 0.9, 0.2, 0.2 }),
 		splat({ 0.05, 0.0, 6.1 }, { 0.15, 0.15, 0.8 }, 0.8, { 0.2, 0.8, 0.3 }) };
 	const Image ref = renderAnalytic(scene, frontalCamera(), kW, kH, kBg);
@@ -182,7 +182,7 @@ TEST(FootprintOracle, DepthRuleResidualForInterpenetratingSplats)
 TEST(FootprintOracle, VariableFootprintTradesPointsForBias)
 {
 	// sigma ~ 5 px = 10 subpixels (large) and ~2 px = 4 subpixels (small).
-	const std::vector<Gaussian3D> scene = {
+	const std::vector<Gaussian3d> scene = {
 		splat({ -0.35, 0.0, 6.0 }, { 0.15, 0.15, 0.15 }, 0.8, { 0.9, 0.4, 0.2 }),
 		splat({ 0.4, 0.2, 6.0 }, { 0.06, 0.06, 0.06 }, 0.8, { 0.2, 0.6, 0.9 }) };
 	const Image ref = renderAnalytic(scene, frontalCamera(), kW, kH, kBg);
@@ -229,14 +229,14 @@ TEST(FootprintOracle, VariableFootprintTradesPointsForBias)
 // the GPS port itself as the noise floor for the perspective residual.
 TEST(FootprintOracle, DISABLED_BiasVersusVariance)
 {
-	auto report = [](const char* label, const std::vector<Gaussian3D>& scene, auto render) {
+	auto report = [](const char* label, const std::vector<Gaussian3d>& scene, auto render) {
 		const Image ref = renderAnalytic(scene, frontalCamera(), kW, kH, kBg);
 		const double p1 = psnr(render(1000), ref);
 		const double p4 = psnr(render(4000), ref);
 		std::printf("[footprint] %-34s PSNR 1000 sets=%.2f  4000 sets=%.2f  (pure variance: +6.0 dB)\n",
 		            label, p1, p4);
 	};
-	const std::vector<Gaussian3D> nearBig = {
+	const std::vector<Gaussian3d> nearBig = {
 		splat({ 0.06, 0.04, 1.2 }, { 0.24, 0.24, 0.24 }, 0.7, { 0.9, 0.4, 0.2 }) };
 	report("near/large GPS port", nearBig, [&](int n) {
 		return renderMonteCarlo(nearBig, frontalCamera(), kW, kH, kSppSide, n, kBg, 21u); });
@@ -246,7 +246,7 @@ TEST(FootprintOracle, DISABLED_BiasVersusVariance)
 		ParticleOptions o = exactC3R(); o.linearizedProjection = false;
 		return renderParticles3D(nearBig, frontalCamera(), kW, kH, kSppSide, n, kBg, 21u, o); });
 
-	const std::vector<Gaussian3D> pair = {
+	const std::vector<Gaussian3d> pair = {
 		splat({ -0.35, 0.0, 6.0 }, { 0.15, 0.15, 0.15 }, 0.8, { 0.9, 0.4, 0.2 }),
 		splat({ 0.4, 0.2, 6.0 }, { 0.06, 0.06, 0.06 }, 0.8, { 0.2, 0.6, 0.9 }) };
 	for (int s : { 1, 2, 4 }) {

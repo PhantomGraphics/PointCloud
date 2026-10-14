@@ -1,4 +1,4 @@
-#include "RansacConeDetector.h"
+#include "RANSACConeDetector.h"
 
 #include <random>
 #include <algorithm>
@@ -7,7 +7,7 @@
 using namespace Phantom::PC;
 using namespace Phantom::Math;
 
-Vector3df RansacConeDetector::computeCentroid(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
+Vector3df RANSACConeDetector::computeCentroid(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
 {
 	Vector3df c(0.0f);
 	for (auto i : indices) {
@@ -17,7 +17,7 @@ Vector3df RansacConeDetector::computeCentroid(const std::vector<Vector3df>& pts,
 	return c;
 }
 
-Vector3df RansacConeDetector::estimateDominantDirection(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
+Vector3df RANSACConeDetector::estimateDominantDirection(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
 {
 	float cov00 = 0, cov01 = 0, cov02 = 0;
 	float cov11 = 0, cov12 = 0, cov22 = 0;
@@ -49,7 +49,7 @@ Vector3df RansacConeDetector::estimateDominantDirection(const std::vector<Vector
 	return v1;
 }
 
-bool RansacConeDetector::fitConeFromDirection(
+bool RANSACConeDetector::fitConeFromDirection(
 	const std::vector<Vector3df>& pts, const std::vector<size_t>& indices,
 	const Vector3df& roughDirection,
 	Vector3df& apex, Vector3df& axis, float& halfAngleRad) const
@@ -89,7 +89,7 @@ bool RansacConeDetector::fitConeFromDirection(
 	return true;
 }
 
-float RansacConeDetector::pointLineDistance(const Vector3df& p, const Vector3df& origin, const Vector3df& dir) const
+float RANSACConeDetector::pointLineDistance(const Vector3df& p, const Vector3df& origin, const Vector3df& dir) const
 {
 	const auto v = p - origin;
 	const float proj = glm::dot(v, dir);
@@ -97,7 +97,7 @@ float RansacConeDetector::pointLineDistance(const Vector3df& p, const Vector3df&
 	return glm::length(perp);
 }
 
-bool RansacConeDetector::detect(
+bool RANSACConeDetector::detect(
 	const std::vector<Vector3df>& points,
 	ConeModel& bestModel,
 	int iterations,
@@ -118,7 +118,7 @@ bool RansacConeDetector::detect(
 
 	size_t bestInlierCount = 0;
 
-	// See RansacPlaneDetector::detect() for why each iteration gets its own RNG seeded from `it`.
+	// See RANSACPlaneDetector::detect() for why each iteration gets its own RNG seeded from `it`.
 #pragma omp parallel for
 	for (int it = 0; it < iterations; ++it) {
 		std::mt19937 rng(baseSeed + static_cast<unsigned>(it));

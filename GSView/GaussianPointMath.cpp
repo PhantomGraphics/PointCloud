@@ -408,7 +408,7 @@ glm::dvec2 sampleCorrectedOffset(double opacity, const glm::dmat2& cov2d, RandSt
 // Analytic per-pixel coverage oracle
 // ===========================================================================
 
-double alphaAt(const Gaussian2D& g, const glm::dvec2& pixel)
+double alphaAt(const Gaussian2d& g, const glm::dvec2& pixel)
 {
 	const glm::dvec2 d = pixel - g.mean;
 	const glm::dmat2 inv = glm::inverse(g.cov);
@@ -438,17 +438,17 @@ glm::dvec4 over(const glm::dvec4& src, const glm::dvec4& dst, AlphaMode mode)
 	return glm::dvec4(rgb, outA);
 }
 
-glm::dvec3 compositeExpected(std::vector<Gaussian2D> layers,
+glm::dvec3 compositeExpected(std::vector<Gaussian2d> layers,
                              const glm::dvec2& pixel,
                              const glm::dvec3& background,
                              double pixelArea)
 {
 	std::sort(layers.begin(), layers.end(),
-	          [](const Gaussian2D& a, const Gaussian2D& b) { return a.depth < b.depth; });
+	          [](const Gaussian2d& a, const Gaussian2d& b) { return a.depth < b.depth; });
 
 	glm::dvec3 accum(0.0);   // premultiplied colour built up front-to-back
 	double transmittance = 1.0;
-	for (const Gaussian2D& g : layers) {
+	for (const Gaussian2d& g : layers) {
 		const double a = expectedCoverage(alphaAt(g, pixel), pixelArea);
 		accum += transmittance * a * g.color;
 		transmittance *= (1.0 - a);

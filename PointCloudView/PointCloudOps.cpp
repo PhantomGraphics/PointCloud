@@ -7,19 +7,19 @@
 #include "NormalEstimator.h"
 #include "DensityBasedFilter.h"
 #include "CurvatureEstimator.h"
-#include "RansacPlaneDetector.h"
-#include "RansacCylinderDetector.h"
-#include "RansacSphereDetector.h"
-#include "RansacConeDetector.h"
-#include "DBSCAN.h"
+#include "RANSACPlaneDetector.h"
+#include "RANSACCylinderDetector.h"
+#include "RANSACSphereDetector.h"
+#include "RANSACConeDetector.h"
+#include "DBSCANClustering.h"
 #include "DistanceBasedClustering.h"
 #include "RegionGrowing.h"
 #include "GroundExtractor.h"
 #include "FPFHEstimator.h"
 #include "BoundaryDetector.h"
 #include "MLSSurface.h"
-#include "ConvexHull2D.h"
-#include "ConcaveHull2D.h"
+#include "ConvexHull2d.h"
+#include "ConcaveHull2d.h"
 #include "ICPRegistration.h"
 #include "GlobalRegistration.h"
 
@@ -70,7 +70,7 @@ std::vector<Phantom::PC::Point> toPoints(const std::vector<glm::vec3>& positions
 // active scene into "<name>Inliers" (primary) + "<name>Outliers", hide the
 // source. Templated on the detector + model type.
 template <class Detector, class Model>
-ProcessOutcome runRansac(World& world, int activeSceneId, const RansacParams& p,
+ProcessOutcome runRansac(World& world, int activeSceneId, const RANSACParams& p,
                          const char* shape, const glm::vec3& inlierColour,
                          Model& modelOut)
 {
@@ -143,7 +143,7 @@ std::vector<glm::vec2> convexHull(std::vector<glm::vec2> pts)
 }
 
 void buildPlaneMesh(const std::vector<glm::vec3>& positions,
-                    const Phantom::PC::RansacPlaneDetector::PlaneModel& model,
+                    const Phantom::PC::RANSACPlaneDetector::PlaneModel& model,
                     World& world)
 {
     if (model.inliers.empty()) return;
@@ -185,7 +185,7 @@ void buildPlaneMesh(const std::vector<glm::vec3>& positions,
 }
 
 void buildCylinderMesh(const std::vector<glm::vec3>& positions,
-                       const Phantom::PC::RansacCylinderDetector::CylinderModel& model,
+                       const Phantom::PC::RANSACCylinderDetector::CylinderModel& model,
                        World& world)
 {
     if (model.inliers.empty()) return;
@@ -380,11 +380,11 @@ ProcessOutcome filterCurvature(World& world, int activeSceneId, const CurvatureF
 
 // --- RANSAC ---------------------------------------------------------------
 
-RansacPlaneResult detectPlane(World& world, int activeSceneId, const RansacParams& p)
+RANSACPlaneResult detectPlane(World& world, int activeSceneId, const RANSACParams& p)
 {
-    RansacPlaneResult r;
-    Phantom::PC::RansacPlaneDetector::PlaneModel model;
-    r.outcome = runRansac<Phantom::PC::RansacPlaneDetector>(
+    RANSACPlaneResult r;
+    Phantom::PC::RANSACPlaneDetector::PlaneModel model;
+    r.outcome = runRansac<Phantom::PC::RANSACPlaneDetector>(
         world, activeSceneId, p, "Plane", glm::vec3(0.2f, 0.9f, 0.3f), model);
     if (!r.outcome.ok) return r;
 
@@ -399,11 +399,11 @@ RansacPlaneResult detectPlane(World& world, int activeSceneId, const RansacParam
     return r;
 }
 
-RansacCylinderResult detectCylinder(World& world, int activeSceneId, const RansacParams& p)
+RANSACCylinderResult detectCylinder(World& world, int activeSceneId, const RANSACParams& p)
 {
-    RansacCylinderResult r;
-    Phantom::PC::RansacCylinderDetector::CylinderModel model;
-    r.outcome = runRansac<Phantom::PC::RansacCylinderDetector>(
+    RANSACCylinderResult r;
+    Phantom::PC::RANSACCylinderDetector::CylinderModel model;
+    r.outcome = runRansac<Phantom::PC::RANSACCylinderDetector>(
         world, activeSceneId, p, "Cylinder", glm::vec3(0.2f, 0.7f, 1.0f), model);
     if (!r.outcome.ok) return r;
 
@@ -418,11 +418,11 @@ RansacCylinderResult detectCylinder(World& world, int activeSceneId, const Ransa
     return r;
 }
 
-RansacSphereResult detectSphere(World& world, int activeSceneId, const RansacParams& p)
+RANSACSphereResult detectSphere(World& world, int activeSceneId, const RANSACParams& p)
 {
-    RansacSphereResult r;
-    Phantom::PC::RansacSphereDetector::SphereModel model;
-    r.outcome = runRansac<Phantom::PC::RansacSphereDetector>(
+    RANSACSphereResult r;
+    Phantom::PC::RANSACSphereDetector::SphereModel model;
+    r.outcome = runRansac<Phantom::PC::RANSACSphereDetector>(
         world, activeSceneId, p, "Sphere", glm::vec3(0.9f, 0.6f, 0.1f), model);
     if (!r.outcome.ok) return r;
 
@@ -433,11 +433,11 @@ RansacSphereResult detectSphere(World& world, int activeSceneId, const RansacPar
     return r;
 }
 
-RansacConeResult detectCone(World& world, int activeSceneId, const RansacParams& p)
+RANSACConeResult detectCone(World& world, int activeSceneId, const RANSACParams& p)
 {
-    RansacConeResult r;
-    Phantom::PC::RansacConeDetector::ConeModel model;
-    r.outcome = runRansac<Phantom::PC::RansacConeDetector>(
+    RANSACConeResult r;
+    Phantom::PC::RANSACConeDetector::ConeModel model;
+    r.outcome = runRansac<Phantom::PC::RANSACConeDetector>(
         world, activeSceneId, p, "Cone", glm::vec3(1.0f, 0.7f, 0.2f), model);
     if (!r.outcome.ok) return r;
 
@@ -472,7 +472,7 @@ ProcessOutcome emitClusterScene(World& world, PointCloudfScene& src,
 
 } // namespace
 
-ClusterResult clusterDbscan(World& world, int activeSceneId, const DbscanParams& p)
+ClusterResult clusterDbscan(World& world, int activeSceneId, const DBSCANParams& p)
 {
     ClusterResult r;
     auto* scene = world.findById(activeSceneId);
@@ -642,9 +642,9 @@ CurvatureResult estimateCurvature(World& world, int activeSceneId, const Curvatu
     return r;
 }
 
-FpfhResult estimateFpfh(World& world, int activeSceneId, const FpfhParams& p)
+FPFHResult estimateFpfh(World& world, int activeSceneId, const FPFHParams& p)
 {
-    FpfhResult r;
+    FPFHResult r;
     auto* scene = world.findById(activeSceneId);
     if (!scene)               { r.outcome.message = "no active scene"; return r; }
     if (!scene->hasNormals()) { r.outcome.message = "scene has no normals"; return r; }
@@ -728,7 +728,7 @@ BoundaryResult detectBoundary(World& world, int activeSceneId, const BoundaryPar
 
 // --- MLS surface --------------------------------------------------------
 
-ProcessOutcome mlsSmooth(World& world, int activeSceneId, const MlsSmoothParams& p)
+ProcessOutcome mlsSmooth(World& world, int activeSceneId, const MLSSmoothParams& p)
 {
     ProcessOutcome out;
     auto* scene = world.findById(activeSceneId);
@@ -749,7 +749,7 @@ ProcessOutcome mlsSmooth(World& world, int activeSceneId, const MlsSmoothParams&
     return out;
 }
 
-ProcessOutcome mlsUpsample(World& world, int activeSceneId, const MlsUpsampleParams& p)
+ProcessOutcome mlsUpsample(World& world, int activeSceneId, const MLSUpsampleParams& p)
 {
     ProcessOutcome out;
     auto* scene = world.findById(activeSceneId);
@@ -817,7 +817,7 @@ HullResult convexHull2D(World& world, int activeSceneId)
     auto* scene = world.findById(activeSceneId);
     if (!scene) { r.outcome.message = "no active scene"; return r; }
 
-    Phantom::PC::ConvexHull2D hull;
+    Phantom::PC::ConvexHull2d hull;
     for (const auto& q : scene->getPositions()) hull.add(q);
     if (!hull.compute()) {
         r.outcome.message = "convex hull failed (need >= 3 non-collinear points)";
@@ -833,7 +833,7 @@ HullResult concaveHull2D(World& world, int activeSceneId, const ConcaveHullParam
     auto* scene = world.findById(activeSceneId);
     if (!scene) { r.outcome.message = "no active scene"; return r; }
 
-    Phantom::PC::ConcaveHull2D hull;
+    Phantom::PC::ConcaveHull2d hull;
     for (const auto& q : scene->getPositions()) hull.add(q);
     if (!hull.compute(static_cast<size_t>(std::max(3, p.k)),
                       static_cast<size_t>(std::max(0, p.maxK)))) {
@@ -846,9 +846,9 @@ HullResult concaveHull2D(World& world, int activeSceneId, const ConcaveHullParam
 
 // --- Registration ----------------------------------------------------
 
-IcpResult icpAlign(World& world, int sourceSceneId, const IcpParams& p)
+ICPResult icpAlign(World& world, int sourceSceneId, const ICPParams& p)
 {
-    IcpResult r;
+    ICPResult r;
     auto* source = world.findById(sourceSceneId);
     if (!source) { r.outcome.message = "no active scene"; return r; }
     auto* target = world.findById(p.targetSceneId);

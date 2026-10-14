@@ -231,7 +231,7 @@ glm::dvec2 sampleCorrectedOffset(double opacity, const glm::dmat2& cov2d, RandSt
 // ---------------------------------------------------------------------------
 
 // A projected Gaussian in pixel space.
-struct Gaussian2D {
+struct Gaussian2d {
     glm::dvec2 mean{ 0.0 };
     glm::dmat2 cov{ 1.0 };
     double     opacity = 1.0;   // o in [0,1]
@@ -240,7 +240,7 @@ struct Gaussian2D {
 };
 
 // alpha(pixel) = o * exp(-1/2 d^T cov^-1 d)
-double alphaAt(const Gaussian2D& g, const glm::dvec2& pixel);
+double alphaAt(const Gaussian2d& g, const glm::dvec2& pixel);
 
 // Expected coverage of a stochastic-opaque-point pass over a pixel of the given
 // area: 1 - (1 - alpha)^pixelArea. For pixelArea == 1 this is exactly alpha --
@@ -258,7 +258,7 @@ glm::dvec4 over(const glm::dvec4& src, const glm::dvec4& dst, AlphaMode mode);
 // Expected composited colour of a stack of projected Gaussians at one pixel,
 // front-to-back, using expectedCoverage() as each layer's alpha over `background`.
 // `layers` need not be sorted; this sorts by depth ascending (near first).
-glm::dvec3 compositeExpected(std::vector<Gaussian2D> layers,
+glm::dvec3 compositeExpected(std::vector<Gaussian2d> layers,
                              const glm::dvec2& pixel,
                              const glm::dvec3& background,
                              double pixelArea = 1.0);

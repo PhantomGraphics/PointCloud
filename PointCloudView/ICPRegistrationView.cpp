@@ -42,7 +42,7 @@ void ICPRegistrationView::onImGui(World& world, int activeSceneId,
         ImGui::SliderFloat("Kernel Delta", &robustKernelDelta_, 0.001f, 5.0f, "%.4f");
 
     if (ImGui::Button("Run")) {
-        ops::IcpParams p;
+        ops::ICPParams p;
         p.targetSceneId             = targetId_;
         p.pointToPlane              = pointToPlane_;
         p.maxIterations             = maxIterations_;

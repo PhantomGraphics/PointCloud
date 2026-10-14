@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "../PointCloud/RansacConeDetector.h"
+#include "../PointCloud/RANSACConeDetector.h"
 
 #include <random>
 #include <vector>
@@ -55,7 +55,7 @@ namespace {
 
 } // namespace
 
-TEST(RansacConeDetectorTest, DetectsConeWithNoise)
+TEST(RANSACConeDetectorTest, DetectsConeWithNoise)
 {
 	const size_t inliers = 500;
 	const size_t outliers = 100;
@@ -64,8 +64,8 @@ TEST(RansacConeDetectorTest, DetectsConeWithNoise)
 	const float trueHalfAngle = 0.20943951f; // 12 degrees
 	auto points = createNoisyConePoints(inliers, outliers, trueApex, trueAxis, trueHalfAngle, 1.0f, 5.0f, 0.01f, 12345u);
 
-	RansacConeDetector detector(42u);
-	RansacConeDetector::ConeModel model;
+	RANSACConeDetector detector(42u);
+	RANSACConeDetector::ConeModel model;
 	const bool ok = detector.detect(points, model, 300, 0.05f, 100);
 
 	EXPECT_TRUE(ok);
@@ -81,26 +81,26 @@ TEST(RansacConeDetectorTest, DetectsConeWithNoise)
 	EXPECT_NEAR(glm::length(model.apex - trueApex), 0.0f, 1.0f);
 }
 
-TEST(RansacConeDetectorTest, FailsWhenNotEnoughInliers)
+TEST(RANSACConeDetectorTest, FailsWhenNotEnoughInliers)
 {
 	const size_t inliers = 40;
 	const size_t outliers = 20;
 	auto points = createNoisyConePoints(inliers, outliers);
 
-	RansacConeDetector detector(42u);
-	RansacConeDetector::ConeModel model;
+	RANSACConeDetector detector(42u);
+	RANSACConeDetector::ConeModel model;
 	const bool ok = detector.detect(points, model, 200, 0.05f, 100);
 
 	EXPECT_FALSE(ok);
 }
 
-TEST(RansacConeDetectorTest, FailsWithLessThanSixPoints)
+TEST(RANSACConeDetectorTest, FailsWithLessThanSixPoints)
 {
 	std::vector<Vector3df> points = {
 		Vector3df(0.0f, 0.0f, 0.0f), Vector3df(1.0f, 0.0f, 1.0f),
 		Vector3df(0.0f, 1.0f, 1.0f), Vector3df(-1.0f, 0.0f, 1.0f)
 	};
-	RansacConeDetector detector(42u);
-	RansacConeDetector::ConeModel model;
+	RANSACConeDetector detector(42u);
+	RANSACConeDetector::ConeModel model;
 	EXPECT_FALSE(detector.detect(points, model));
 }

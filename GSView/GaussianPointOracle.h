@@ -30,7 +30,7 @@
 
 namespace Phantom::GSView::oracle {
 
-struct Gaussian3D {
+struct Gaussian3d {
     glm::dvec3 pos{ 0.0 };
     glm::dvec3 logScale{ 0.0 };          // log of the per-axis std-dev
     glm::dquat rot{ 1.0, 0.0, 0.0, 0.0 }; // (w,x,y,z)
@@ -49,18 +49,18 @@ struct OracleCamera {
 using Image = std::vector<glm::dvec3>;   // row-major, size W*H
 
 // Ground truth.
-Image renderAnalytic(const std::vector<Gaussian3D>& scene,
+Image renderAnalytic(const std::vector<Gaussian3d>& scene,
                      OracleCamera cam, int W, int H,
                      const glm::dvec3& background);
 
-Image renderAnalyticSamples(const std::vector<Gaussian3D>& scene,
+Image renderAnalyticSamples(const std::vector<Gaussian3d>& scene,
                             OracleCamera cam, int W, int H,
                             const glm::dvec3& background,
                             const std::vector<glm::ivec2>& pixels);
 
 // CPU port of the GPU pipeline. `numSets` independent sample sets are averaged
 // (each with a distinct frame seed), mirroring progressive accumulation.
-Image renderMonteCarlo(const std::vector<Gaussian3D>& scene,
+Image renderMonteCarlo(const std::vector<Gaussian3d>& scene,
                        OracleCamera cam, int W, int H, int sppSide, int numSets,
                        const glm::dvec3& background, std::uint32_t baseSeed = 1u);
 
@@ -89,7 +89,7 @@ struct MonteCarloOptions {
 
 // renderMonteCarlo() with point footprints. With the default options this is
 // bit-identical to the overload above (same RNG stream, same writes).
-Image renderMonteCarlo(const std::vector<Gaussian3D>& scene,
+Image renderMonteCarlo(const std::vector<Gaussian3d>& scene,
                        OracleCamera cam, int W, int H, int sppSide, int numSets,
                        const glm::dvec3& background, std::uint32_t baseSeed,
                        const MonteCarloOptions& options);
@@ -115,7 +115,7 @@ struct ParticleOptions {
     RenderStats* stats = nullptr;
 };
 
-Image renderParticles3D(const std::vector<Gaussian3D>& scene,
+Image renderParticles3D(const std::vector<Gaussian3d>& scene,
                         OracleCamera cam, int W, int H, int sppSide, int numSets,
                         const glm::dvec3& background, std::uint32_t baseSeed,
                         const ParticleOptions& options);

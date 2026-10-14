@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "../PointCloud/DBSCAN.h"
+#include "../PointCloud/DBSCANClustering.h"
 
 using namespace Phantom::PC;
 

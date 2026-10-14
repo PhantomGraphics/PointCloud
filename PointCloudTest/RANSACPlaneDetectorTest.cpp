@@ -1,5 +1,5 @@
 ﻿#include "pch.h"
-#include "../PointCloud/RansacPlaneDetector.h"
+#include "../PointCloud/RANSACPlaneDetector.h"
 
 #include <random>
 #include <vector>
@@ -41,15 +41,15 @@ static std::vector<Vector3df> createNoisyPlanePoints(
     return pts;
 }
 
-TEST(RansacPlaneDetectorTest, DetectsPlaneWithNoise)
+TEST(RANSACPlaneDetectorTest, DetectsPlaneWithNoise)
 {
     const size_t inliers = 300;
     const size_t outliers = 50;
     const float noiseSigma = 0.005f;
     auto points = createNoisyPlanePoints(inliers, outliers, noiseSigma, 9876u);
 
-   RansacPlaneDetector detector(42u);
-    RansacPlaneDetector::PlaneModel model;
+   RANSACPlaneDetector detector(42u);
+    RANSACPlaneDetector::PlaneModel model;
     const int iterations = 200;
     const float distThreshold = 0.02f;
     const size_t minInliers = 100;
@@ -67,15 +67,15 @@ TEST(RansacPlaneDetectorTest, DetectsPlaneWithNoise)
     EXPECT_NEAR(model.offset, 0.0f, 0.02f);
 }
 
-TEST(RansacPlaneDetectorTest, FailsWhenNotEnoughInliers)
+TEST(RANSACPlaneDetectorTest, FailsWhenNotEnoughInliers)
 {
     const size_t inliers = 30; // 少なすぎる
     const size_t outliers = 20;
     const float noiseSigma = 0.005f;
     auto points = createNoisyPlanePoints(inliers, outliers, noiseSigma, 1111u);
 
-   RansacPlaneDetector detector(42u);
-    RansacPlaneDetector::PlaneModel model;
+   RANSACPlaneDetector detector(42u);
+    RANSACPlaneDetector::PlaneModel model;
     const int iterations = 200;
     const float distThreshold = 0.02f;
     const size_t minInliers = 50;
@@ -85,10 +85,10 @@ TEST(RansacPlaneDetectorTest, FailsWhenNotEnoughInliers)
     EXPECT_FALSE(ok);
 }
 
-TEST(RansacPlaneDetectorTest, FailsWithLessThanThreePoints)
+TEST(RANSACPlaneDetectorTest, FailsWithLessThanThreePoints)
 {
     std::vector<Vector3df> points = { Vector3df(0.0f, 0.0f, 0.0f), Vector3df(1.0f, 0.0f, 0.0f) };
-   RansacPlaneDetector detector(42u);
-    RansacPlaneDetector::PlaneModel model;
+   RANSACPlaneDetector detector(42u);
+    RANSACPlaneDetector::PlaneModel model;
     EXPECT_FALSE(detector.detect(points, model));
 }

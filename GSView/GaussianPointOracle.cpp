@@ -35,7 +35,7 @@ struct Projected {
     glm::dvec3 color{ 0.0 };
 };
 
-Projected project(const Gaussian3D& g, const OracleCamera& c)
+Projected project(const Gaussian3d& g, const OracleCamera& c)
 {
     Projected pr;
     const gpm::PinholeCamera pin = toPinhole(c);
@@ -64,15 +64,15 @@ void defaultPrincipalPoint(OracleCamera& c, int W, int H)
     }
 }
 
-std::vector<gpm::Gaussian2D> projectLayers(const std::vector<Gaussian3D>& scene,
+std::vector<gpm::Gaussian2d> projectLayers(const std::vector<Gaussian3d>& scene,
                                            const OracleCamera& cam)
 {
-    std::vector<gpm::Gaussian2D> layers;
+    std::vector<gpm::Gaussian2d> layers;
     layers.reserve(scene.size());
     for (const auto& g : scene) {
         const Projected p = project(g, cam);
         if (!p.visible) continue;
-        gpm::Gaussian2D layer;
+        gpm::Gaussian2d layer;
         layer.mean = p.mean;
         layer.cov = p.cov2d;
         layer.opacity = p.opacity;
@@ -133,12 +133,12 @@ void resolveSet(int W, int H, int spp, const std::vector<double>& depth,
 
 } // namespace
 
-Image renderAnalytic(const std::vector<Gaussian3D>& scene, OracleCamera cam,
+Image renderAnalytic(const std::vector<Gaussian3d>& scene, OracleCamera cam,
                      int W, int H, const glm::dvec3& background)
 {
     defaultPrincipalPoint(cam, W, H);
 
-    const std::vector<gpm::Gaussian2D> layers = projectLayers(scene, cam);
+    const std::vector<gpm::Gaussian2d> layers = projectLayers(scene, cam);
 
     Image img(static_cast<size_t>(W) * H);
     for (int y = 0; y < H; ++y) {
@@ -151,12 +151,12 @@ Image renderAnalytic(const std::vector<Gaussian3D>& scene, OracleCamera cam,
     return img;
 }
 
-Image renderAnalyticSamples(const std::vector<Gaussian3D>& scene, OracleCamera cam,
+Image renderAnalyticSamples(const std::vector<Gaussian3d>& scene, OracleCamera cam,
                             int W, int H, const glm::dvec3& background,
                             const std::vector<glm::ivec2>& pixels)
 {
     defaultPrincipalPoint(cam, W, H);
-    const std::vector<gpm::Gaussian2D> layers = projectLayers(scene, cam);
+    const std::vector<gpm::Gaussian2d> layers = projectLayers(scene, cam);
     Image img;
     img.reserve(pixels.size());
     for (const glm::ivec2& px : pixels) {
@@ -170,7 +170,7 @@ Image renderAnalyticSamples(const std::vector<Gaussian3D>& scene, OracleCamera c
     return img;
 }
 
-Image renderMonteCarlo(const std::vector<Gaussian3D>& scene, OracleCamera cam,
+Image renderMonteCarlo(const std::vector<Gaussian3d>& scene, OracleCamera cam,
                        int W, int H, int sppSide, int numSets,
                        const glm::dvec3& background, std::uint32_t baseSeed)
 {
@@ -178,7 +178,7 @@ Image renderMonteCarlo(const std::vector<Gaussian3D>& scene, OracleCamera cam,
                             MonteCarloOptions{});
 }
 
-Image renderMonteCarlo(const std::vector<Gaussian3D>& scene, OracleCamera cam,
+Image renderMonteCarlo(const std::vector<Gaussian3d>& scene, OracleCamera cam,
                        int W, int H, int sppSide, int numSets,
                        const glm::dvec3& background, std::uint32_t baseSeed,
                        const MonteCarloOptions& options)
@@ -271,7 +271,7 @@ Image renderMonteCarlo(const std::vector<Gaussian3D>& scene, OracleCamera cam,
     return accum;
 }
 
-Image renderParticles3D(const std::vector<Gaussian3D>& scene, OracleCamera cam,
+Image renderParticles3D(const std::vector<Gaussian3d>& scene, OracleCamera cam,
                         int W, int H, int sppSide, int numSets,
                         const glm::dvec3& background, std::uint32_t baseSeed,
                         const ParticleOptions& options)
@@ -289,7 +289,7 @@ Image renderParticles3D(const std::vector<Gaussian3D>& scene, OracleCamera cam,
     const double objectDepth = gpm::worldToCamera(pin, centre).z;
 
     struct Prep {
-        const Gaussian3D* g = nullptr;
+        const Gaussian3d* g = nullptr;
         Projected pr;
         glm::dmat3 L3{ 1.0 };      // Cholesky factor of the 3D covariance
         glm::dmat2 cov2dInv{ 1.0 };

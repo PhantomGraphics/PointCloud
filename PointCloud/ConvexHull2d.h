@@ -11,11 +11,11 @@ namespace Phantom {
 		/// boundary extraction of scanned data. z is ignored entirely for the computation, and
 		/// returned hull points use z=0 -- callers who need the original z back must look it up
 		/// by (x,y) themselves.
-		class ConvexHull2D
+		class ConvexHull2d
 		{
 		public:
-			ConvexHull2D() = default;
-			~ConvexHull2D() = default;
+			ConvexHull2d() = default;
+			~ConvexHull2d() = default;
 
 			/// @brief Adds a point to be processed (only its x,y are used).
 			void add(const Math::Vector3df& position) { pointCloud.push_back(position); }

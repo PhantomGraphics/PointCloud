@@ -231,7 +231,7 @@ bool GSViewRenderer::validateGaussianPointOracle(double& psnrAll, double& psnrFo
 	flip[2][2] = -1.0f;
 	const glm::mat3 toOracle = flip * glm::mat3(view);
 
-	std::vector<oracle::Gaussian3D> scene;
+	std::vector<oracle::Gaussian3d> scene;
 	scene.reserve(gsCloud_->points.size());
 	const int dataStride = Phantom::PointCloud::GSPointCloud::coeffsPerChannel(gsCloud_->shDegree);
 	const int evalDegree = std::min(std::clamp(gpParams_.shDegree, 0, 3), gsCloud_->shDegree);
@@ -239,7 +239,7 @@ bool GSViewRenderer::validateGaussianPointOracle(double& psnrAll, double& psnrFo
 		const auto& p = gsCloud_->points[i];
 		const double opacity = gpm::sigmoid(p.opacity);
 		if (opacity < gpParams_.opacityCutoff) continue;
-		oracle::Gaussian3D g;
+		oracle::Gaussian3d g;
 		const glm::vec3 world(p.x, p.y, p.z);
 		g.pos = glm::dvec3(flip * glm::vec3(view * glm::vec4(world, 1.0f)));
 		g.logScale = glm::dvec3(p.scale[0], p.scale[1], p.scale[2]);

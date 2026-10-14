@@ -72,32 +72,32 @@ ProcessOutcome filterCurvature(World& world, int activeSceneId, const CurvatureF
 
 // --- RANSAC primitive detection ----------------------------------------
 
-struct RansacParams {
+struct RANSACParams {
     float threshold  = 0.02f;
     int   iterations = 200;
     int   minInliers = 50;
     bool  buildOverlayMesh = false;  // GUI adds a plane/cylinder polygon overlay
 };
 
-struct RansacPlaneResult {
+struct RANSACPlaneResult {
     ProcessOutcome outcome;
     glm::vec3 normal{ 0.f };
     float     offset = 0.f;
     int       inlierCount = 0;
 };
-struct RansacCylinderResult {
+struct RANSACCylinderResult {
     ProcessOutcome outcome;
     glm::vec3 axis{ 0.f };
     float     radius = 0.f;
     int       inlierCount = 0;
 };
-struct RansacSphereResult {
+struct RANSACSphereResult {
     ProcessOutcome outcome;
     glm::vec3 center{ 0.f };
     float     radius = 0.f;
     int       inlierCount = 0;
 };
-struct RansacConeResult {
+struct RANSACConeResult {
     ProcessOutcome outcome;
     glm::vec3 apex{ 0.f };
     glm::vec3 axis{ 0.f };
@@ -106,14 +106,14 @@ struct RansacConeResult {
 };
 
 // Each adds "<Shape>Inliers" (primary) + "<Shape>Outliers", hides the source.
-RansacPlaneResult    detectPlane   (World& world, int activeSceneId, const RansacParams& p);
-RansacCylinderResult detectCylinder(World& world, int activeSceneId, const RansacParams& p);
-RansacSphereResult   detectSphere  (World& world, int activeSceneId, const RansacParams& p);
-RansacConeResult     detectCone    (World& world, int activeSceneId, const RansacParams& p);
+RANSACPlaneResult    detectPlane   (World& world, int activeSceneId, const RANSACParams& p);
+RANSACCylinderResult detectCylinder(World& world, int activeSceneId, const RANSACParams& p);
+RANSACSphereResult   detectSphere  (World& world, int activeSceneId, const RANSACParams& p);
+RANSACConeResult     detectCone    (World& world, int activeSceneId, const RANSACParams& p);
 
 // --- Clustering / segmentation -----------------------------------------
 
-struct DbscanParams   { float eps = 0.02f; int minPts = 10; };
+struct DBSCANParams   { float eps = 0.02f; int minPts = 10; };
 struct DistanceClusterParams { float radius = 0.02f; };
 struct RegionGrowParams {
     float curvatureRadius = 0.1f;
@@ -129,7 +129,7 @@ struct ClusterResult {
 };
 
 // "DBSCANResult" -- per-cluster colour (grey for noise), source hidden.
-ClusterResult clusterDbscan(World& world, int activeSceneId, const DbscanParams& p);
+ClusterResult clusterDbscan(World& world, int activeSceneId, const DBSCANParams& p);
 // "RegionGrowingResult" -- distance-based region growing, per-cluster colour.
 ClusterResult clusterDistance(World& world, int activeSceneId, const DistanceClusterParams& p);
 // "RegionGrowingNormalResult" -- normal/curvature region growing (needs normals),
@@ -173,13 +173,13 @@ struct CurvatureResult {
 
 CurvatureResult estimateCurvature(World& world, int activeSceneId, const CurvatureParams& p);
 
-struct FpfhParams { int kNeighbors = 20; };
-struct FpfhResult {
+struct FPFHParams { int kNeighbors = 20; };
+struct FPFHResult {
     ProcessOutcome outcome;    // "FPFHResult" (needs normals)
     int descriptorCount = 0;
     int histogramSize   = 0;
 };
-FpfhResult estimateFpfh(World& world, int activeSceneId, const FpfhParams& p);
+FPFHResult estimateFpfh(World& world, int activeSceneId, const FPFHParams& p);
 
 struct BoundaryParams { float radius = 0.1f; float angleThresholdDeg = 153.0f; };
 struct BoundaryResult {
@@ -190,17 +190,17 @@ BoundaryResult detectBoundary(World& world, int activeSceneId, const BoundaryPar
 
 // --- MLS surface -----------------------------------------------------
 
-struct MlsSmoothParams { float radius = 0.1f; };
-struct MlsUpsampleParams {
+struct MLSSmoothParams { float radius = 0.1f; };
+struct MLSUpsampleParams {
     float radius         = 0.1f;
     float upsampleRadius = 0.05f;
     float stepSize       = 0.01f;
 };
 
 // "MLSSmoothed" (colour 0.5,0.85,0.9), source hidden.
-ProcessOutcome mlsSmooth(World& world, int activeSceneId, const MlsSmoothParams& p);
+ProcessOutcome mlsSmooth(World& world, int activeSceneId, const MLSSmoothParams& p);
 // "MLSUpsampled" (colour 0.9,0.7,0.9). Source stays visible (new points are added).
-ProcessOutcome mlsUpsample(World& world, int activeSceneId, const MlsUpsampleParams& p);
+ProcessOutcome mlsUpsample(World& world, int activeSceneId, const MLSUpsampleParams& p);
 
 // --- 2D hulls -------------------------------------------------------
 
@@ -217,7 +217,7 @@ HullResult concaveHull2D(World& world, int activeSceneId, const ConcaveHullParam
 
 // --- Registration -------------------------------------------------
 
-struct IcpParams {
+struct ICPParams {
     int   targetSceneId = -1;
     bool  pointToPlane  = false;
     int   maxIterations = 50;
@@ -228,7 +228,7 @@ struct IcpParams {
     bool  estimateScale = false;
 };
 
-struct IcpResult {
+struct ICPResult {
     ProcessOutcome outcome;   // "ICPAligned" / "ICPAlignedP2Plane"
     float fitness = 0.f;
     int   iterations = 0;
@@ -236,7 +236,7 @@ struct IcpResult {
     float scale = 1.f;
 };
 
-IcpResult icpAlign(World& world, int sourceSceneId, const IcpParams& p);
+ICPResult icpAlign(World& world, int sourceSceneId, const ICPParams& p);
 
 struct GlobalRegisterParams {
     int   targetSceneId  = -1;

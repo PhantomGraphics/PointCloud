@@ -33,10 +33,10 @@ enum class ProcessId {
     RegionGrowing,
     GroundExtractor,
 
-    RansacPlane,
-    RansacCylinder,
-    RansacSphere,
-    RansacCone,
+    RANSACPlane,
+    RANSACCylinder,
+    RANSACSphere,
+    RANSACCone,
 
     ICPRegistration,
     GlobalRegistration,
@@ -44,8 +44,8 @@ enum class ProcessId {
     GreedyProjectionMesh,
     PoissonSurface,
     MLSSurface,
-    ConvexHull2D,
-    ConcaveHull2D,
+    ConvexHull2d,
+    ConcaveHull2d,
 
     Count,
 };

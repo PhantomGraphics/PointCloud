@@ -18,7 +18,7 @@ private:
     int kNeighbors_ = 20;
 
     bool           hasResult_ = false;
-    ops::FpfhResult result_;
+    ops::FPFHResult result_;
 };
 
 } // namespace VPC

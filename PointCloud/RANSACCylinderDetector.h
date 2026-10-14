@@ -9,11 +9,11 @@ namespace Phantom {
 	namespace PC {
 
 		/// @brief Detects a cylinder from a point cloud using the RANSAC algorithm.
-		class RansacCylinderDetector
+		class RANSACCylinderDetector
 		{
 		public:
-			RansacCylinderDetector() = default;
-			~RansacCylinderDetector() = default;
+			RANSACCylinderDetector() = default;
+			~RANSACCylinderDetector() = default;
 
 			/// @brief Holds the result of a cylinder detection.
 			struct CylinderModel {

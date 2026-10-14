@@ -1,4 +1,4 @@
-#include "ConcaveHull2D.h"
+#include "ConcaveHull2d.h"
 
 #include <algorithm>
 #include <cmath>
@@ -197,7 +197,7 @@ namespace {
 	}
 }
 
-bool ConcaveHull2D::compute(size_t k, size_t maxK)
+bool ConcaveHull2d::compute(size_t k, size_t maxK)
 {
 	hullPoints.clear();
 	area = 0.0f;

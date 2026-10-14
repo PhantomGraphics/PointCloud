@@ -12,7 +12,7 @@ void MLSSurfaceView::onImGui(World& world, int activeSceneId,
     ImGui::SliderFloat("Step Size",       &stepSize_,       0.001f, 0.2f, "%.4f");
 
     if (ImGui::Button("Smooth")) {
-        ops::MlsSmoothParams p;
+        ops::MLSSmoothParams p;
         p.radius = searchRadius_;
         lastOutcome_ = ops::mlsSmooth(world, activeSceneId, p);
         hasResult_ = true;
@@ -20,7 +20,7 @@ void MLSSurfaceView::onImGui(World& world, int activeSceneId,
     }
     ImGui::SameLine();
     if (ImGui::Button("Upsample")) {
-        ops::MlsUpsampleParams p;
+        ops::MLSUpsampleParams p;
         p.radius         = searchRadius_;
         p.upsampleRadius = upsampleRadius_;
         p.stepSize       = stepSize_;

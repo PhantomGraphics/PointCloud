@@ -25,9 +25,9 @@ OracleCamera frontalCamera()
     return c;
 }
 
-Gaussian3D isoSplat(double z, double opacity, double sigmaWorld = 0.15)
+Gaussian3d isoSplat(double z, double opacity, double sigmaWorld = 0.15)
 {
-    Gaussian3D g;
+    Gaussian3d g;
     g.pos = glm::dvec3(0.0, 0.0, z);
     g.logScale = glm::dvec3(std::log(sigmaWorld));
     g.opacity = opacity;
@@ -45,7 +45,7 @@ const glm::dvec3 kBg(0.05, 0.05, 0.08);
 TEST(GaussianPointOracle, SingleGaussianConvergesToAnalytic)
 {
     for (double o : { 0.1, 0.5, 0.9 }) {
-        const std::vector<Gaussian3D> scene = { isoSplat(6.0, o) };
+        const std::vector<Gaussian3d> scene = { isoSplat(6.0, o) };
         const auto ref = renderAnalytic(scene, frontalCamera(), kW, kH, kBg);
         const auto mc  = renderMonteCarlo(scene, frontalCamera(), kW, kH, kSppSide, kSets, kBg);
 
@@ -59,10 +59,10 @@ TEST(GaussianPointOracle, SingleGaussianConvergesToAnalytic)
 
 TEST(GaussianPointOracle, FrontBackTwoLayerConvergesToAnalytic)
 {
-    std::vector<Gaussian3D> scene;
-    Gaussian3D back = isoSplat(9.0, 0.8);
+    std::vector<Gaussian3d> scene;
+    Gaussian3d back = isoSplat(9.0, 0.8);
     back.color = glm::dvec3(0.15, 0.7, 0.25);
-    Gaussian3D front = isoSplat(5.0, 0.6);
+    Gaussian3d front = isoSplat(5.0, 0.6);
     front.color = glm::dvec3(0.9, 0.2, 0.2);
     scene = { back, front };
 
@@ -76,20 +76,20 @@ TEST(GaussianPointOracle, FrontBackTwoLayerConvergesToAnalytic)
     EXPECT_GE(s, 0.98) << "SSIM " << s;
 
     // Order independence: reversing the input must give a statistically equal image.
-    std::vector<Gaussian3D> reversed = { front, back };
+    std::vector<Gaussian3d> reversed = { front, back };
     const auto mc2 = renderMonteCarlo(reversed, frontalCamera(), kW, kH, kSppSide, kSets, kBg);
     EXPECT_GE(psnr(mc, mc2), 40.0);
 }
 
 TEST(GaussianPointOracle, AnisotropicRotatedGaussianConvergesToAnalytic)
 {
-    Gaussian3D g;
+    Gaussian3d g;
     g.pos = glm::dvec3(0.0, 0.0, 6.0);
     g.logScale = glm::dvec3(std::log(0.28), std::log(0.10), std::log(0.06));
     g.rot = glm::normalize(glm::dquat(0.82, 0.20, -0.45, 0.30));
     g.opacity = 0.7;
     g.color = glm::dvec3(0.3, 0.5, 0.95);
-    const std::vector<Gaussian3D> scene = { g };
+    const std::vector<Gaussian3d> scene = { g };
 
     const auto ref = renderAnalytic(scene, frontalCamera(), kW, kH, kBg);
     const auto mc  = renderMonteCarlo(scene, frontalCamera(), kW, kH, kSppSide, kSets, kBg);
@@ -102,7 +102,7 @@ TEST(GaussianPointOracle, AnisotropicRotatedGaussianConvergesToAnalytic)
 
 TEST(GaussianPointOracle, FullyTransparentSceneIsBackground)
 {
-    const std::vector<Gaussian3D> scene = { isoSplat(6.0, 0.0) };
+    const std::vector<Gaussian3d> scene = { isoSplat(6.0, 0.0) };
     const auto mc = renderMonteCarlo(scene, frontalCamera(), kW, kH, kSppSide, 8, kBg);
     for (const auto& px : mc) {
         EXPECT_NEAR(px.r, kBg.r, 1e-9);

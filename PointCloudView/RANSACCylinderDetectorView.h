@@ -5,7 +5,7 @@
 
 namespace Phantom::VPC {
 
-class RansacCylinderDetectorView : public IProcessView {
+class RANSACCylinderDetectorView : public IProcessView {
 public:
     const char* getName() const override { return "RANSAC Cylinder Detector"; }
     void onImGui(World& world, int activeSceneId,
@@ -17,7 +17,7 @@ private:
     int   minInliers_ = 50;
 
     bool                     hasResult_ = false;
-    ops::RansacCylinderResult result_;
+    ops::RANSACCylinderResult result_;
 };
 
 } // namespace VPC

@@ -1,4 +1,4 @@
-#include "ConvexHull2D.h"
+#include "ConvexHull2d.h"
 
 #include <algorithm>
 #include <cmath>
@@ -19,7 +19,7 @@ namespace {
 	}
 }
 
-bool ConvexHull2D::compute()
+bool ConvexHull2d::compute()
 {
 	hullPoints.clear();
 	area = 0.0f;

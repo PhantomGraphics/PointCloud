@@ -22,7 +22,7 @@ private:
     bool  estimateScale_     = false;
 
     bool          hasResult_ = false;
-    ops::IcpResult result_;
+    ops::ICPResult result_;
 };
 
 } // namespace VPC

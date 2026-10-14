@@ -75,7 +75,7 @@ bool GlobalRegistration::align(
 	Vector3df bestTranslation(0.0f, 0.0f, 0.0f);
 	bool foundAny = false;
 
-	// See RansacPlaneDetector::detect() for why each iteration gets its own RNG seeded from `it`
+	// See RANSACPlaneDetector::detect() for why each iteration gets its own RNG seeded from `it`
 	// (also avoids sharing the `sampleIdx` scratch buffer across threads).
 #pragma omp parallel for
 	for (int it = 0; it < iterations; ++it) {
@@ -138,7 +138,7 @@ bool GlobalRegistration::align(
 			}
 		}
 
-		// No cheap pre-filter is available here (unlike the Ransac*Detector classes' minInliers
+		// No cheap pre-filter is available here (unlike the RANSAC*Detector classes' minInliers
 		// guard), so the compare-and-update always goes through the critical section; the O(n)
 		// inlier count above dominates the per-iteration cost, so this stays cheap relative to it.
 #pragma omp critical

@@ -354,14 +354,14 @@ TEST(GaussianPointMath, OverCompositesConsistentlyInBothAlphaModes)
 
 TEST(GaussianPointMath, CompositeExpectedMatchesHandCalculationForTwoLayers)
 {
-	Gaussian2D front;
+	Gaussian2d front;
 	front.mean = glm::dvec2(0.0);
 	front.cov = glm::dmat2(4.0, 0.0, 0.0, 4.0);
 	front.opacity = 0.6;
 	front.color = glm::dvec3(1.0, 0.0, 0.0);
 	front.depth = 1.0;
 
-	Gaussian2D back = front;
+	Gaussian2d back = front;
 	back.opacity = 0.8;
 	back.color = glm::dvec3(0.0, 1.0, 0.0);
 	back.depth = 5.0;
@@ -388,7 +388,7 @@ TEST(GaussianPointMath, MonteCarloSingleGaussianCoverageMatchesOracle)
 {
 	struct Cfg { double sigma; double opacity; };
 	for (Cfg cfg : std::vector<Cfg>{ {3.0, 0.8}, {5.0, 0.5}, {4.0, 0.95} }) {
-		Gaussian2D g;
+		Gaussian2d g;
 		g.mean = glm::dvec2(0.0);
 		g.cov = glm::dmat2(cfg.sigma * cfg.sigma, 0.0, 0.0, cfg.sigma * cfg.sigma);
 		g.opacity = cfg.opacity;

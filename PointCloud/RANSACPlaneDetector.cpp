@@ -1,4 +1,4 @@
-﻿#include "RansacPlaneDetector.h"
+﻿#include "RANSACPlaneDetector.h"
 
 #include <random>
 #include <algorithm>
@@ -8,7 +8,7 @@
 using namespace Phantom::PC;
 using namespace Phantom::Math;
 
-bool RansacPlaneDetector::detect(
+bool RANSACPlaneDetector::detect(
 	const std::vector<Vector3df>& points,
 	PlaneModel& bestModel,
 	int iterations,
@@ -77,7 +77,7 @@ bool RansacPlaneDetector::detect(
 	return bestInlierCount >= minInliers;
 }
 
-Vector3df RansacPlaneDetector::computeCentroid(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
+Vector3df RANSACPlaneDetector::computeCentroid(const std::vector<Vector3df>& pts, const std::vector<size_t>& indices) const
 {
 	Vector3df c(0.0f);
 	for (auto i : indices) {
@@ -87,7 +87,7 @@ Vector3df RansacPlaneDetector::computeCentroid(const std::vector<Vector3df>& pts
 	return c;
 }
 
-bool RansacPlaneDetector::computePlaneFromThreePoints(const Vector3df& p0, const Vector3df& p1, const Vector3df& p2, Vector3df& normal, float& offset) const
+bool RANSACPlaneDetector::computePlaneFromThreePoints(const Vector3df& p0, const Vector3df& p1, const Vector3df& p2, Vector3df& normal, float& offset) const
 {
 	const auto v1 = p1 - p0;
 	const auto v2 = p2 - p0;
@@ -99,7 +99,7 @@ bool RansacPlaneDetector::computePlaneFromThreePoints(const Vector3df& p0, const
 	return true;
 }
 
-float RansacPlaneDetector::pointPlaneDistance(const Vector3df& p, const Vector3df& normal, float offset) const
+float RANSACPlaneDetector::pointPlaneDistance(const Vector3df& p, const Vector3df& normal, float offset) const
 {
 	return std::fabs(glm::dot(normal, p) + offset);
 }

@@ -1,10 +1,10 @@
-#include "ConvexHull2DView.h"
+#include "ConvexHull2dView.h"
 
 #include "imgui.h"
 
 namespace Phantom::VPC {
 
-void ConvexHull2DView::onImGui(World& world, int activeSceneId,
+void ConvexHull2dView::onImGui(World& world, int activeSceneId,
                                 const std::function<void(int)>& onResult)
 {
     ImGui::TextWrapped("Computes the convex hull of the active scene's XY projection.");

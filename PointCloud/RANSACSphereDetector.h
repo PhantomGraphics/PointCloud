@@ -7,12 +7,12 @@ namespace Phantom {
 	namespace PC {
 
 		/// @brief Detects a sphere from a point cloud using the RANSAC algorithm.
-		class RansacSphereDetector
+		class RANSACSphereDetector
 		{
 		public:
-			RansacSphereDetector() = default;
-			explicit RansacSphereDetector(unsigned seed) : hasSeed(true), rngSeed(seed) {}
-			~RansacSphereDetector() = default;
+			RANSACSphereDetector() = default;
+			explicit RANSACSphereDetector(unsigned seed) : hasSeed(true), rngSeed(seed) {}
+			~RANSACSphereDetector() = default;
 
 			/// @brief Holds the result of a sphere detection.
 			struct SphereModel {

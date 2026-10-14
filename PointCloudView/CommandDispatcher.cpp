@@ -430,7 +430,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "RansacPlane") {
-        Phantom::VPC::ops::RansacParams p;
+        Phantom::VPC::ops::RANSACParams p;
         p.threshold = toFloat(arg, 0.05f);
         const auto r = Phantom::VPC::ops::detectPlane(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
@@ -440,7 +440,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "RansacCylinder") {
-        Phantom::VPC::ops::RansacParams p;
+        Phantom::VPC::ops::RANSACParams p;
         p.threshold = toFloat(arg, 0.05f);
         const auto r = Phantom::VPC::ops::detectCylinder(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
@@ -452,7 +452,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "ClusterDbscan") {
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:ClusterDbscan expects eps,minPts";
-        Phantom::VPC::ops::DbscanParams p;
+        Phantom::VPC::ops::DBSCANParams p;
         p.eps    = toFloat(parts[0], 0.03f);
         p.minPts = toInt(parts[1], 8);
         const auto r = Phantom::VPC::ops::clusterDbscan(*world_, activeId(), p);
@@ -502,7 +502,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "EstimateFPFH") {
-        Phantom::VPC::ops::FpfhParams p;
+        Phantom::VPC::ops::FPFHParams p;
         p.kNeighbors = toInt(arg, 20);
         const auto r = Phantom::VPC::ops::estimateFpfh(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
@@ -529,7 +529,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     // --- Phase C: sphere/cone RANSAC, normal-based region growing, ground extraction ---
 
     if (name == "RansacSphere") {
-        Phantom::VPC::ops::RansacParams p;
+        Phantom::VPC::ops::RANSACParams p;
         p.threshold = toFloat(arg, 0.02f);
         const auto r = Phantom::VPC::ops::detectSphere(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
@@ -540,7 +540,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "RansacCone") {
-        Phantom::VPC::ops::RansacParams p;
+        Phantom::VPC::ops::RANSACParams p;
         p.threshold = toFloat(arg, 0.02f);
         const auto r = Phantom::VPC::ops::detectCone(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
@@ -583,7 +583,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     // --- Phase D: MLS surface smoothing/upsampling, 2D convex/concave hull ---
 
     if (name == "MLSSmooth") {
-        Phantom::VPC::ops::MlsSmoothParams p;
+        Phantom::VPC::ops::MLSSmoothParams p;
         p.radius = toFloat(arg, 0.1f);
         const auto o = Phantom::VPC::ops::mlsSmooth(*world_, activeId(), p);
         if (!o.ok) return "Error:" + o.message;
@@ -595,7 +595,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "MLSUpsample") {
         const auto parts = splitComma(arg);
         if (parts.size() < 3) return "Error:MLSUpsample expects radius,upsampleRadius,stepSize";
-        Phantom::VPC::ops::MlsUpsampleParams p;
+        Phantom::VPC::ops::MLSUpsampleParams p;
         p.radius         = toFloat(parts[0], 0.1f);
         p.upsampleRadius = toFloat(parts[1], 0.05f);
         p.stepSize       = toFloat(parts[2], 0.01f);
@@ -636,7 +636,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         if (parts.size() < 2)
             return p2p ? "Error:ICPAlignPointToPlane expects targetId,maxIterations"
                        : "Error:ICPAlign expects targetId,maxIterations";
-        Phantom::VPC::ops::IcpParams p;
+        Phantom::VPC::ops::ICPParams p;
         p.targetSceneId = toInt(parts[0], -1);
         p.maxIterations = toInt(parts[1], 50);
         p.pointToPlane  = p2p;

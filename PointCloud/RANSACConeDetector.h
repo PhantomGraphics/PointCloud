@@ -7,12 +7,12 @@ namespace Phantom {
 	namespace PC {
 
 		/// @brief Detects a cone from a point cloud using the RANSAC algorithm.
-		class RansacConeDetector
+		class RANSACConeDetector
 		{
 		public:
-			RansacConeDetector() = default;
-			explicit RansacConeDetector(unsigned seed) : hasSeed(true), rngSeed(seed) {}
-			~RansacConeDetector() = default;
+			RANSACConeDetector() = default;
+			explicit RANSACConeDetector(unsigned seed) : hasSeed(true), rngSeed(seed) {}
+			~RANSACConeDetector() = default;
 
 			/// @brief Holds the result of a cone detection.
 			struct ConeModel {
