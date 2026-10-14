@@ -1,6 +1,6 @@
 ﻿#include "GSViewApp.h"
 
-#include "../../CGLib/VulkanGraphics/VulkanSPVResolver.h"
+#include "../../CGLib/VulkanGraphics/SpvResolver.h"
 
 #include <GLFW/glfw3.h>
 #include <cstdio>

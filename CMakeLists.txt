@@ -184,7 +184,7 @@ if(OpenMP_CXX_FOUND)
 endif()
 target_compile_options(PointCloudView PRIVATE ${PHANTOM_WARN_FLAGS})
 
-# loadSPVRepo() (VulkanSPVResolver.h) resolves "shaders/*.spv" relative to the
+# loadSPVRepo() (SpvResolver.h) resolves "shaders/*.spv" relative to the
 # running binary's directory on Windows, and to the current working directory
 # on other platforms. The .spv files are Git-ignored, so compile them from GLSL
 # with glslc and drop them beside the binary (phantom_add_runtime_shaders,

@@ -94,7 +94,7 @@ cmake --build --preset windows-debug
 - `World`（`World.h`）— `PointCloudfScene` の集合を ID 管理する軽量な状態保持クラス（`addScene()`/`removeScene()`/`findById()`）。ポリゴンオーバーレイ（`PolygonMesh`）も `addPolygon()`/`clearPolygons()` で保持する。
 - **GUI 構造（2026-09-07、`docs/todo/PLAN_pointcloudview_gui_restructuring.md` Phase 1〜3）**: PhysicsView と同じ
   「メニューでページを選び、単一の "Control" ウィンドウに表示」方式へ再構築済み。
-  - `ControlPanelHost : ::VKG::IVkUIPanel`（`ControlPanelHost.{h,cpp}`）— 唯一の "Control" ウィンドウ。
+  - `ControlPanelHost : ::VKG::IUIPanel`（`ControlPanelHost.{h,cpp}`）— 唯一の "Control" ウィンドウ。
     `ControlPage`（`Scenes`/`Rendering`/`Processing`/`ImportExport`/`ScenarioBrowser`）を1つだけ表示し、
     上部に共通ステータス（`PointCloudApp::drawStatusArea`：対象シーン選択 Combo・総点数/可視点数・
     描画モード・直近 I/O・シナリオ状態、対象シーンが非表示なら警告）を出す。`page`/`visible`/`process` を

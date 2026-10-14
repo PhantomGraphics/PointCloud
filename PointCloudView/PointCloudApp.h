@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../CGLib/VkAppBase/VkAppBase.h"
-#include "../../CGLib/VulkanGraphics/VulkanSPVResolver.h"
+#include "../../CGLib/VulkanGraphics/SpvResolver.h"
 #include "../../CGLib/VkAppBase/ScenarioRunner/ScenarioRunner.h"
 #include "../../CGLib/VkAppBase/ScenarioRunner/IScenarioHost.h"
 #include "../../CGLib/VkAppBase/ScenarioRunner/ScenarioBrowserPanel.h"

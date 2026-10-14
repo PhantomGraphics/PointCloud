@@ -18,7 +18,7 @@ namespace Phantom::VPC {
 // area drawn above every page, and renders the selected page's embedded panel.
 // It keeps only non-owning pointers -- the panels are owned by PointCloudApp and
 // outlive the host.
-class ControlPanelHost : public ::Phantom::VKG::IVkUIPanel {
+class ControlPanelHost : public ::Phantom::VKG::IUIPanel {
 public:
     void registerPage(ControlPage page, IEmbeddedPanel* panel);
     void setPage(ControlPage page);
