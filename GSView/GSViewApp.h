@@ -15,16 +15,16 @@
 #include <cstddef>
 #include <string>
 
-namespace GSView {
+namespace Phantom::GSView {
 
-class GSViewApp : public ::VKG::VkAppBase, public ::IScenarioHost {
+class GSViewApp : public ::Phantom::VKG::VkAppBase, public ::IScenarioHost {
 public:
 	GSViewApp(int width, int height, const std::string& title);
 
 	void setInitialPLY(const std::string& path) { initialPLYPath_ = path; }
 
 	// Headless single-shot capture (call before run()): initial render mode
-	// (see GSView::parseRenderModeName for accepted names), initial camera
+	// (see Phantom::GSView::parseRenderModeName for accepted names), initial camera
 	// pose for the GaussianPoint/PBVR3D evaluation camera (see
 	// GSViewRenderer::setEvaluationCamera), and whether to close the window
 	// (causing run() to return) right after the requested --screenshot is

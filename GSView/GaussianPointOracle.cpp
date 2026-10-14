@@ -5,9 +5,9 @@
 #include <algorithm>
 #include <cmath>
 
-namespace GSView::oracle {
+namespace Phantom::GSView::oracle {
 
-namespace gpm = GSView::gpm;
+namespace gpm = Phantom::GSView::gpm;
 
 namespace {
 
@@ -449,4 +449,4 @@ double ssim(const Image& a, const Image& b, int W, int H)
     return count ? total / count : 1.0;
 }
 
-} // namespace GSView::oracle
+} // namespace Phantom::GSView::oracle

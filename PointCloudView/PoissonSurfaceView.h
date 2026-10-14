@@ -4,7 +4,7 @@
 #include "CGLib/UIWidgets/Button.h"
 #include <string>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class PoissonSurfaceView : public IProcessView {
 public:

@@ -6,7 +6,7 @@
 #include <glm/glm.hpp>
 #include <random>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void PCCylinderView::onImGui(World& world, int /*activeSceneId*/,
                               const std::function<void(int)>& onResult)

@@ -10,7 +10,7 @@
 #include <fstream>
 #include <string>
 
-namespace GSView {
+namespace Phantom::GSView {
 
 // ---- parse helpers ----------------------------------------------------------
 

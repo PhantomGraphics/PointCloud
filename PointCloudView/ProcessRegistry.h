@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // Every algorithm panel PointCloudView exposes, plus the menu category it is
 // filed under. The PointCloud menu shows these as "category -> item" entries

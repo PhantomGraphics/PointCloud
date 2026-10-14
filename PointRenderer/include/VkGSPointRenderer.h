@@ -18,7 +18,7 @@ class VulkanContext;
 class VulkanCommandPool;
 }
 
-namespace VKR {
+namespace Phantom::VKR {
 
 struct VkGSPointRendererConfig {
     std::vector<uint32_t> vertSpv;

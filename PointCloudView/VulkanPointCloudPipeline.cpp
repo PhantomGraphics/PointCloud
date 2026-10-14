@@ -1,7 +1,7 @@
 ﻿#include "VulkanPointCloudPipeline.h"
 #include "../../CGLib/VulkanGraphics/VulkanContext.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void VulkanPointCloudPipeline::create(const Phantom::VKG::VulkanContext& ctx,
                                        VkRenderPass renderPass,

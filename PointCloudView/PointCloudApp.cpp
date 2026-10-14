@@ -10,7 +10,7 @@
 #include <fstream>
 #include <string>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 namespace {
 
@@ -199,18 +199,18 @@ void PointCloudApp::onInit() {
     {
         static constexpr auto kSh = "shaders/";
         PointCloudRenderer::Shaders s;
-        s.pointVert = ::VKG::loadSPVRepo(std::string(kSh) + "point.vert.spv");
-        s.pointFrag = ::VKG::loadSPVRepo(std::string(kSh) + "point.frag.spv");
-        s.gsVert    = ::VKG::loadSPVRepo(std::string(kSh) + "gs_splat.vert.spv");
-        s.gsFrag    = ::VKG::loadSPVRepo(std::string(kSh) + "gs_splat.frag.spv");
-        s.gsComp    = ::VKG::loadSPVRepo(std::string(kSh) + "gs_sort.comp.spv");
-        s.lineVert  = ::VKG::loadSPVRepo(std::string(kSh) + "line.vert.spv");
-        s.lineFrag  = ::VKG::loadSPVRepo(std::string(kSh) + "line.frag.spv");
-        s.triVert   = ::VKG::loadSPVRepo(std::string(kSh) + "triangle.vert.spv");
-        s.triFrag   = ::VKG::loadSPVRepo(std::string(kSh) + "triangle.frag.spv");
+        s.pointVert = ::Phantom::VKG::loadSPVRepo(std::string(kSh) + "point.vert.spv");
+        s.pointFrag = ::Phantom::VKG::loadSPVRepo(std::string(kSh) + "point.frag.spv");
+        s.gsVert    = ::Phantom::VKG::loadSPVRepo(std::string(kSh) + "gs_splat.vert.spv");
+        s.gsFrag    = ::Phantom::VKG::loadSPVRepo(std::string(kSh) + "gs_splat.frag.spv");
+        s.gsComp    = ::Phantom::VKG::loadSPVRepo(std::string(kSh) + "gs_sort.comp.spv");
+        s.lineVert  = ::Phantom::VKG::loadSPVRepo(std::string(kSh) + "line.vert.spv");
+        s.lineFrag  = ::Phantom::VKG::loadSPVRepo(std::string(kSh) + "line.frag.spv");
+        s.triVert   = ::Phantom::VKG::loadSPVRepo(std::string(kSh) + "triangle.vert.spv");
+        s.triFrag   = ::Phantom::VKG::loadSPVRepo(std::string(kSh) + "triangle.frag.spv");
         renderer_.setShaders(std::move(s));
     }
-    ::VKG::VkAppBase::onInit();
+    ::Phantom::VKG::VkAppBase::onInit();
     renderer_.setExtent(getExtent());
     setupCallbacks();
 }
@@ -246,11 +246,11 @@ void PointCloudApp::onUpdate(uint32_t frameIndex) {
     } else {
     }
 
-    ::VKG::VkAppBase::onUpdate(frameIndex);
+    ::Phantom::VKG::VkAppBase::onUpdate(frameIndex);
 }
 
 void PointCloudApp::onCleanup() {
-    ::VKG::VkAppBase::onCleanup();
+    ::Phantom::VKG::VkAppBase::onCleanup();
 }
 
 void PointCloudApp::onImGuiReady() {
@@ -278,7 +278,7 @@ void PointCloudApp::onImGuiReady() {
 void PointCloudApp::onImGui() {
     drawMenuBar();
     shell_.drawWindows();
-    ::VKG::VkAppBase::onImGui();
+    ::Phantom::VKG::VkAppBase::onImGui();
 }
 
 // ============================================================

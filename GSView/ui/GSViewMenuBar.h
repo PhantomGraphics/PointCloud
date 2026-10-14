@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 
-namespace GSView {
+namespace Phantom::GSView {
 
 class GSViewMenuBar {
 public:

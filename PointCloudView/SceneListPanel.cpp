@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <string>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void SceneListPanel::init(World* world, int* pActiveSceneId,
                                  std::function<void()> onWorldChanged,

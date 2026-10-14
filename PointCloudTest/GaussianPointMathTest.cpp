@@ -11,7 +11,7 @@
 #include <cmath>
 #include <vector>
 
-using namespace GSView::gpm;
+using namespace Phantom::GSView::gpm;
 
 TEST(GaussianPointMath, PixelDensityZoomAndResolution)
 {
@@ -25,7 +25,7 @@ TEST(GaussianPointMath, PixelDensityZoomAndResolution)
     EXPECT_DOUBLE_EQ(pixelDensityScale(4, 0, 400, .01, .05), 0);
     EXPECT_DOUBLE_EQ(pixelDensityScale(4, 400, 400, 0, .05), 0);
 }
-namespace vec = GSView::gpm::vectors;
+namespace vec = Phantom::GSView::gpm::vectors;
 
 namespace {
 

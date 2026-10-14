@@ -6,7 +6,7 @@
 #include <fstream>
 #include <string>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void ControlPanelHost::registerPage(ControlPage page, IEmbeddedPanel* panel)
 {

@@ -6,7 +6,7 @@
 #include <functional>
 #include <string>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class PointCloudRenderer;
 

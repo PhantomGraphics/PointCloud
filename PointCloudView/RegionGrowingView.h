@@ -3,7 +3,7 @@
 #include "IProcessView.h"
 #include "PointCloudOps.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 /// @brief UI for Phantom::PC::RegionGrowing (normal/curvature-based segmentation), distinct
 /// from DistanceBasedClusteringView (menu label "Region Growing (Distance)").

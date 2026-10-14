@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // The operation page currently shown in the single shared "Control" window.
 //

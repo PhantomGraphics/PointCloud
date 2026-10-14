@@ -5,7 +5,7 @@
 
 #include <cstdio>
 
-namespace VKR {
+namespace Phantom::VKR {
 
 bool VkGSPointRenderer::create(const Phantom::VKG::VulkanContext& ctx,
                                const Phantom::VKG::VulkanCommandPool& pool,

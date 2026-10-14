@@ -54,7 +54,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    VPC::PointCloudApp app(winW, winH, "Vulkan Point Cloud Viewer [experimental]");
+    Phantom::VPC::PointCloudApp app(winW, winH, "Vulkan Point Cloud Viewer [experimental]");
     app.setCaptureMode(captureMode);
     app.setStartupSelection(startupPage, startupProcess);
 

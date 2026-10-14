@@ -4,7 +4,7 @@
 #include "CGLib/UIWidgets/Button.h"
 #include "CGLib/UIWidgets/Vector3dView.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class PCCylinderView : public IProcessView {
 public:

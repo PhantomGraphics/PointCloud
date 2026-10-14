@@ -8,11 +8,11 @@
 #include <string>
 #include <vector>
 
-namespace VPC { class World; }
+namespace Phantom::VPC { class World; }
 
 class CommandDispatcher : public IScenarioDispatcher {
 public:
-    void setWorld(VPC::World* w) { world_ = w; }
+    void setWorld(Phantom::VPC::World* w) { world_ = w; }
 
     // Share the GUI's active-scene id (renderer_.getActiveSceneIdPtr()) so a
     // scenario acts on whatever the GUI last selected and vice versa -- the two
@@ -42,7 +42,7 @@ private:
     // (e.g. a unit test that constructs a bare dispatcher).
     int& activeId() { return pActiveSceneId_ ? *pActiveSceneId_ : activeIdFallback_; }
 
-    VPC::World*              world_    = nullptr;
+    Phantom::VPC::World*              world_    = nullptr;
     std::function<void(int)> onWorldChanged_;
     int*                     pActiveSceneId_   = nullptr;
     int                      activeIdFallback_ = -1;

@@ -15,7 +15,7 @@
 
 #include <cstdint>
 
-namespace GSView::gpm::vectors {
+namespace Phantom::GSView::gpm::vectors {
 
 // --- Dilogarithm ----------------------------------------------------------
 // Li2(0)   = 0
@@ -69,4 +69,4 @@ inline constexpr DepthKeyCase kDepthKey[] = {
     { 100.0f, 0xC2C80000u },   // 0x42C80000 | 0x80000000
 };
 
-} // namespace GSView::gpm::vectors
+} // namespace Phantom::GSView::gpm::vectors

@@ -3,7 +3,7 @@
 #include "World.h"
 #include <functional>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 /// @brief Base interface for process-view panels (algorithm UI panels).
 ///

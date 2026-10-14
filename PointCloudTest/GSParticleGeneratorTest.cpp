@@ -10,7 +10,7 @@
 
 using Phantom::PointCloud::GSPoint;
 using Phantom::PointCloud::GSPointCloud;
-using GSView::reference::GSParticleGenerator;
+using Phantom::GSView::reference::GSParticleGenerator;
 
 namespace {
 

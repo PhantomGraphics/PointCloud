@@ -30,7 +30,7 @@
 #include <limits>
 #include <vector>
 
-namespace VPC {
+namespace Phantom::VPC {
 namespace ops {
 
 namespace {

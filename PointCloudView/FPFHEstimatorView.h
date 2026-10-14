@@ -3,7 +3,7 @@
 #include "IProcessView.h"
 #include "PointCloudOps.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 /// @brief UI for Phantom::PC::FPFHEstimator. The 33-dim descriptor itself can't be visualized
 /// directly, so each point is colored by its Euclidean distance (in descriptor space) from the

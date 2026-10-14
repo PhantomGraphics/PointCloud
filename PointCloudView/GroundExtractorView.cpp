@@ -2,7 +2,7 @@
 
 #include "imgui.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void GroundExtractorView::onImGui(World& world, int activeSceneId,
                                    const std::function<void(int)>& onResult)

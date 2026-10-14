@@ -4,7 +4,7 @@
 
 #include <glm/glm.hpp>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void PCRectView::onImGui(World& world, int /*activeSceneId*/,
                           const std::function<void(int)>& onResult)

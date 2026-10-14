@@ -18,7 +18,7 @@ class VulkanContext;
 class VulkanCommandPool;
 }
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class VkGSPointRenderer {
 public:

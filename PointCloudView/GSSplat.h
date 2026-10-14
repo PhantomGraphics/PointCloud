@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // One element of Gaussian Splatting on the Vulkan side.
 // Laid out in vec4 units for compatibility with both std430 and vertex attributes.

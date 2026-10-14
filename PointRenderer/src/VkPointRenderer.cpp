@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <array>
 
-namespace VKR {
+namespace Phantom::VKR {
 
 VkVertexInputBindingDescription VkPointRenderer::Vertex::getBindingDescription() {
     VkVertexInputBindingDescription bd{};

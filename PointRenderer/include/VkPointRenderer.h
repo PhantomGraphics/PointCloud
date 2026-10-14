@@ -20,7 +20,7 @@ class VulkanContext;
 class VulkanCommandPool;
 }
 
-namespace VKR {
+namespace Phantom::VKR {
 
 enum class PointRenderMode {
     Point,

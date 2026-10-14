@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // GPU vertex layout: position (location 0) + color (location 1).
 struct Vertex {
@@ -35,7 +35,7 @@ struct Vertex {
 //   renderer.handleMouseButton(pressed);
 //   renderer.handleMouseMove(x, y);
 //   renderer.handleScroll(dy);
-class PointCloudRenderer : public ::VKG::IVkSubRenderer {
+class PointCloudRenderer : public ::Phantom::VKG::IVkSubRenderer {
 public:
     enum class RenderMode {
         Point,
@@ -115,7 +115,7 @@ private:
     const Phantom::VKG::VulkanCommandPool* pool_  = nullptr;
     Shaders                       shaders_;
     Phantom::PointCloud::PointScene             scene_;
-    VKR::VkPointRenderer          rendererCore_;
+    Phantom::VKR::VkPointRenderer          rendererCore_;
     RenderMode renderMode_ = RenderMode::Point;
     bool gsAvailable_ = false;
 

@@ -8,7 +8,7 @@
 
 class ViewShell;
 
-namespace GSView {
+namespace Phantom::GSView {
 
 class GSViewPanel {
 public:

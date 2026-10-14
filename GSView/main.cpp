@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
                       "[GSView] --exit-after-screenshot has no effect without --screenshot\n");
     }
 
-    GSView::GSViewApp app(width, height, "GS View");
+    Phantom::GSView::GSViewApp app(width, height, "GS View");
 
     if (!plyPath.empty())
         app.setInitialPLY(plyPath);

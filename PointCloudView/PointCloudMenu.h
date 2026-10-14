@@ -3,7 +3,7 @@
 #include "ControlPage.h"
 #include "ProcessRegistry.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class ControlPanelHost;
 class ProcessPanel;

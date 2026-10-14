@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class World;
 

@@ -2,7 +2,7 @@
 #include "World.h"
 #include <functional>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // Renders the scene list section inside an existing ImGui window.
 // Call onImGui() from within ImGui::Begin("Control") / ImGui::End().

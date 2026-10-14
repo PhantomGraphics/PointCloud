@@ -3,7 +3,7 @@
 #include "World.h"
 #include "PointCloudfScene.h"
 #include "PointCloudFileLoader.h"
-#include "PointCloudOps.h"   // every processing command now routes through VPC::ops
+#include "PointCloudOps.h"   // every processing command now routes through Phantom::VPC::ops
 
 #include "CGLib/Math/Matrix3d.h"  // DuplicateSceneTransformed
 
@@ -75,9 +75,9 @@ std::vector<CommandInfo> CommandDispatcher::commandCatalog() const {
 
 std::string CommandDispatcher::cmdCheckCommandCatalog() {
     // Probe on a scratch world so Generate*/Clear/... cannot touch real data.
-    VPC::World scratch;
+    Phantom::VPC::World scratch;
     int scratchActive = -1;
-    VPC::World* const savedWorld = world_;
+    Phantom::VPC::World* const savedWorld = world_;
     int* const savedActive = pActiveSceneId_;
     auto savedCallback = std::move(onWorldChanged_);
     const auto savedMetrics = lastMetrics_;
@@ -386,9 +386,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         // Shared with DownSamplerView (GUI) so both paths match exactly
         // (PLAN Phase 4). The old inline error strings are preserved by
         // prefixing "Error:" to the outcome message.
-        VPC::ops::DownSampleParams p;
+        Phantom::VPC::ops::DownSampleParams p;
         p.cellSize = toFloat(arg, 0.05f);
-        const auto outcome = VPC::ops::downSample(*world_, activeId(), p);
+        const auto outcome = Phantom::VPC::ops::downSample(*world_, activeId(), p);
         if (!outcome.ok) return "Error:" + outcome.message;
 
         activeId() = outcome.primarySceneId;
@@ -397,9 +397,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "EstimateNormals") {
-        VPC::ops::NormalParams p;
+        Phantom::VPC::ops::NormalParams p;
         p.radius = toFloat(arg, 0.1f);
-        const auto o = VPC::ops::estimateNormals(*world_, activeId(), p);
+        const auto o = Phantom::VPC::ops::estimateNormals(*world_, activeId(), p);
         if (!o.ok) return "Error:" + o.message;
         activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -407,9 +407,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "FilterDensity") {
-        VPC::ops::DensityFilterParams p;
+        Phantom::VPC::ops::DensityFilterParams p;
         p.radius = toFloat(arg, 0.1f);
-        const auto o = VPC::ops::filterDensity(*world_, activeId(), p);
+        const auto o = Phantom::VPC::ops::filterDensity(*world_, activeId(), p);
         if (!o.ok) return "Error:" + o.message;
         activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -419,10 +419,10 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "FilterCurvature") {
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:FilterCurvature expects radius,threshold";
-        VPC::ops::CurvatureFilterParams p;
+        Phantom::VPC::ops::CurvatureFilterParams p;
         p.radius    = toFloat(parts[0], 0.1f);
         p.threshold = toFloat(parts[1], 0.01f);
-        const auto o = VPC::ops::filterCurvature(*world_, activeId(), p);
+        const auto o = Phantom::VPC::ops::filterCurvature(*world_, activeId(), p);
         if (!o.ok) return "Error:" + o.message;
         activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -430,9 +430,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "RansacPlane") {
-        VPC::ops::RansacParams p;
+        Phantom::VPC::ops::RansacParams p;
         p.threshold = toFloat(arg, 0.05f);
-        const auto r = VPC::ops::detectPlane(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::detectPlane(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -440,9 +440,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "RansacCylinder") {
-        VPC::ops::RansacParams p;
+        Phantom::VPC::ops::RansacParams p;
         p.threshold = toFloat(arg, 0.05f);
-        const auto r = VPC::ops::detectCylinder(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::detectCylinder(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -452,10 +452,10 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "ClusterDbscan") {
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:ClusterDbscan expects eps,minPts";
-        VPC::ops::DbscanParams p;
+        Phantom::VPC::ops::DbscanParams p;
         p.eps    = toFloat(parts[0], 0.03f);
         p.minPts = toInt(parts[1], 8);
-        const auto r = VPC::ops::clusterDbscan(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::clusterDbscan(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -463,9 +463,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "ClusterRegionGrowing") {
-        VPC::ops::DistanceClusterParams p;
+        Phantom::VPC::ops::DistanceClusterParams p;
         p.radius = toFloat(arg, 0.03f);
-        const auto r = VPC::ops::clusterDistance(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::clusterDistance(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         activeId() = r.outcome.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -477,11 +477,11 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "OrientNormals") {
         const auto parts = splitComma(arg);
         if (parts.size() < 4) return "Error:OrientNormals expects radius,vx,vy,vz";
-        VPC::ops::NormalParams p;
+        Phantom::VPC::ops::NormalParams p;
         p.radius            = toFloat(parts[0], 0.1f);
         p.orientToViewpoint = true;
         p.viewpoint = glm::vec3(toFloat(parts[1], 0.f), toFloat(parts[2], 0.f), toFloat(parts[3], 0.f));
-        const auto o = VPC::ops::estimateNormals(*world_, activeId(), p);
+        const auto o = Phantom::VPC::ops::estimateNormals(*world_, activeId(), p);
         if (!o.ok) return "Error:" + o.message;
         activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -489,10 +489,10 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "EstimatePrincipalCurvature") {
-        VPC::ops::CurvatureParams p;
+        Phantom::VPC::ops::CurvatureParams p;
         p.radius    = toFloat(arg, 0.1f);
         p.principal = true;
-        const auto r = VPC::ops::estimateCurvature(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::estimateCurvature(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["meanK1"] = std::to_string(r.meanK1);
         lastMetrics_["meanK2"] = std::to_string(r.meanK2);
@@ -502,9 +502,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "EstimateFPFH") {
-        VPC::ops::FpfhParams p;
+        Phantom::VPC::ops::FpfhParams p;
         p.kNeighbors = toInt(arg, 20);
-        const auto r = VPC::ops::estimateFpfh(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::estimateFpfh(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["fpfhDim"] = std::to_string(r.histogramSize);
         activeId() = r.outcome.primarySceneId;
@@ -515,10 +515,10 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "DetectBoundary") {
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:DetectBoundary expects radius,angleThresholdDeg";
-        VPC::ops::BoundaryParams p;
+        Phantom::VPC::ops::BoundaryParams p;
         p.radius            = toFloat(parts[0], 0.1f);
         p.angleThresholdDeg = toFloat(parts[1], 153.0f);
-        const auto r = VPC::ops::detectBoundary(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::detectBoundary(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["boundaryCount"] = std::to_string(r.boundaryCount);
         activeId() = r.outcome.primarySceneId;
@@ -529,9 +529,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     // --- Phase C: sphere/cone RANSAC, normal-based region growing, ground extraction ---
 
     if (name == "RansacSphere") {
-        VPC::ops::RansacParams p;
+        Phantom::VPC::ops::RansacParams p;
         p.threshold = toFloat(arg, 0.02f);
-        const auto r = VPC::ops::detectSphere(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::detectSphere(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["sphereRadius"] = std::to_string(r.radius);
         activeId() = r.outcome.primarySceneId;
@@ -540,9 +540,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "RansacCone") {
-        VPC::ops::RansacParams p;
+        Phantom::VPC::ops::RansacParams p;
         p.threshold = toFloat(arg, 0.02f);
-        const auto r = VPC::ops::detectCone(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::detectCone(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["coneHalfAngleRad"] = std::to_string(r.halfAngleRad);
         activeId() = r.outcome.primarySceneId;
@@ -553,12 +553,12 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "SegmentRegionGrowing") {
         const auto parts = splitComma(arg);
         if (parts.size() < 4) return "Error:SegmentRegionGrowing expects radius,kNeighbors,smoothnessDeg,curvatureThreshold";
-        VPC::ops::RegionGrowParams p;
+        Phantom::VPC::ops::RegionGrowParams p;
         p.curvatureRadius    = toFloat(parts[0], 0.1f);
         p.kNeighbors         = toInt(parts[1], 30);
         p.smoothnessDeg      = toFloat(parts[2], 5.0f);
         p.curvatureThreshold = toFloat(parts[3], 1.0f);
-        const auto r = VPC::ops::segmentRegionGrowing(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::segmentRegionGrowing(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["clusterCount"] = std::to_string(r.clusterCount);
         activeId() = r.outcome.primarySceneId;
@@ -569,10 +569,10 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "ExtractGround") {
         const auto parts = splitComma(arg);
         if (parts.size() < 2) return "Error:ExtractGround expects cellSize,slope";
-        VPC::ops::GroundParams p;
+        Phantom::VPC::ops::GroundParams p;
         p.cellSize = toFloat(parts[0], 1.0f);
         p.slope    = toFloat(parts[1], 0.3f);
-        const auto r = VPC::ops::extractGround(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::extractGround(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["groundRatio"] = std::to_string(r.groundRatio);
         activeId() = r.outcome.primarySceneId;
@@ -583,9 +583,9 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     // --- Phase D: MLS surface smoothing/upsampling, 2D convex/concave hull ---
 
     if (name == "MLSSmooth") {
-        VPC::ops::MlsSmoothParams p;
+        Phantom::VPC::ops::MlsSmoothParams p;
         p.radius = toFloat(arg, 0.1f);
-        const auto o = VPC::ops::mlsSmooth(*world_, activeId(), p);
+        const auto o = Phantom::VPC::ops::mlsSmooth(*world_, activeId(), p);
         if (!o.ok) return "Error:" + o.message;
         activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -595,11 +595,11 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "MLSUpsample") {
         const auto parts = splitComma(arg);
         if (parts.size() < 3) return "Error:MLSUpsample expects radius,upsampleRadius,stepSize";
-        VPC::ops::MlsUpsampleParams p;
+        Phantom::VPC::ops::MlsUpsampleParams p;
         p.radius         = toFloat(parts[0], 0.1f);
         p.upsampleRadius = toFloat(parts[1], 0.05f);
         p.stepSize       = toFloat(parts[2], 0.01f);
-        const auto o = VPC::ops::mlsUpsample(*world_, activeId(), p);
+        const auto o = Phantom::VPC::ops::mlsUpsample(*world_, activeId(), p);
         if (!o.ok) return "Error:" + o.message;
         activeId() = o.primarySceneId;
         if (onWorldChanged_) onWorldChanged_(activeId());
@@ -607,7 +607,7 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     }
 
     if (name == "ConvexHull2D") {
-        const auto r = VPC::ops::convexHull2D(*world_, activeId());
+        const auto r = Phantom::VPC::ops::convexHull2D(*world_, activeId());
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["hullArea"] = std::to_string(r.area);
         activeId() = r.outcome.primarySceneId;
@@ -617,10 +617,10 @@ std::string CommandDispatcher::route(const std::string& cmd) {
 
     if (name == "ConcaveHull2D") {
         const auto parts = splitComma(arg);
-        VPC::ops::ConcaveHullParams p;
+        Phantom::VPC::ops::ConcaveHullParams p;
         p.k    = parts.empty()      ? 3 : toInt(parts[0], 3);
         p.maxK = parts.size() < 2   ? 0 : toInt(parts[1], 0);
-        const auto r = VPC::ops::concaveHull2D(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::concaveHull2D(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["hullArea"] = std::to_string(r.area);
         activeId() = r.outcome.primarySceneId;
@@ -636,11 +636,11 @@ std::string CommandDispatcher::route(const std::string& cmd) {
         if (parts.size() < 2)
             return p2p ? "Error:ICPAlignPointToPlane expects targetId,maxIterations"
                        : "Error:ICPAlign expects targetId,maxIterations";
-        VPC::ops::IcpParams p;
+        Phantom::VPC::ops::IcpParams p;
         p.targetSceneId = toInt(parts[0], -1);
         p.maxIterations = toInt(parts[1], 50);
         p.pointToPlane  = p2p;
-        const auto r = VPC::ops::icpAlign(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::icpAlign(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["fitness"]    = std::to_string(r.fitness);
         lastMetrics_["iterations"] = std::to_string(r.iterations);
@@ -654,11 +654,11 @@ std::string CommandDispatcher::route(const std::string& cmd) {
     if (name == "GlobalRegister") {
         const auto parts = splitComma(arg);
         if (parts.size() < 3) return "Error:GlobalRegister expects targetId,k,iterations";
-        VPC::ops::GlobalRegisterParams p;
+        Phantom::VPC::ops::GlobalRegisterParams p;
         p.targetSceneId = toInt(parts[0], -1);
         p.fpfhK         = toInt(parts[1], 20);
         p.iterations    = toInt(parts[2], 1000);
-        const auto r = VPC::ops::globalRegister(*world_, activeId(), p);
+        const auto r = Phantom::VPC::ops::globalRegister(*world_, activeId(), p);
         if (!r.outcome.ok) return "Error:" + r.outcome.message;
         lastMetrics_["inlierCount"] = std::to_string(r.inlierCount);
         lastMetrics_["inlierRmse"]  = std::to_string(r.inlierRmse);

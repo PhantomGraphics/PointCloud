@@ -14,7 +14,7 @@
 
 namespace Phantom::VKG { class VulkanContext; }
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // Encapsulates the full Vulkan pipeline for point cloud rendering:
 // descriptor set layout, UBOs, descriptor pool/sets, and graphics pipeline.

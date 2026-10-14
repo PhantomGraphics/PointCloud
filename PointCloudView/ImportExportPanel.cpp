@@ -7,7 +7,7 @@
 
 #include <cstdio>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 namespace {
 

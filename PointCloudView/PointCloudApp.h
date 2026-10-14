@@ -20,9 +20,9 @@
 
 #include <string>
 
-namespace VPC {
+namespace Phantom::VPC {
 
-class PointCloudApp : public ::VKG::VkAppBase, public ::IScenarioHost {
+class PointCloudApp : public ::Phantom::VKG::VkAppBase, public ::IScenarioHost {
 public:
     PointCloudApp(int width, int height, const std::string& title);
 

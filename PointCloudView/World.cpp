@@ -1,7 +1,7 @@
 #include "World.h"
 #include <algorithm>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 PointCloudfScene* World::addScene(const std::string& name) {
     auto scene = std::make_unique<PointCloudfScene>(nextId_++, name);

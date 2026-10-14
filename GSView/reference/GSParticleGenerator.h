@@ -20,7 +20,7 @@
 #include <random>
 #include <vector>
 
-namespace GSView::reference {
+namespace Phantom::GSView::reference {
 
 struct CpuParticle {
 	glm::vec3 pos{};
@@ -57,4 +57,4 @@ private:
 	mutable std::mt19937 rng_{ 42u };
 };
 
-} // namespace GSView::reference
+} // namespace Phantom::GSView::reference

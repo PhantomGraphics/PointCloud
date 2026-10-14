@@ -3,7 +3,7 @@
 #include "../../../CGLib/UIWidgets/FileOpenDialog.h"
 #include "imgui.h"
 
-namespace GSView {
+namespace Phantom::GSView {
 
 void GSViewMenuBar::init(std::function<bool(const std::string&, std::string&)> onOpenFile,
 						 std::function<void()> onRequestClose)

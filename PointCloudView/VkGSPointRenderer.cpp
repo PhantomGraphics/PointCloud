@@ -6,7 +6,7 @@
 #include <array>
 #include <stdexcept>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void VkGSPointRenderer::create(const Phantom::VKG::VulkanContext& ctx,
                                const Phantom::VKG::VulkanCommandPool& pool,

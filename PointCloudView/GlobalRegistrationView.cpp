@@ -4,7 +4,7 @@
 
 #include <string>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void GlobalRegistrationView::onImGui(World& world, int activeSceneId,
                                       const std::function<void(int)>& onResult)

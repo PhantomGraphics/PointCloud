@@ -3,7 +3,7 @@
 #include "GreedyProjectionMeshGenerator.h"
 #include "imgui.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void GreedyProjectionMeshGeneratorView::onImGui(World& world, int activeSceneId,
                                                  const std::function<void(int)>& onResult)

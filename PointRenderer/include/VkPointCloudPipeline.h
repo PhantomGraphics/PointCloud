@@ -14,7 +14,7 @@
 
 namespace Phantom::VKG { class VulkanContext; }
 
-namespace VKR {
+namespace Phantom::VKR {
 
 struct VkPointCloudPipelineConfig {
     std::vector<uint32_t> vertSpv;

@@ -9,7 +9,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace GSView::gpm {
+namespace Phantom::GSView::gpm {
 
 double pixelDensityScale(double depth, double focalX, double focalY,
                          double referencePixelLength, double nearZ)
@@ -493,4 +493,4 @@ std::uint32_t unpackDepthKey(std::uint64_t packed)
 	return static_cast<std::uint32_t>(packed >> 32);
 }
 
-} // namespace GSView::gpm
+} // namespace Phantom::GSView::gpm

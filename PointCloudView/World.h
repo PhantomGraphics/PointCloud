@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 /// @brief Polygon mesh overlay (planes, surfaces, reconstruction results) — display-only struct.
 struct PolygonMesh {

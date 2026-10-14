@@ -12,7 +12,7 @@
 #include <cstdio>
 #include <vector>
 
-using namespace GSView::oracle;
+using namespace Phantom::GSView::oracle;
 
 namespace {
 

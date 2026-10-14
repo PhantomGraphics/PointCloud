@@ -6,7 +6,7 @@
 
 #include <vector>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class GSPointPresenter {
 public:

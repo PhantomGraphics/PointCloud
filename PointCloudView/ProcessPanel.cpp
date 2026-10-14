@@ -2,7 +2,7 @@
 
 #include "imgui.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void ProcessPanel::init(World* world, const int* pActiveSceneId,
                         std::function<void()> onWorldChanged,

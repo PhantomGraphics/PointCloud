@@ -28,7 +28,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace GSView::oracle {
+namespace Phantom::GSView::oracle {
 
 struct Gaussian3D {
     glm::dvec3 pos{ 0.0 };
@@ -124,4 +124,4 @@ Image renderParticles3D(const std::vector<Gaussian3D>& scene,
 double psnr(const Image& a, const Image& b);
 double ssim(const Image& a, const Image& b, int W, int H);
 
-} // namespace GSView::oracle
+} // namespace Phantom::GSView::oracle

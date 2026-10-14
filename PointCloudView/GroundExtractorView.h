@@ -3,7 +3,7 @@
 #include "IProcessView.h"
 #include "PointCloudOps.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class GroundExtractorView : public IProcessView {
 public:

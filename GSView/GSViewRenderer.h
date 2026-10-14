@@ -19,7 +19,7 @@
 
 namespace Phantom::PointCloud { struct GSPointCloud; }
 
-namespace GSView {
+namespace Phantom::GSView {
 
 // Render paths (docs/todo/PLAN_gsview_gaussian_point_pbvr.md):
 //   SortBased          - legacy sorted point-sprite splatting.
@@ -43,9 +43,9 @@ struct DebugSplatInfo {
     bool valid = false;
 };
 
-class GSViewRenderer : public ::VKG::IVkSubRenderer {
+class GSViewRenderer : public ::Phantom::VKG::IVkSubRenderer {
 public:
-	using SortShaders = VKR::VkPointRenderer::Shaders;
+	using SortShaders = Phantom::VKR::VkPointRenderer::Shaders;
 
 	void setSortShaders(SortShaders s) { sortShaders_ = std::move(s); }
 	void setGSCloud(const Phantom::PointCloud::GSPointCloud* cloud);
@@ -117,7 +117,7 @@ public:
 private:
 	SortShaders sortShaders_;
 	Phantom::PointCloud::PointScene vkScene_;
-	VKR::VkPointRenderer sortRenderer_;
+	Phantom::VKR::VkPointRenderer sortRenderer_;
 	bool sceneDirty_ = true;
 
 	GaussianPointRenderer gaussianPoint_;

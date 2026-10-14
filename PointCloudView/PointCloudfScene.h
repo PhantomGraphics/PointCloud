@@ -9,7 +9,7 @@
 
 #include "GSSplat.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 /// @brief Single-precision point-cloud scene with position/color data.
 class PointCloudfScene {

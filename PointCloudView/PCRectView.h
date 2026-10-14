@@ -5,7 +5,7 @@
 #include "CGLib/UIWidgets/Vector3dView.h"
 #include "CGLib/Math/Vector3d.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class PCRectView : public IProcessView {
 public:

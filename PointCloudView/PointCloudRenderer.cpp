@@ -11,7 +11,7 @@
 #include <array>
 #include <cmath>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // ============================================================
 //  Vertex
@@ -114,12 +114,12 @@ void PointCloudRenderer::onInit(Phantom::VKG::VulkanContext& ctx,
     rendererCore_.setActiveScene(activeSceneId_);
     rendererCore_.setRenderMode(
         renderMode_ == RenderMode::Point
-        ? VKR::PointRenderMode::Point
-        : VKR::PointRenderMode::GaussianSplatting);
+        ? Phantom::VKR::PointRenderMode::Point
+        : Phantom::VKR::PointRenderMode::GaussianSplatting);
     rendererCore_.setShowNormals(showNormals_);
     rendererCore_.setNormalLength(normalLength_);
     {
-        VKR::VkPointRenderer::Shaders s;
+        Phantom::VKR::VkPointRenderer::Shaders s;
         s.pointVert = std::move(shaders_.pointVert);
         s.pointFrag = std::move(shaders_.pointFrag);
         s.gsVert    = std::move(shaders_.gsVert);
@@ -152,8 +152,8 @@ void PointCloudRenderer::onUpdate(uint32_t frameIndex) {
         rendererCore_.setActiveScene(activeSceneId_);
         rendererCore_.setRenderMode(
             renderMode_ == RenderMode::Point
-            ? VKR::PointRenderMode::Point
-            : VKR::PointRenderMode::GaussianSplatting);
+            ? Phantom::VKR::PointRenderMode::Point
+            : Phantom::VKR::PointRenderMode::GaussianSplatting);
         rendererCore_.setShowNormals(showNormals_);
         rendererCore_.setNormalLength(normalLength_);
         stateDirty_ = false;

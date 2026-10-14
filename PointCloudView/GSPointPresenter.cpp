@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace VPC {
+namespace Phantom::VPC {
 namespace {
 
 static glm::vec3 rowFromQuat0(const float* q) {

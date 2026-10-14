@@ -19,7 +19,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace GSView::gpm {
+namespace Phantom::GSView::gpm {
 
 // SH band-0 basis value: color = f_dc * kShC0 + 0.5. Centralised so the CPU
 // reference, the GPU shaders and the loaders all agree on one constant.
@@ -277,4 +277,4 @@ std::uint64_t packDepthColor(float depth, std::uint32_t rgba8);
 std::uint32_t unpackColor(std::uint64_t packed);
 std::uint32_t unpackDepthKey(std::uint64_t packed);
 
-} // namespace GSView::gpm
+} // namespace Phantom::GSView::gpm

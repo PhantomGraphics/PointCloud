@@ -4,7 +4,7 @@
 #include "ProcessPanel.h"
 #include "imgui.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 void PointCloudMenu::init(ControlPanelHost* host, ProcessPanel* processPanel)
 {

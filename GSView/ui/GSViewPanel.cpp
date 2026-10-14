@@ -4,7 +4,7 @@
 
 #include "../../../CGLib/VkAppBase/ScenarioRunner/ViewShell.h"
 
-namespace GSView {
+namespace Phantom::GSView {
 
 void GSViewPanel::init(
 	std::function<void(RenderMode)> onModeChanged,

@@ -7,7 +7,7 @@
 
 #include <algorithm>
 
-using GSView::EnsembleLodController;
+using Phantom::GSView::EnsembleLodController;
 using State = EnsembleLodController::State;
 
 namespace {

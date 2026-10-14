@@ -38,7 +38,7 @@
 namespace Phantom::VKG { class VulkanContext; class VulkanCommandPool; }
 namespace Phantom::PointCloud { struct GSPointCloud; }
 
-namespace GSView {
+namespace Phantom::GSView {
 
 class GaussianPointRenderer {
 public:

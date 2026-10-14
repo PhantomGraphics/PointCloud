@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace GSView {
+namespace Phantom::GSView {
 
 namespace {
 // Shortest text that reads back as the same float (commands parse with from_chars).
@@ -56,7 +56,7 @@ std::vector<std::string> gpParamCommands(const GaussianPointRenderer::Params& fr
 } // namespace
 
 GSViewApp::GSViewApp(int width, int height, const std::string& title)
-	: ::VKG::VkAppBase(width, height, title)
+	: ::Phantom::VKG::VkAppBase(width, height, title)
 {
 	renderer_.setGSCloud(&gsCloud_);
 
@@ -125,13 +125,13 @@ void GSViewApp::onInit()
 {
 	static constexpr auto kPR = "shaders/";
 	GSViewRenderer::SortShaders s;
-	s.pointVert = ::VKG::loadSPVRepo(std::string(kPR) + "point.vert.spv");
-	s.pointFrag = ::VKG::loadSPVRepo(std::string(kPR) + "point.frag.spv");
-	s.gsVert    = ::VKG::loadSPVRepo(std::string(kPR) + "gs_splat.vert.spv");
-	s.gsFrag    = ::VKG::loadSPVRepo(std::string(kPR) + "gs_splat.frag.spv");
-	s.gsComp    = ::VKG::loadSPVRepo(std::string(kPR) + "gs_sort.comp.spv");
-	s.lineVert  = ::VKG::loadSPVRepo(std::string(kPR) + "line.vert.spv");
-	s.lineFrag  = ::VKG::loadSPVRepo(std::string(kPR) + "line.frag.spv");
+	s.pointVert = ::Phantom::VKG::loadSPVRepo(std::string(kPR) + "point.vert.spv");
+	s.pointFrag = ::Phantom::VKG::loadSPVRepo(std::string(kPR) + "point.frag.spv");
+	s.gsVert    = ::Phantom::VKG::loadSPVRepo(std::string(kPR) + "gs_splat.vert.spv");
+	s.gsFrag    = ::Phantom::VKG::loadSPVRepo(std::string(kPR) + "gs_splat.frag.spv");
+	s.gsComp    = ::Phantom::VKG::loadSPVRepo(std::string(kPR) + "gs_sort.comp.spv");
+	s.lineVert  = ::Phantom::VKG::loadSPVRepo(std::string(kPR) + "line.vert.spv");
+	s.lineFrag  = ::Phantom::VKG::loadSPVRepo(std::string(kPR) + "line.frag.spv");
 	renderer_.setSortShaders(std::move(s));
 
 	renderer_.setSortPointSize(panel_.getSortPointSize());
@@ -139,7 +139,7 @@ void GSViewApp::onInit()
 	renderer_.setMaxParticlesPerSplat(panel_.getMaxParticlesPerSplat());
 	renderer_.setPbvrParticleSize(panel_.getPbvrParticleSize());
 
-	::VKG::VkAppBase::onInit();
+	::Phantom::VKG::VkAppBase::onInit();
 
 	renderer_.setExtent(getExtent());
 	setupCallbacks();
@@ -202,7 +202,7 @@ void GSViewApp::onUpdate(uint32_t frameIndex)
 		getWindow().close();
 	}
 
-	::VKG::VkAppBase::onUpdate(frameIndex);
+	::Phantom::VKG::VkAppBase::onUpdate(frameIndex);
 	panel_.setSplatCount(renderer_.getSplatCount());
 	panel_.setParticleCount(renderer_.getParticleCount());
 	panel_.setParticleCapacity(renderer_.getParticleCapacity());
@@ -242,12 +242,12 @@ void GSViewApp::onImGui()
 		scenarioBrowser_.drawEmbedded();
 		shell_.endPanel();
 	}
-	::VKG::VkAppBase::onImGui();
+	::Phantom::VKG::VkAppBase::onImGui();
 }
 
 void GSViewApp::onCleanup()
 {
-	::VKG::VkAppBase::onCleanup();
+	::Phantom::VKG::VkAppBase::onCleanup();
 }
 
 bool GSViewApp::loadPLY(const std::string& path, std::string& errorMessage)

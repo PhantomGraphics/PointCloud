@@ -27,7 +27,7 @@
 #include "ConvexHull2DView.h"
 #include "ConcaveHull2DView.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 const char* processName(ProcessId id)
 {

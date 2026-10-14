@@ -19,7 +19,7 @@ float sigmoid(float x)
 
 } // namespace
 
-namespace GSView::reference {
+namespace Phantom::GSView::reference {
 
 int GSParticleGenerator::particleCountForSplat(const Phantom::PointCloud::GSPoint& p) const
 {
@@ -126,4 +126,4 @@ glm::mat3 GSParticleGenerator::cholesky(const glm::mat3& A) const
 	return L;
 }
 
-} // namespace GSView::reference
+} // namespace Phantom::GSView::reference

@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace GSView {
+namespace Phantom::GSView {
 
 class GSViewApp;
 class GSViewRenderer;

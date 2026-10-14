@@ -38,7 +38,7 @@ static float shDcToColor(float sh) {
 
 static std::vector<Phantom::PointCloud::GSSplat> buildSplats(
 	const Phantom::PointCloud::GSPointCloud& cloud,
-	GSView::DebugSplatInfo& dbg,
+	Phantom::GSView::DebugSplatInfo& dbg,
 	float splatSizeScale)
 {
 	dbg = {};
@@ -115,7 +115,7 @@ static std::vector<Phantom::PointCloud::GSSplat> buildSplats(
 
 } // namespace
 
-namespace GSView {
+namespace Phantom::GSView {
 
 void GSViewRenderer::setGSCloud(const Phantom::PointCloud::GSPointCloud* cloud)
 {
@@ -375,7 +375,7 @@ void GSViewRenderer::onInit(Phantom::VKG::VulkanContext& ctx, const Phantom::VKG
 	pool_ = &pool;
 
 	sortRenderer_.setScene(&vkScene_);
-	sortRenderer_.setRenderMode(VKR::PointRenderMode::GaussianSplatting);
+	sortRenderer_.setRenderMode(Phantom::VKR::PointRenderMode::GaussianSplatting);
 	syncSortScene();
 	sortRenderer_.onInit(ctx, pool, renderPass, framesInFlight, std::move(sortShaders_));
 	sceneDirty_ = false;

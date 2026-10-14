@@ -9,7 +9,7 @@
 #include <memory>
 #include <string>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // The "Processing" page: shows one algorithm panel at a time, selected from the
 // PointCloud menu. Panels are created lazily on first selection and kept for the

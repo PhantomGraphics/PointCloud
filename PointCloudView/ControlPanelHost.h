@@ -9,7 +9,7 @@
 #include <functional>
 #include <string>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // The single shared "Control" window
 // (docs/todo/PLAN_pointcloudview_gui_restructuring.md section 3/4).
@@ -18,7 +18,7 @@ namespace VPC {
 // area drawn above every page, and renders the selected page's embedded panel.
 // It keeps only non-owning pointers -- the panels are owned by PointCloudApp and
 // outlive the host.
-class ControlPanelHost : public ::VKG::IVkUIPanel {
+class ControlPanelHost : public ::Phantom::VKG::IVkUIPanel {
 public:
     void registerPage(ControlPage page, IEmbeddedPanel* panel);
     void setPage(ControlPage page);

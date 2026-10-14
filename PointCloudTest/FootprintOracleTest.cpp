@@ -17,8 +17,8 @@
 #include <cstdio>
 #include <vector>
 
-using namespace GSView::oracle;
-namespace gpm = GSView::gpm;
+using namespace Phantom::GSView::oracle;
+namespace gpm = Phantom::GSView::gpm;
 
 namespace {
 

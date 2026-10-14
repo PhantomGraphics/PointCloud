@@ -3,7 +3,7 @@
 #include "IProcessView.h"
 #include "CGLib/UIWidgets/Button.h"
 
-namespace VPC {
+namespace Phantom::VPC {
 
 class GreedyProjectionMeshGeneratorView : public IProcessView {
 public:

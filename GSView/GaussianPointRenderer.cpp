@@ -16,7 +16,7 @@
 static_assert(sizeof(Phantom::PointCloud::GSPoint) == 68,
               "GSPoint layout changed -- update gps_splat.comp / gps_pbvr3d.comp");
 
-namespace GSView {
+namespace Phantom::GSView {
 
 namespace {
 constexpr double kShC0 = 0.28209479177387814;
@@ -117,11 +117,11 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     }
 
     // --- pipelines ---
-    auto splatSpv = ::VKG::loadSPVRepo("shaders/gps_splat.comp.spv");
-    auto pbvrSpv = ::VKG::loadSPVRepo("shaders/gps_pbvr3d.comp.spv");
-    auto resolveSpv = ::VKG::loadSPVRepo("shaders/gps_resolve.comp.spv");
-    auto compVertSpv = ::VKG::loadSPVRepo("shaders/gps_composite.vert.spv");
-    auto compFragSpv = ::VKG::loadSPVRepo("shaders/gps_composite.frag.spv");
+    auto splatSpv = ::Phantom::VKG::loadSPVRepo("shaders/gps_splat.comp.spv");
+    auto pbvrSpv = ::Phantom::VKG::loadSPVRepo("shaders/gps_pbvr3d.comp.spv");
+    auto resolveSpv = ::Phantom::VKG::loadSPVRepo("shaders/gps_resolve.comp.spv");
+    auto compVertSpv = ::Phantom::VKG::loadSPVRepo("shaders/gps_composite.vert.spv");
+    auto compFragSpv = ::Phantom::VKG::loadSPVRepo("shaders/gps_composite.frag.spv");
     if (splatSpv.empty() || pbvrSpv.empty() || resolveSpv.empty() ||
         compVertSpv.empty() || compFragSpv.empty()) {
         std::fprintf(stderr, "[GaussianPoint] shader SPV missing -- mode disabled\n");
@@ -142,10 +142,10 @@ void GaussianPointRenderer::onInit(const Phantom::VKG::VulkanContext& ctx,
     if (!pbvr3dPipe_.create(ctx, pbvrCfg)) { available_ = false; return; }
 
     auto scanCfg = splatCfg;
-    scanCfg.compSpv = ::VKG::loadSPVRepo("shaders/gps_scan.comp.spv");
+    scanCfg.compSpv = ::Phantom::VKG::loadSPVRepo("shaders/gps_scan.comp.spv");
     scanCfg.pushConstantRange.size = sizeof(ScanConstants);
     auto compactCfg = splatCfg;
-    compactCfg.compSpv = ::VKG::loadSPVRepo("shaders/gps_compact.comp.spv");
+    compactCfg.compSpv = ::Phantom::VKG::loadSPVRepo("shaders/gps_compact.comp.spv");
     compactCfg.pushConstantRange.size = sizeof(PushConstants);  // gps_compact.comp only reads `pass`
     if (scanCfg.compSpv.empty() || compactCfg.compSpv.empty() ||
         !scanPipe_.create(ctx, scanCfg) || !compactPipe_.create(ctx, compactCfg)) {

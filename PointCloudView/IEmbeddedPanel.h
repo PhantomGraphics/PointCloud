@@ -3,7 +3,7 @@
 #include <functional>
 #include <utility>
 
-namespace VPC {
+namespace Phantom::VPC {
 
 // A panel whose *content* rendering is separated from its window creation, so
 // the same controls can be embedded into the single shared Control window

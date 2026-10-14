@@ -20,7 +20,7 @@ static_assert(sizeof(GSSplat) == 80, "GSSplat layout must remain binary-compatib
 
 } // namespace Phantom::PointCloud
 
-namespace VKR {
+namespace Phantom::VKR {
 
 struct GSSortPushConstants {
     uint32_t count = 0;
