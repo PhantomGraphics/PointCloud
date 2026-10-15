@@ -2,7 +2,7 @@
 
 #include "DensityEstimator.h"
 
-#include "../../CGLib/Math/Statistics.h"
+#include "../../CGLib/Math/Math/Statistics.h"
 
 #include <limits>
 

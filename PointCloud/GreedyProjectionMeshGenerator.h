@@ -1,8 +1,8 @@
 #pragma once
 
 #include <vector>
-#include "../../CGLib/Math/Vector3d.h"
-#include "../../CGLib/Math/Triangle3d.h"
+#include "../../CGLib/Math/Math/Vector3d.h"
+#include "../../CGLib/Math/Math/Triangle3d.h"
 
 namespace Phantom
 {

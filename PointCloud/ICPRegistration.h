@@ -1,8 +1,8 @@
 #pragma once
 
 #include <vector>
-#include "../../CGLib/Math/Vector3d.h"
-#include "../../CGLib/Math/Matrix3d.h"
+#include "../../CGLib/Math/Math/Vector3d.h"
+#include "../../CGLib/Math/Math/Matrix3d.h"
 #include "../../CGLib/Space/Space/KDTree.h"
 #include "ProgressReporter.h"
 
