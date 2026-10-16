@@ -3,7 +3,7 @@
 #include "PointCloudFileLoader.h"
 #include "GSPointPresenter.h"
 
-#include "../PointCloud/GSPointCloud.h"
+#include "../Core/GSPointCloud.h"
 
 #include <cfloat>
 #include <filesystem>

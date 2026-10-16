@@ -1,6 +1,6 @@
 #include "pch.h"
-#include "../PointCloud/GlobalRegistration.h"
-#include "../PointCloud/FPFHEstimator.h"
+#include "../Core/GlobalRegistration.h"
+#include "../Core/FPFHEstimator.h"
 
 #include <algorithm>
 #include <cmath>

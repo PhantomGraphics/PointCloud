@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "../PointCloud/RegionGrowing.h"
+#include "../Core/RegionGrowing.h"
 
 #include <algorithm>
 #include <vector>

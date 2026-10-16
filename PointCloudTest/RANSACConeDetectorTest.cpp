@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "../PointCloud/RANSACConeDetector.h"
+#include "../Core/RANSACConeDetector.h"
 
 #include <random>
 #include <vector>

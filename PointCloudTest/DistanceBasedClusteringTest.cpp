@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "../PointCloud/DistanceBasedClustering.h"
+#include "../Core/DistanceBasedClustering.h"
 
 using namespace Phantom::PC;
 

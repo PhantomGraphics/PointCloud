@@ -1,6 +1,6 @@
 ﻿#include "pch.h"
 
-#include "../PointCloud/PLYFileReader.h"
+#include "../Core/PLYFileReader.h"
 
 #include <fstream>
 #include <cstdio>

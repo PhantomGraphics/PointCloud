@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "../PointCloud/ICPRegistration.h"
+#include "../Core/ICPRegistration.h"
 
 #include <algorithm>
 #include <cmath>

@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "../PointCloud/NormalEstimator.h"
+#include "../Core/NormalEstimator.h"
 #include "../../CGLib/Math/Core/Vector3d.h"
 
 using namespace Phantom::Math;

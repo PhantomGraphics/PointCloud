@@ -1,7 +1,7 @@
 ﻿#include "pch.h"
 
-#include "../PointCloud/PCDFileWriter.h"
-#include "../PointCloud/PCDFile.h"
+#include "../Core/PCDFileWriter.h"
+#include "../Core/PCDFile.h"
 
 #include <fstream>
 #include <sstream>

@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "../PointCloud/RANSACCylinderDetector.h"
+#include "../Core/RANSACCylinderDetector.h"
 
 #include <random>
 #include <vector>

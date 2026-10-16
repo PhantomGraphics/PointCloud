@@ -1,8 +1,8 @@
 #include "pch.h"
 #include "gtest/gtest.h"
 
-#include "../PointCloud/ConcaveHull2d.h"
-#include "../PointCloud/ConvexHull2d.h"
+#include "../Core/ConcaveHull2d.h"
+#include "../Core/ConvexHull2d.h"
 #include "../../CGLib/Math/Core/Vector3d.h"
 #include <cmath>
 

@@ -4,7 +4,7 @@
 #include "../../CGLib/VulkanGraphics/VulkanContext.h"
 #include "../../CGLib/VulkanGraphics/VulkanCommandPool.h"
 #include "../../CGLib/VulkanGraphics/SpvResolver.h"
-#include "../PointCloud/GSPointCloud.h"
+#include "../Core/GSPointCloud.h"
 
 #include <algorithm>
 #include <cstddef>

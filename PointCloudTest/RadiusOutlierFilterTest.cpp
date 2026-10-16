@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "../PointCloud/RadiusOutlierFilter.h"
+#include "../Core/RadiusOutlierFilter.h"
 #include "../../CGLib/Math/Core/Vector3d.h"
 
 using namespace Phantom::Math;

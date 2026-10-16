@@ -1,8 +1,8 @@
 #include "pch.h"
 
-#include "../PointCloud/PCDFileReader.h"
-#include "../PointCloud/PCDFileWriter.h"
-#include "../PointCloud/PCDFile.h"
+#include "../Core/PCDFileReader.h"
+#include "../Core/PCDFileWriter.h"
+#include "../Core/PCDFile.h"
 
 #include <fstream>
 #include <cstdio>

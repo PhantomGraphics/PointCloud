@@ -2,7 +2,7 @@
 
 // Phase 3 of docs/todo/PLAN_gsview_gaussian_point_pbvr.md: standard-PLY loading
 // of the f_rest_* spherical-harmonics coefficients.
-#include "../PointCloud/GSPointCloud.h"
+#include "../Core/GSPointCloud.h"
 
 #include <cstdint>
 #include <fstream>

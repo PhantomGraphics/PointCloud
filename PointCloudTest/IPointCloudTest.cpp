@@ -1,8 +1,8 @@
 #include "pch.h"
 
-#include "../PointCloud/PointCloud.h"
-#include "../PointCloud/ColoredPointCloud.h"
-#include "../PointCloud/NormalEstimator.h"
+#include "../Core/PointCloud.h"
+#include "../Core/ColoredPointCloud.h"
+#include "../Core/NormalEstimator.h"
 
 using namespace Phantom::Math;
 using namespace Phantom::PC;

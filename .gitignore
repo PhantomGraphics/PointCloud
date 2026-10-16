@@ -2,7 +2,7 @@
 # この .gitignore ファイルは Microsoft(R) Visual Studio によって自動的に作成されました。
 ################################################################################
 
-/PointCloud/x64/Debug
+/Core/x64/Debug
 /PointCloudView/x64/Debug
 *.ini
 /PointCloudApp/WpfApp1/obj
@@ -10,7 +10,7 @@
 /PointCloudApp/obj/project.assets.json
 /PointCloudApp/obj/project.nuget.cache
 /PointCloudTest/x64/Debug
-/PointCloud/x64/Release
+/Core/x64/Release
 /PointCloudApp/obj/Debug
 /PointCloudApp/obj/Release/net8.0-windows
 /PointCloudView/x64/Release
@@ -18,7 +18,7 @@
 /PointCloudTest/x64/Release
 /PointCloudApp/bin/Release/net8.0-windows
 /PointRenderer/x64/Debug
-/PointCloud/PointCloud/x64/Debug
+/Core/x64/Debug
 /PointCloudTest/PointCloudTest/x64/Debug
 /PointRenderer/x64/Release
 *.spv
@@ -31,8 +31,8 @@
 *.log
 /output
 /VulkanPointCloudView/x64/Release
-/PointCloud/PointCloud/x64/Release
-/PointCloud/PointCloud/x64/Release
+/Core/x64/Release
+/Core/x64/Release
 /PointCloudView/PointCloudView/x64/Release
 /PointRenderer/PointRenderer/x64/Release
 /VulkanPointCloudView/VulkanPo.C4E1F2A3/x64/Release

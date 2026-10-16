@@ -10,7 +10,7 @@
 #include "../../CGLib/VkAppBase/ScenarioRunner/IScenarioHost.h"
 #include "../../CGLib/VkAppBase/ScenarioRunner/ScenarioBrowserPanel.h"
 #include "../../CGLib/VkAppBase/ScenarioRunner/ViewShell.h"
-#include "../PointCloud/GSPointCloud.h"
+#include "../Core/GSPointCloud.h"
 
 #include <cstddef>
 #include <string>

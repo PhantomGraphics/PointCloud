@@ -2,7 +2,7 @@
 
 #include "GaussianPointMath.h"
 #include "GaussianPointOracle.h"
-#include "../PointCloud/GSPointCloud.h"
+#include "../Core/GSPointCloud.h"
 
 #include "../../CGLib/VulkanGraphics/VulkanContext.h"
 #include "../../CGLib/VulkanGraphics/VulkanCommandPool.h"

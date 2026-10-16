@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "../PointCloud/GreedyProjectionMeshGenerator.h"
+#include "../Core/GreedyProjectionMeshGenerator.h"
 
 #include <algorithm>
 #include <set>

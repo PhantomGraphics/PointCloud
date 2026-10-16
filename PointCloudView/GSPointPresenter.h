@@ -2,7 +2,7 @@
 
 #include "GSSplat.h"
 
-#include "../PointCloud/GSPointCloud.h"
+#include "../Core/GSPointCloud.h"
 
 #include <vector>
 

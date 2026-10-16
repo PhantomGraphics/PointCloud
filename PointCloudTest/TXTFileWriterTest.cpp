@@ -1,7 +1,7 @@
 #include "pch.h"
 
-#include "../PointCloud/TXTFileReader.h"
-#include "../PointCloud/TXTFileWriter.h"
+#include "../Core/TXTFileReader.h"
+#include "../Core/TXTFileWriter.h"
 
 #include <cstdio>
 #include <sstream>

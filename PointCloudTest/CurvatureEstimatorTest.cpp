@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "gtest/gtest.h"
 
-#include "../PointCloud/CurvatureEstimator.h"
+#include "../Core/CurvatureEstimator.h"
 #include "../../CGLib/Math/Core/Vector3d.h"
 
 #include <cmath>

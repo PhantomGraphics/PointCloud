@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "../PointCloud/PointCloudFileLoader.h"
+#include "../Core/PointCloudFileLoader.h"
 
 using namespace Phantom::Math;
 using namespace Phantom::PC;

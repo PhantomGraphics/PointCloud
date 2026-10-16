@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "../PointCloud/TXTFileReader.h"
+#include "../Core/TXTFileReader.h"
 
 using namespace Phantom::Math;
 using namespace Phantom::PC;

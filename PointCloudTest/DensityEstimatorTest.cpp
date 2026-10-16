@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "gtest/gtest.h"
 
-#include "../PointCloud/DensityEstimator.h"
+#include "../Core/DensityEstimator.h"
 #include "../../CGLib/Math/Core/Vector3d.h"
 
 using namespace Phantom::PC;

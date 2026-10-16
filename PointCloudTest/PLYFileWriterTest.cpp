@@ -1,8 +1,8 @@
 ﻿#include "pch.h"
 
-#include "../PointCloud/PLYFileWriter.h"
-#include "../PointCloud/PLYFileReader.h"
-#include "../PointCloud/PLYFile.h"
+#include "../Core/PLYFileWriter.h"
+#include "../Core/PLYFileReader.h"
+#include "../Core/PLYFile.h"
 
 #include <fstream>
 #include <sstream>

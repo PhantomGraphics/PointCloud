@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "../PointCloud/GSPointCloud.h"
+#include "../Core/GSPointCloud.h"
 
 #include <array>
 #include <cmath>

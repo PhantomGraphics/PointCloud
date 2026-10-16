@@ -1,5 +1,5 @@
 ﻿#include "pch.h"
-#include "../PointCloud/RANSACPlaneDetector.h"
+#include "../Core/RANSACPlaneDetector.h"
 
 #include <random>
 #include <vector>

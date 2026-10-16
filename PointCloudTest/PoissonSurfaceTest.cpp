@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "../PointCloud/PoissonSurface.h"
+#include "../Core/PoissonSurface.h"
 
 #include <random>
 

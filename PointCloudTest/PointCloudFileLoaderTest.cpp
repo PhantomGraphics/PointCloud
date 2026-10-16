@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "../PointCloud/PointCloudFileLoader.h"
+#include "../Core/PointCloudFileLoader.h"
 
 #include <cstdio>
 #include <fstream>

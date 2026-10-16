@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#include "../PointCloud/DensityBasedFilter.h"
+#include "../Core/DensityBasedFilter.h"
 #include "../../CGLib/Math/Core/Vector3d.h"
 
 #include <algorithm>

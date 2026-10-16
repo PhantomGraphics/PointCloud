@@ -56,7 +56,7 @@ phantom_add_math_core()
 phantom_add_space_core()
 phantom_add_numerics_core()
 
-file(GLOB POINTCLOUD_SOURCES ${POINTCLOUD_ROOT}/PointCloud/*.cpp)
+file(GLOB POINTCLOUD_SOURCES ${POINTCLOUD_ROOT}/Core/*.cpp)
 list(FILTER POINTCLOUD_SOURCES EXCLUDE REGEX "pch\\.cpp$")
 
 add_library(PointCloudCore STATIC ${POINTCLOUD_SOURCES})
@@ -169,7 +169,7 @@ list(FILTER POINTCLOUDVIEW_SOURCES EXCLUDE REGEX "VulkanPointCloudPipeline\\.cpp
 add_executable(PointCloudView ${POINTCLOUDVIEW_SOURCES})
 target_include_directories(PointCloudView PRIVATE
     ${CGLIB_ROOT}/UIWidgets
-    ${POINTCLOUD_ROOT}/PointCloud
+    ${POINTCLOUD_ROOT}/Core
 )
 target_link_libraries(PointCloudView PRIVATE
     PointCloudCore
@@ -219,7 +219,7 @@ add_executable(GSView
 target_include_directories(GSView PRIVATE
     ${CGLIB_ROOT}/UIWidgets
     ${POINTCLOUD_ROOT}/PointRenderer/include
-    ${POINTCLOUD_ROOT}/PointCloud
+    ${POINTCLOUD_ROOT}/Core
 )
 target_link_libraries(GSView PRIVATE
     PointCloudCore
@@ -258,7 +258,7 @@ if(TARGET GSViewShaders)
     endforeach()
 endif()
 
-# Precompiled headers (cmake/PhantomPch.cmake). PointCloud/pch.h pulls in framework.h
+# Precompiled headers (cmake/PhantomPch.cmake). Core/pch.h pulls in framework.h
 # for a single file, so the core library gets the plain STL list instead; the test
 # suite gets gtest + STL for every TU (its pch.h holds only gtest).
 include(PhantomPch)
