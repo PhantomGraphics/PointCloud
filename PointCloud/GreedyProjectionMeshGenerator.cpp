@@ -1,6 +1,6 @@
-﻿#include "GreedyProjectionMeshGenerator.h"
+#include "GreedyProjectionMeshGenerator.h"
 
-#include "../../CGLib/Space/Space/CompactSpaceHash.h"
+#include "../../CGLib/Space/Core/CompactSpaceHash.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>

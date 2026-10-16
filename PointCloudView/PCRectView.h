@@ -3,7 +3,7 @@
 #include "IProcessView.h"
 #include "CGLib/UIWidgets/Button.h"
 #include "CGLib/UIWidgets/Vector3dView.h"
-#include "CGLib/Math/Math/Vector3d.h"
+#include "CGLib/Math/Core/Vector3d.h"
 
 namespace Phantom::VPC {
 

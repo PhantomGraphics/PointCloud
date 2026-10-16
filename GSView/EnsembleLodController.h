@@ -6,7 +6,7 @@
 // GSView's and PointCloudTest's existing `Phantom::GSView::EnsembleLodController`
 // spelling working unchanged.
 
-#include "../../CGLib/Graphics/Graphics/EnsembleLodController.h"
+#include "../../CGLib/Graphics/Core/EnsembleLodController.h"
 
 namespace Phantom::GSView {
 using EnsembleLodController = Phantom::Graphics::EnsembleLodController;

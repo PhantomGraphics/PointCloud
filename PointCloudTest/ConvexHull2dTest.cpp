@@ -2,7 +2,7 @@
 #include "gtest/gtest.h"
 
 #include "../PointCloud/ConvexHull2d.h"
-#include "../../CGLib/Math/Math/Vector3d.h"
+#include "../../CGLib/Math/Core/Vector3d.h"
 
 using namespace Phantom::PC;
 using namespace Phantom::Math;

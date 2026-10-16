@@ -6,7 +6,7 @@
 #include <limits>
 #include <utility>
 
-#include <CGLib/Numerics/Numerics/SVD3d.h>
+#include <CGLib/Numerics/Core/SVD3d.h>
 
 using namespace Phantom::PC;
 using namespace Phantom::Math;

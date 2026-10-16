@@ -1,8 +1,8 @@
 #include "DensityEstimator.h"
 
-#include "../../CGLib/Math/Math/Gaussian.h"
-#include "../../CGLib/Space/Space/CompactSpaceHash.h"
-#include "../../CGLib/Space/Space/KDTree.h"
+#include "../../CGLib/Math/Core/Gaussian.h"
+#include "../../CGLib/Space/Core/CompactSpaceHash.h"
+#include "../../CGLib/Space/Core/KDTree.h"
 
 #include <algorithm>
 

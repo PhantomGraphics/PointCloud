@@ -1,8 +1,8 @@
 #include "CurvatureEstimator.h"
-#include <CGLib/Space/Space/CompactSpaceHash.h>
-#include <CGLib/Space/Space/KDTree.h>
-#include <CGLib/Math/Math/Matrix3d.h>
-#include <CGLib/Numerics/Numerics/SVD3d.h>
+#include <CGLib/Space/Core/CompactSpaceHash.h>
+#include <CGLib/Space/Core/KDTree.h>
+#include <CGLib/Math/Core/Matrix3d.h>
+#include <CGLib/Numerics/Core/SVD3d.h>
 
 #include <algorithm>
 #include <array>

@@ -1,11 +1,11 @@
-﻿#include "CommandDispatcher.h"
+#include "CommandDispatcher.h"
 
 #include "World.h"
 #include "PointCloudfScene.h"
 #include "PointCloudFileLoader.h"
 #include "PointCloudOps.h"   // every processing command now routes through Phantom::VPC::ops
 
-#include "CGLib/Math/Math/Matrix3d.h"  // DuplicateSceneTransformed
+#include "CGLib/Math/Core/Matrix3d.h"  // DuplicateSceneTransformed
 
 #include <algorithm>
 #include <charconv>

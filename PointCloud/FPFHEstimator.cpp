@@ -1,5 +1,5 @@
 #include "FPFHEstimator.h"
-#include "../../CGLib/Space/Space/KDTree.h"
+#include "../../CGLib/Space/Core/KDTree.h"
 
 #include <algorithm>
 #include <cmath>

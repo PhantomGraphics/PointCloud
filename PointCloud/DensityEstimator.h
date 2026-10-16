@@ -2,7 +2,7 @@
 
 #include <cstddef>
 #include <vector>
-#include "CGLib/Math/Math/Vector3d.h"
+#include "CGLib/Math/Core/Vector3d.h"
 
 namespace Phantom {
 	namespace PC {
