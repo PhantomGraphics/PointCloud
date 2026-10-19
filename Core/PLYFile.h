@@ -8,8 +8,9 @@ namespace Phantom {
 
 		/// @brief Stores point cloud data loaded from a PLY file.
 		/// Positions are always present; colors (RGB normalized to [0,1]) and normals are
-		/// filled only when the source file declares those vertex properties, so callers
-		/// must check hasColors()/hasNormals() before indexing them.
+		/// filled only when the source file declares those vertex properties (radii: a scalar
+		/// "radius" property), so callers must check hasColors()/hasNormals()/hasRadii() before
+		/// indexing them.
 		class PLYFile
 		{
 		public:
@@ -17,7 +18,7 @@ namespace Phantom {
 			~PLYFile() = default;
 
 			/// @brief Removes all stored points, colors and normals.
-			void clear() { points.clear(); colors.clear(); normals.clear(); }
+			void clear() { points.clear(); colors.clear(); normals.clear(); radii.clear(); }
 
 			/// @brief Returns a const reference to the point list.
 			/// @return Const reference to the vector of 3D coordinates.
@@ -47,6 +48,16 @@ namespace Phantom {
 			/// @brief Returns true when per-point normals were read from the file.
 			bool hasNormals() const { return !normals.empty(); }
 
+			/// @brief Returns a const reference to the per-point radii (the vertex "radius" property).
+			/// @return Const reference to the radius list (empty when the file had no radius property).
+			const std::vector<float>& getRadii() const { return radii; }
+
+			/// @brief Returns a reference to the per-point radii.
+			std::vector<float>& getRadii() { return radii; }
+
+			/// @brief Returns true when per-point radii were read from the file.
+			bool hasRadii() const { return !radii.empty(); }
+
 			/// @brief Returns the number of points.
 			/// @return The size of the point cloud.
 			size_t size() const { return points.size(); }
@@ -55,6 +66,7 @@ namespace Phantom {
 			std::vector<Phantom::Math::Vector3df> points;
 			std::vector<Phantom::Math::Vector3df> colors;
 			std::vector<Phantom::Math::Vector3df> normals;
+			std::vector<float> radii;
 		};
 
 	}

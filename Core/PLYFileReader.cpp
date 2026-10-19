@@ -203,6 +203,7 @@ namespace {
 			else if (n == "nx") fields.nx = i;
 			else if (n == "ny") fields.ny = i;
 			else if (n == "nz") fields.nz = i;
+			else if (n == "radius") fields.radius = i;
 		}
 		return fields.hasPosition();
 	}
@@ -285,12 +286,15 @@ bool PLYFileReader::readASCII(std::istream& stream,
 	auto& points  = file.getPoints();
 	auto& colors  = file.getColors();
 	auto& normals = file.getNormals();
+	auto& radii   = file.getRadii();
 	points.reserve(vertexCount);
 
 	const bool wantColor  = fields.hasColor();
 	const bool wantNormal = fields.hasNormal();
+	const bool wantRadius = fields.hasRadius();
 	if (wantColor)  colors.reserve(vertexCount);
 	if (wantNormal) normals.reserve(vertexCount);
+	if (wantRadius) radii.reserve(vertexCount);
 
 	const float rScale = wantColor ? colorScale(propTypes[fields.r]) : 1.0f;
 	const float gScale = wantColor ? colorScale(propTypes[fields.g]) : 1.0f;
@@ -338,6 +342,14 @@ bool PLYFileReader::readASCII(std::istream& stream,
 				return false;
 			}
 			normals.emplace_back(nx, ny, nz);
+		}
+		if (wantRadius) {
+			float radius = 0.0f;
+			if (!parseFloatToken(tokens[fields.radius], radius)) {
+				lastError_ = "Failed to parse ASCII vertex radius at line " + std::to_string(lineNo) + ".";
+				return false;
+			}
+			radii.push_back(radius);
 		}
 		++read;
 	}
@@ -433,12 +445,15 @@ bool PLYFileReader::readBinary(std::istream& stream,
 	auto& points  = file.getPoints();
 	auto& colors  = file.getColors();
 	auto& normals = file.getNormals();
+	auto& radii   = file.getRadii();
 	points.reserve(vertexCount);
 
 	const bool wantColor  = fields.hasColor();
 	const bool wantNormal = fields.hasNormal();
+	const bool wantRadius = fields.hasRadius();
 	if (wantColor)  colors.reserve(vertexCount);
 	if (wantNormal) normals.reserve(vertexCount);
+	if (wantRadius) radii.reserve(vertexCount);
 
 	const float rScale = wantColor ? colorScale(propTypes[fields.r]) : 1.0f;
 	const float gScale = wantColor ? colorScale(propTypes[fields.g]) : 1.0f;
@@ -476,6 +491,8 @@ bool PLYFileReader::readBinary(std::istream& stream,
 					readPropAsFloat(row, offsets[fields.ny], propTypes[fields.ny], swapBytes),
 					readPropAsFloat(row, offsets[fields.nz], propTypes[fields.nz], swapBytes));
 			}
+			if (wantRadius)
+				radii.push_back(readPropAsFloat(row, offsets[fields.radius], propTypes[fields.radius], swapBytes));
 		}
 		remaining -= rows;
 	}

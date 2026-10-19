@@ -28,17 +28,19 @@ namespace Phantom {
 				size_t x = npos, y = npos, z = npos;
 				size_t r = npos, g = npos, b = npos;
 				size_t nx = npos, ny = npos, nz = npos;
+				size_t radius = npos;
 
 				bool hasPosition() const { return x != npos && y != npos && z != npos; }
 				bool hasColor()    const { return r != npos && g != npos && b != npos; }
 				bool hasNormal()   const { return nx != npos && ny != npos && nz != npos; }
+				bool hasRadius()   const { return radius != npos; }
 			};
 		}
 
 		/// @brief Reads a PLY file and stores the parsed vertex data into a PLYFile object.
 		/// Supports ASCII, binary little-endian, and binary big-endian formats.
 		/// Vertex x/y/z positions are mandatory; red/green/blue and nx/ny/nz are read as
-		/// colors and normals when present (integer color channels are normalized by their
+		/// colors and normals (and radius as a per-point radius) when present (integer color channels are normalized by their
 		/// type's maximum, so uchar 0-255 becomes 0-1). Face and other elements are skipped.
 		class PLYFileReader
 		{
