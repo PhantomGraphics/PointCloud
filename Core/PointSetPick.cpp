@@ -84,9 +84,9 @@ namespace {
 	{
 		glm::mat4 viewProj;       // proj * view
 		glm::mat4 mvp;            // proj * view * model
+		glm::mat4 inverseMvp;
 		float width, height;
-		float modelScale;         // largest stretch the model applies to a unit vector (the sphere radius in world units)
-		float pixelsPerUnitAtW1;  // projected size of one world unit at view distance 1
+		glm::vec3 clipRadius;     // local sphere's extent in clip x, y and w, per unit radius
 	};
 
 	Camera makeCamera(const PointPickView& v)
@@ -94,10 +94,11 @@ namespace {
 		Camera c;
 		c.viewProj = v.proj * v.view;
 		c.mvp = c.viewProj * v.model;
+		c.inverseMvp = glm::inverse(c.mvp);
 		c.width = v.width;
 		c.height = v.height;
-		c.modelScale = std::max({ glm::length(glm::vec3(v.model[0])), glm::length(glm::vec3(v.model[1])), glm::length(glm::vec3(v.model[2])) });
-		c.pixelsPerUnitAtW1 = 0.5f * v.height * std::abs(v.proj[1][1]);
+		auto rowLength = [&](int row) { return glm::length(glm::vec3(c.mvp[0][row], c.mvp[1][row], c.mvp[2][row])); };
+		c.clipRadius = { rowLength(0), rowLength(1), rowLength(3) };
 		return c;
 	}
 
@@ -107,7 +108,6 @@ namespace {
 		float x = 0.f, y = 0.f;   // pixels
 		float w = 0.f;            // view-space distance of the centre
 		float radiusPx = 0.f;     // projected sphere radius, not yet clamped
-		float frontW = 0.f;       // view-space distance of the sphere's near surface
 	};
 
 	Projected project(const Camera& c, const glm::vec3& local, float radius)
@@ -115,14 +115,38 @@ namespace {
 		Projected p;
 		const glm::vec4 clip = c.mvp * glm::vec4(local, 1.f);
 		if (!(clip.w > kNear)) return p;
-		const float rWorld = radius * c.modelScale;
 		p.ok = true;
 		p.w = clip.w;
 		p.x = (clip.x / clip.w * 0.5f + 0.5f) * c.width;
 		p.y = (clip.y / clip.w * 0.5f + 0.5f) * c.height;
-		p.radiusPx = rWorld * c.pixelsPerUnitAtW1 / clip.w;
-		p.frontW = clip.w - rWorld;
+		// Conservative bound only. Actual coverage and depth come from local ray/sphere intersection.
+		const float denominator = std::max(kNear, clip.w - radius * c.clipRadius.z);
+		const float rx = 0.5f * c.width * radius * (c.clipRadius.x + std::abs(clip.x / clip.w) * c.clipRadius.z) / denominator;
+		const float ry = 0.5f * c.height * radius * (c.clipRadius.y + std::abs(clip.y / clip.w) * c.clipRadius.z) / denominator;
+		p.radiusPx = std::max(rx, ry);
 		return p;
+	}
+
+	float surfaceDepth(const Camera& c, const glm::vec3& centre, float radius, float x, float y)
+	{
+		const float inf = std::numeric_limits<float>::infinity();
+		if (!(radius > 0.f)) return inf;
+		const glm::vec2 ndc(2.f * x / c.width - 1.f, 2.f * y / c.height - 1.f);
+		const glm::vec4 a = c.inverseMvp * glm::vec4(ndc, 0.f, 1.f);
+		const glm::vec4 b = c.inverseMvp * glm::vec4(ndc, 0.5f, 1.f);
+		if (a.w == 0.f || b.w == 0.f) return inf;
+		const glm::vec3 origin = glm::vec3(a) / a.w;
+		const glm::dvec3 direction = glm::dvec3(glm::vec3(b) / b.w) - glm::dvec3(origin);
+		const glm::dvec3 offset = glm::dvec3(origin) - glm::dvec3(centre);
+		const double aa = glm::dot(direction, direction), halfB = glm::dot(offset, direction);
+		const double cc = glm::dot(offset, offset) - double(radius) * radius;
+		const double discriminant = halfB * halfB - aa * cc;
+		if (!(aa > 0.0) || discriminant < 0.0) return inf;
+		double t = (-halfB - std::sqrt(discriminant)) / aa;
+		if (t < 0.0) t = (-halfB + std::sqrt(discriminant)) / aa;
+		if (t < 0.0) return inf;
+		const glm::vec4 clip = c.mvp * glm::vec4(glm::vec3(glm::dvec3(origin) + t * direction), 1.f);
+		return clip.w > kNear && clip.z >= 0.f && clip.z <= clip.w ? clip.w : inf;
 	}
 
 	void addOccluders(DepthMap& map, const Camera& c, const std::vector<OccluderTriangle>& occluders)
@@ -144,22 +168,26 @@ namespace {
 
 	float tolerance(float w) { return 1.0e-3f * w + 1.0e-6f; }
 
-	float clampRadius(float radiusPx, const PointPickOptions& o)
-	{
-		return std::min(std::max(radiusPx, o.minRadiusPx), o.maxOccludeRadiusPx);
-	}
-
 	// Fills `map` with everything that can hide a point inside it: the occluders, and the discs of all the points of the cloud.
 	void buildMap(DepthMap& map, const PointSet& points, const Camera& c, const PointPickOptions& o,
 		const std::vector<OccluderTriangle>& occluders, float rx0, float ry0, float rx1, float ry1)
 	{
 		addOccluders(map, c, occluders);
 		for (size_t i = 0; i < points.size(); ++i) {
-			const Projected p = project(c, points.positions[i], points.radii[i]);
+			const float radius = points.radii[i] * o.radiusScale;
+			const Projected p = project(c, points.positions[i], radius);
 			if (!p.ok) continue;
-			const float r = clampRadius(p.radiusPx, o);
+			const float r = std::max(p.radiusPx, o.minRadiusPx);
 			if (p.x + r < rx0 || p.x - r > rx1 || p.y + r < ry0 || p.y - r > ry1) continue;
-			map.splat(p.x, p.y, r, p.frontW);
+			const int xa = int(std::max(rx0, std::floor(p.x - r))), xb = int(std::min(rx1 - 1.f, std::ceil(p.x + r)));
+			const int ya = int(std::max(ry0, std::floor(p.y - r))), yb = int(std::min(ry1 - 1.f, std::ceil(p.y + r)));
+			for (int y = ya; y <= yb; ++y) for (int x = xa; x <= xb; ++x) {
+				float depth = surfaceDepth(c, points.positions[i], radius, float(x) + 0.5f, float(y) + 0.5f);
+				// A subpixel point remains selectable, without enlarging larger ellipsoids.
+				if (!std::isfinite(depth) && p.radiusPx < o.minRadiusPx &&
+					glm::length(glm::vec2(float(x) + 0.5f - p.x, float(y) + 0.5f - p.y)) <= o.minRadiusPx) depth = p.w;
+				map.write(x, y, depth);
+			}
 		}
 	}
 
@@ -168,7 +196,7 @@ namespace {
 std::optional<uint32_t> Phantom::PC::pickPoint(const PointSet& points, const PointPickView& view, double x, double y,
 	const PointPickOptions& options, const std::vector<OccluderTriangle>& occluders)
 {
-	if (points.empty() || !(view.width > 0.f) || !(view.height > 0.f)) return std::nullopt;
+	if (points.empty() || !(view.width > 0.f) || !(view.height > 0.f) || !(options.radiusScale > 0.f) || glm::determinant(view.model) == 0.f) return std::nullopt;
 	const Camera c = makeCamera(view);
 	const float reach = options.tolerancePx + options.maxOccludeRadiusPx;
 	const int ax = std::max(0, static_cast<int>(std::floor(x - reach))), ay = std::max(0, static_cast<int>(std::floor(y - reach)));
@@ -182,13 +210,24 @@ std::optional<uint32_t> Phantom::PC::pickPoint(const PointSet& points, const Poi
 	std::optional<uint32_t> best;
 	float bestDistance = std::numeric_limits<float>::infinity(), bestW = std::numeric_limits<float>::infinity();
 	for (size_t i = 0; i < points.size(); ++i) {
-		const Projected p = project(c, points.positions[i], points.radii[i]);
+		const float radius = points.radii[i] * options.radiusScale;
+		const Projected p = project(c, points.positions[i], radius);
 		if (!p.ok) continue;
 		const float r = std::max(p.radiusPx, options.minRadiusPx);
 		const float dx = p.x - static_cast<float>(x), dy = p.y - static_cast<float>(y);
 		const float distance = std::sqrt(dx * dx + dy * dy);
-		if (distance > options.tolerancePx + std::min(r, options.maxOccludeRadiusPx)) continue;
-		if (!options.xray && !(p.frontW <= map.at(static_cast<int>(std::floor(p.x)), static_cast<int>(std::floor(p.y))) + tolerance(p.w))) continue;
+		if (distance > options.tolerancePx + r) continue;
+		bool covered = false;
+		const int reachPx = static_cast<int>(std::ceil(options.tolerancePx));
+		for (int py = std::max(ay, int(std::floor(y)) - reachPx); py < by && py <= int(std::floor(y)) + reachPx && !covered; ++py)
+			for (int px = std::max(ax, int(std::floor(x)) - reachPx); px < bx && px <= int(std::floor(x)) + reachPx; ++px) {
+				if (glm::length(glm::vec2(float(px) + 0.5f - float(x), float(py) + 0.5f - float(y))) > options.tolerancePx + 0.75f) continue;
+				float depth = surfaceDepth(c, points.positions[i], radius, float(px) + 0.5f, float(py) + 0.5f);
+				if (!std::isfinite(depth) && p.radiusPx < options.minRadiusPx &&
+					glm::length(glm::vec2(float(px) + 0.5f - p.x, float(py) + 0.5f - p.y)) <= options.minRadiusPx) depth = p.w;
+				if (std::isfinite(depth) && (options.xray || depth <= map.at(px, py) + tolerance(depth))) { covered = true; break; }
+			}
+		if (!covered) continue;
 		if (distance < bestDistance || (distance == bestDistance && p.w < bestW)) {
 			best = static_cast<uint32_t>(i);
 			bestDistance = distance;
@@ -202,7 +241,7 @@ PointIndexList Phantom::PC::boxSelectPoints(const PointSet& points, const PointP
 	const PointPickOptions& options, const std::vector<OccluderTriangle>& occluders)
 {
 	PointIndexList hits;
-	if (points.empty() || !(view.width > 0.f) || !(view.height > 0.f)) return hits;
+	if (points.empty() || !(view.width > 0.f) || !(view.height > 0.f) || !(options.radiusScale > 0.f) || glm::determinant(view.model) == 0.f) return hits;
 	const float left = static_cast<float>(std::min(x0, x1)), right = static_cast<float>(std::max(x0, x1));
 	const float top = static_cast<float>(std::min(y0, y1)), bottom = static_cast<float>(std::max(y0, y1));
 	const Camera c = makeCamera(view);
@@ -211,14 +250,29 @@ PointIndexList Phantom::PC::boxSelectPoints(const PointSet& points, const PointP
 	const int bx = std::min(static_cast<int>(view.width), static_cast<int>(std::ceil(right)) + 1);
 	const int by = std::min(static_cast<int>(view.height), static_cast<int>(std::ceil(bottom)) + 1);
 	if (bx <= ax || by <= ay) return hits;
+	// X-ray rectangles only test centres: no sphere intersection or depth buffer is needed.
+	if (options.xray) {
+		for (size_t i = 0; i < points.size(); ++i) {
+			const glm::vec4 clip = c.mvp * glm::vec4(points.positions[i], 1.f);
+			if (!(clip.w > kNear)) continue;
+			const float px = (clip.x / clip.w * 0.5f + 0.5f) * c.width;
+			const float py = (clip.y / clip.w * 0.5f + 0.5f) * c.height;
+			if (px >= left && px <= right && py >= top && py <= bottom) hits.push_back(static_cast<uint32_t>(i));
+		}
+		return hits;
+	}
 
 	DepthMap map(ax, ay, bx, by);
 	if (!options.xray) buildMap(map, points, c, options, occluders, float(ax), float(ay), float(bx), float(by));
 
 	for (size_t i = 0; i < points.size(); ++i) {
-		const Projected p = project(c, points.positions[i], points.radii[i]);
+		const float radius = points.radii[i] * options.radiusScale;
+		const Projected p = project(c, points.positions[i], radius);
 		if (!p.ok || p.x < left || p.x > right || p.y < top || p.y > bottom) continue;
-		if (!options.xray && !(p.frontW <= map.at(static_cast<int>(std::floor(p.x)), static_cast<int>(std::floor(p.y))) + tolerance(p.w))) continue;
+		const int px = static_cast<int>(std::floor(p.x)), py = static_cast<int>(std::floor(p.y));
+		float depth = surfaceDepth(c, points.positions[i], radius, float(px) + 0.5f, float(py) + 0.5f);
+		if (!std::isfinite(depth) && p.radiusPx < options.minRadiusPx) depth = p.w;
+		if (!options.xray && !(std::isfinite(depth) && depth <= map.at(px, py) + tolerance(depth))) continue;
 		hits.push_back(static_cast<uint32_t>(i));
 	}
 	return hits;

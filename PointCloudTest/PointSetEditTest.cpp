@@ -270,6 +270,35 @@ TEST(PointSetPickTest, TheCloudsModelMatrixIsApplied)
 
 // ---- generation -------------------------------------------------------------------------------------------------------------
 
+TEST(PointSetPickTest, EllipsoidsUseTheirActualSilhouetteAndDisplayRadius)
+{
+	PointSet s = makeSet(1);
+	s.positions[0] = { 0.f, 0.f, 0.f };
+	s.radii[0] = 0.5f;
+	auto view = frontView();
+	view.model = glm::scale(glm::mat4(1.f), glm::vec3(-4.f, 0.25f, 1.f));
+	PointPickOptions o;
+	o.tolerancePx = 0.f;
+	EXPECT_TRUE(pickPoint(s, view, 130, 100, o, {}).has_value());
+	EXPECT_FALSE(pickPoint(s, view, 100, 115, o, {}).has_value());
+	o.radiusScale = 0.25f;
+	EXPECT_FALSE(pickPoint(s, view, 130, 100, o, {}).has_value());
+	o.radiusScale = 2.f;
+	EXPECT_TRUE(pickPoint(s, view, 160, 100, o, {}).has_value()); // well beyond the old 24px cap
+}
+
+TEST(PointSetPickTest, ThinEllipsoidDoesNotOccludePointsOutsideItsSilhouette)
+{
+	PointSet s = makeSet(2);
+	s.positions[0] = { 0.f, 0.f, 1.f };
+	s.positions[1] = { 0.f, 3.f, 0.f };
+	s.radii = { 0.5f, 0.1f };
+	auto view = frontView();
+	view.model = glm::scale(glm::mat4(1.f), glm::vec3(4.f, 0.25f, 1.f));
+	PointPickOptions o;
+	EXPECT_EQ((PointIndexList{ 0, 1 }), boxSelectPoints(s, view, 0, 0, 200, 200, o, {}));
+}
+
 TEST(PointSetGenerateTest, VerticesBecomeOnePointEach)
 {
 	const auto set = pointsFromVertices({ { 0, 0, 0 }, { 1, 2, 3 } }, { 0.2f, 0.4f, 0.6f }, 0.05f);

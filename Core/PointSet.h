@@ -44,7 +44,7 @@ namespace Phantom {
 			Math::Box3df bounds() const;
 
 			/// @brief Bounds of the spheres (centre +- radius on every axis). Degenerated when empty.
-			Math::Box3df boundsWithRadius() const;
+			Math::Box3df boundsWithRadius(float radiusScale = 1.f) const;
 
 			/// @brief Heap bytes held by the arrays.
 			size_t memoryBytes() const;

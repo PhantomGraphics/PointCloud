@@ -51,12 +51,12 @@ Box3df PointSet::bounds() const
 	return box;
 }
 
-Box3df PointSet::boundsWithRadius() const
+Box3df PointSet::boundsWithRadius(float radiusScale) const
 {
 	auto box = Box3df::createDegeneratedBox();
 	for (size_t i = 0; i < positions.size(); ++i) {
 		const auto& p = positions[i];
-		const float r = i < radii.size() ? radii[i] : 0.0f;
+		const float r = i < radii.size() ? radii[i] * radiusScale : 0.0f;
 		box.add(Vector3df(p.x - r, p.y - r, p.z - r));
 		box.add(Vector3df(p.x + r, p.y + r, p.z + r));
 	}

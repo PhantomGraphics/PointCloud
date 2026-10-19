@@ -17,8 +17,8 @@ namespace Phantom {
 		///
 		/// Camera convention: the same as the mesh element picking. `proj` already carries the Vulkan Y flip, so
 		/// ndc.y * 0.5 + 0.5 scaled by `height` is the pixel row (origin top-left); `model` maps the cloud's local space to world.
-		/// A point is the sphere of its radius under `model` (an ellipsoid under a non-uniform scale); picking sees it as a disc of
-		/// that projected size, at least `minRadiusPx` wide.
+		/// A point is the sphere of its radius under `model` (an ellipsoid under a non-uniform scale).
+		/// Coverage and depth use ray/sphere intersection in local space; subpixel points keep a minimum click target.
 		struct PointPickView
 		{
 			glm::mat4 model{ 1.f };
@@ -29,13 +29,14 @@ namespace Phantom {
 
 		struct PointPickOptions
 		{
+			float radiusScale = 1.f;
 			/// false (default): a point hidden behind other points of the cloud or behind an occluder cannot be picked. true: see-through.
 			bool xray = false;
 			/// How close (pixels) a click must be to a point, beyond the point's own projected radius.
 			float tolerancePx = 6.f;
 			/// Discs smaller than this are treated as this size, so single-pixel points can still be hit and hide what is behind them.
 			float minRadiusPx = 1.5f;
-			/// Largest disc (pixels) a point may occlude with; very large points are clamped to keep a box selection cheap.
+			/// Click-query padding. Occlusion coverage itself is never clamped.
 			float maxOccludeRadiusPx = 24.f;
 		};
 
