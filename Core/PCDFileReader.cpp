@@ -1,5 +1,6 @@
 ﻿#include "PCDFileReader.h"
 #include "PCDFileReader.h"
+#include <filesystem>
 
 #include <fstream>
 #include <sstream>
@@ -57,7 +58,7 @@ bool PCDFileReader::read(const std::string& filename)
 	this->file.clear();
 	this->lastError_.clear();
 
-	std::ifstream ifs(filename, std::ios::binary);
+	std::ifstream ifs(std::filesystem::path(std::u8string(filename.begin(),filename.end())), std::ios::binary);
     if (!ifs.is_open()) {
 		this->lastError_ = "Failed to open file: " + filename;
 		return false;

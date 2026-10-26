@@ -15,13 +15,13 @@ namespace Phantom {
 		{
 		public:
 			/// @brief Writes the point cloud in ASCII format.
-			/// @param filename Output file path.
+			/// @param filename UTF-8 output file path.
 			/// @param file The point cloud data to write.
 			/// @return true on success, false on failure.
 			bool writeAscii(const std::string& filename, const PCDFile& file);
 
 			/// @brief Writes the point cloud in Binary format.
-			/// @param filename Output file path.
+			/// @param filename UTF-8 output file path.
 			/// @param file The point cloud data to write.
 			/// @return true on success, false on failure.
 			bool writeBinary(const std::string& filename, const PCDFile& file);

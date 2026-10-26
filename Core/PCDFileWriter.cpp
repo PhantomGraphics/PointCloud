@@ -1,6 +1,7 @@
 #include "PCDFileWriter.h"
 
 #include <fstream>
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
 
@@ -11,7 +12,7 @@ namespace Phantom {
 		{
 			const auto& points = file.getPoints();
 
-			std::ofstream ofs(filename);
+			std::ofstream ofs(std::filesystem::path(std::u8string(filename.begin(),filename.end())));
 			if (!ofs) return false;
 
 			ofs << "VERSION .7\n";
@@ -37,7 +38,7 @@ namespace Phantom {
 		{
 			const auto& points = file.getPoints();
 
-			std::ofstream ofs(filename, std::ios::binary);
+			std::ofstream ofs(std::filesystem::path(std::u8string(filename.begin(),filename.end())), std::ios::binary);
 			if (!ofs) return false;
 
 			std::ostringstream header;

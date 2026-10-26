@@ -15,7 +15,7 @@ namespace Phantom {
 		{
 		public:
 			/// @brief Reads the specified PCD file.
-			/// @param filename Path to the PCD file.
+			/// @param filename UTF-8 path to the PCD file.
 			/// @return true on success, false on failure.
 			bool read(const std::string& filename);
 
